@@ -13,7 +13,7 @@ from typing import Any
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
-from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode, runs_in_worker
 from mloda.core.abstract_plugins.function_extender import Extender
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
 from mloda.core.core.step.join_step import JoinStep
@@ -52,13 +52,13 @@ def _unpicklable_link_generic_error(step: JoinStep) -> str:
     )
 
 
-def raise_on_unpicklable_join_link(steps: Iterable[Any]) -> None:
+def raise_on_unpicklable_join_link(steps: Iterable[Any], register_modes: set[ParallelizationMode]) -> None:
     """Raise ValueError if any JoinStep in steps carries a Link that multiprocessing cannot pickle."""
     for step in steps:
         if not isinstance(step, JoinStep):
             continue
 
-        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+        if not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
 
         if _is_picklable(step.link):
@@ -102,14 +102,14 @@ def _step_feature_groups(step: Any) -> tuple[type[Any], ...]:
     return (step.from_feature_group, step.to_feature_group)
 
 
-def raise_on_unpicklable_step_feature_group(steps: Iterable[Any]) -> None:
+def raise_on_unpicklable_step_feature_group(steps: Iterable[Any], register_modes: set[ParallelizationMode]) -> None:
     """Raise ValueError if a FeatureGroupStep or TransformFrameworkStep in steps, or anything it
     carries, is something multiprocessing cannot pickle."""
     for step in steps:
         if not isinstance(step, (FeatureGroupStep, TransformFrameworkStep)):
             continue
 
-        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+        if not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
 
         if _is_picklable(step):
@@ -236,7 +236,9 @@ def refuse_unpicklable_credentials(grant: Any, values: Mapping[str, Any]) -> Non
     )
 
 
-def raise_on_unpicklable_step_credentials(steps: Iterable[Any], collection: DataAccessCollection | None) -> None:
+def raise_on_unpicklable_step_credentials(
+    steps: Iterable[Any], register_modes: set[ParallelizationMode], collection: DataAccessCollection | None
+) -> None:
     """Raise ValueError naming the handle if a multiprocessing step's credential value cannot be pickled."""
     if collection is None:
         return
@@ -244,7 +246,7 @@ def raise_on_unpicklable_step_credentials(steps: Iterable[Any], collection: Data
     for step in steps:
         if not isinstance(step, FeatureGroupStep) or not step.credential_handles:
             continue
-        if ParallelizationMode.MULTIPROCESSING not in step.get_parallelization_mode():
+        if not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
         for handle in step.credential_handles:
             if handle in collection.credentials:

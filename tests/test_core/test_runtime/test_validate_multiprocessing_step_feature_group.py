@@ -33,6 +33,7 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 )
 
 _DYNAMIC_CLASS_NAME = "ReviewProbeDynamicFeatureGroup_ValidateStepTest"
+_MP = {ParallelizationMode.MULTIPROCESSING}
 
 
 class ValidateStepFeatureGroup(FeatureGroup):
@@ -70,7 +71,7 @@ def test_a_feature_group_step_with_an_unpicklable_feature_group_is_rejected() ->
     step = _feature_group_step(unpicklable)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_feature_group([step])
+        raise_on_unpicklable_step_feature_group([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable.__name__} (" in message, f"the offending class must be named; got: {message}"
@@ -80,7 +81,7 @@ def test_a_feature_group_step_with_an_unpicklable_feature_group_is_rejected() ->
 def test_a_feature_group_step_with_a_picklable_feature_group_does_not_raise() -> None:
     step = _feature_group_step(ValidateStepFeatureGroup)
 
-    raise_on_unpicklable_step_feature_group([step])
+    raise_on_unpicklable_step_feature_group([step], _MP)
 
 
 def test_a_feature_group_step_whose_compute_framework_does_not_support_multiprocessing_is_not_rejected() -> None:
@@ -88,7 +89,7 @@ def test_a_feature_group_step_whose_compute_framework_does_not_support_multiproc
     unpicklable = _make_local_feature_group()
     step = _feature_group_step(unpicklable, compute_framework=SyncOnlyComputeFramework)
 
-    raise_on_unpicklable_step_feature_group([step])
+    raise_on_unpicklable_step_feature_group([step], _MP)
 
 
 def test_a_feature_group_step_unpicklable_for_a_reason_other_than_its_feature_group_is_rejected() -> None:
@@ -97,7 +98,7 @@ def test_a_feature_group_step_unpicklable_for_a_reason_other_than_its_feature_gr
     step = FeatureGroupStep(ValidateStepFeatureGroup, FeatureSet([feature]), set(), PandasDataFrame)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_feature_group([step])
+        raise_on_unpicklable_step_feature_group([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {ValidateStepFeatureGroup.__name__} (" not in message, (
@@ -111,7 +112,7 @@ def test_a_transform_framework_step_with_an_unpicklable_from_feature_group_is_re
     step = _transform_step(unpicklable, ValidateStepFeatureGroup)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_feature_group([step])
+        raise_on_unpicklable_step_feature_group([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable.__name__} (" in message, f"the offending class must be named; got: {message}"
@@ -126,7 +127,7 @@ def test_a_transform_framework_step_with_an_unpicklable_to_feature_group_is_reje
     step = _transform_step(ValidateStepFeatureGroup, unpicklable)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_feature_group([step])
+        raise_on_unpicklable_step_feature_group([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable.__name__} (" in message, f"the offending class must be named; got: {message}"
@@ -141,7 +142,7 @@ def test_a_transform_framework_step_with_both_feature_groups_unpicklable_blames_
     step = _transform_step(unpicklable_from, unpicklable_to)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_feature_group([step])
+        raise_on_unpicklable_step_feature_group([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable_from.__name__} (" in message, (
@@ -152,11 +153,11 @@ def test_a_transform_framework_step_with_both_feature_groups_unpicklable_blames_
 def test_a_transform_framework_step_with_both_feature_groups_picklable_does_not_raise() -> None:
     step = _transform_step(ValidateStepFeatureGroup, ValidateStepFeatureGroup)
 
-    raise_on_unpicklable_step_feature_group([step])
+    raise_on_unpicklable_step_feature_group([step], _MP)
 
 
 def test_non_matching_step_entries_are_ignored_not_crashed_on() -> None:
-    raise_on_unpicklable_step_feature_group([object(), None])
+    raise_on_unpicklable_step_feature_group([object(), None], _MP)
 
 
 def test_a_join_step_is_ignored_by_this_function() -> None:
@@ -167,7 +168,24 @@ def test_a_join_step_is_ignored_by_this_function() -> None:
     )
     step = JoinStep(link, PyArrowTable, PandasDataFrame, set(), set(), set())
 
-    raise_on_unpicklable_step_feature_group([step])
+    raise_on_unpicklable_step_feature_group([step], _MP)
+
+
+@pytest.mark.parametrize("register_modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}])
+@pytest.mark.parametrize("kind", ["feature_group_step", "transform_framework_step"])
+def test_step_preflight_skips_a_multiprocessing_step_when_the_register_is_not(
+    kind: str, register_modes: set[ParallelizationMode]
+) -> None:
+    """The register decides dispatch too: without MULTIPROCESSING there, the step never reaches a worker."""
+    unpicklable = _make_local_feature_group()
+    step: FeatureGroupStep | TransformFrameworkStep = (
+        _feature_group_step(unpicklable)
+        if kind == "feature_group_step"
+        else _transform_step(unpicklable, ValidateStepFeatureGroup)
+    )
+    assert ParallelizationMode.MULTIPROCESSING in step.get_parallelization_mode()
+
+    raise_on_unpicklable_step_feature_group([step], register_modes)
 
 
 def test_a_feature_group_step_with_a_dynamic_feature_group_creator_class_is_rejected() -> None:
@@ -176,7 +194,7 @@ def test_a_feature_group_step_with_a_dynamic_feature_group_creator_class_is_reje
     step = _feature_group_step(dynamic_fg)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_feature_group([step])
+        raise_on_unpicklable_step_feature_group([step], _MP)
 
     message = str(excinfo.value)
     assert dynamic_fg.__name__ in message, f"the dynamically created class must be named; got: {message}"
@@ -211,7 +229,7 @@ def test_credential_preflight_rejects_an_unpicklable_value_naming_the_handle_not
     step = _credential_step(("db-handle",))
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_step_credentials([step], _collection({"db-handle": _SecretHolder()}))
+        raise_on_unpicklable_step_credentials([step], _MP, _collection({"db-handle": _SecretHolder()}))
 
     message = str(excinfo.value)
     assert "db-handle" in message
@@ -220,27 +238,48 @@ def test_credential_preflight_rejects_an_unpicklable_value_naming_the_handle_not
 
 
 @pytest.mark.parametrize(
-    "handles, framework, credentials",
+    "handles, framework, credentials, register_modes",
     [
-        pytest.param(("h",), SyncOnlyComputeFramework, {"h": _SecretHolder()}, id="step-without-multiprocessing"),
-        pytest.param((), PandasDataFrame, {"h": _SecretHolder()}, id="step-without-handles"),
-        pytest.param(("absent",), PandasDataFrame, {"other": _SecretHolder()}, id="handle-missing-from-collection"),
-        pytest.param(("h",), PandasDataFrame, None, id="none-collection"),
+        pytest.param(("h",), SyncOnlyComputeFramework, {"h": _SecretHolder()}, _MP, id="step-without-multiprocessing"),
+        pytest.param(
+            ("h",),
+            PandasDataFrame,
+            {"h": _SecretHolder()},
+            {ParallelizationMode.SYNC},
+            id="sync-register",
+        ),
+        pytest.param(
+            ("h",),
+            PandasDataFrame,
+            {"h": _SecretHolder()},
+            {ParallelizationMode.THREADING},
+            id="threading-register",
+        ),
+        pytest.param((), PandasDataFrame, {"h": _SecretHolder()}, _MP, id="step-without-handles"),
+        pytest.param(
+            ("absent",), PandasDataFrame, {"other": _SecretHolder()}, _MP, id="handle-missing-from-collection"
+        ),
+        pytest.param(("h",), PandasDataFrame, None, _MP, id="none-collection"),
     ],
 )
 def test_credential_preflight_skips(
-    handles: tuple[str, ...], framework: type[ComputeFramework], credentials: dict[str, Any] | None
+    handles: tuple[str, ...],
+    framework: type[ComputeFramework],
+    credentials: dict[str, Any] | None,
+    register_modes: set[ParallelizationMode],
 ) -> None:
     step = _credential_step(handles, framework)
 
-    raise_on_unpicklable_step_credentials([step], None if credentials is None else _collection(credentials))
+    raise_on_unpicklable_step_credentials(
+        [step], register_modes, None if credentials is None else _collection(credentials)
+    )
 
 
 def test_credential_preflight_probes_a_shared_handle_once() -> None:
     steps = [_credential_step(("shared",)), _credential_step(("shared",))]
 
     with patch("mloda.core.runtime.validate_multiprocessing_link.refuse_unpicklable_credentials") as refuse:
-        raise_on_unpicklable_step_credentials(steps, _collection({"shared": {"k": "v"}}))
+        raise_on_unpicklable_step_credentials(steps, _MP, _collection({"shared": {"k": "v"}}))
 
     assert refuse.call_count == 1
     assert refuse.call_args.args[1] == {"shared": {"k": "v"}}

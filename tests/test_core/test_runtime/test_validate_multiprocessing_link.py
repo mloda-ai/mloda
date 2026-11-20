@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import pytest
 
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.core.step.join_step import JoinStep
 from mloda.provider import FeatureGroup
 from mloda.user import Index, JoinSpec, Link
@@ -21,6 +22,7 @@ from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dyna
 )
 
 _DYNAMIC_CLASS_NAME = "ReviewProbeDynamicFeatureGroup_ValidateLinkTest"
+_MP = {ParallelizationMode.MULTIPROCESSING}
 
 
 class ValidateLinkLeft(FeatureGroup):
@@ -50,7 +52,7 @@ def test_a_link_with_an_unpicklable_left_feature_group_is_rejected() -> None:
     step = _joinstep_for(link)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_join_link([step])
+        raise_on_unpicklable_join_link([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable_left.__name__} (" in message, f"the offending class must be named; got: {message}"
@@ -69,7 +71,7 @@ def test_a_link_with_an_unpicklable_right_feature_group_is_rejected() -> None:
     step = _joinstep_for(link)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_join_link([step])
+        raise_on_unpicklable_join_link([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable_right.__name__} (" in message, f"the offending class must be named; got: {message}"
@@ -86,7 +88,7 @@ def test_a_link_whose_both_sides_are_picklable_does_not_raise() -> None:
     )
     step = _joinstep_for(link)
 
-    raise_on_unpicklable_join_link([step])
+    raise_on_unpicklable_join_link([step], _MP)
 
 
 def test_non_joinstep_entries_are_ignored_not_crashed_on() -> None:
@@ -96,7 +98,7 @@ def test_non_joinstep_entries_are_ignored_not_crashed_on() -> None:
     )
     step = _joinstep_for(link)
 
-    raise_on_unpicklable_join_link([object(), None, step])
+    raise_on_unpicklable_join_link([object(), None, step], _MP)
 
 
 def test_a_link_with_both_feature_groups_unpicklable_blames_the_left_one() -> None:
@@ -109,7 +111,7 @@ def test_a_link_with_both_feature_groups_unpicklable_blames_the_left_one() -> No
     step = _joinstep_for(link)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_join_link([step])
+        raise_on_unpicklable_join_link([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {unpicklable_left.__name__} (" in message, (
@@ -126,7 +128,7 @@ def test_a_link_with_unpicklable_discriminator_and_picklable_feature_groups_is_r
     step = _joinstep_for(link)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_join_link([step])
+        raise_on_unpicklable_join_link([step], _MP)
 
     message = str(excinfo.value)
     assert f"references {ValidateLinkLeft.__name__} (" not in message, (
@@ -146,7 +148,29 @@ def test_join_link_preflight_skips_destination_without_multiprocessing() -> None
     )
     step = JoinStep(link, DuckDBFramework, PandasDataFrame, set(), set(), set())
 
-    raise_on_unpicklable_join_link([step])
+    raise_on_unpicklable_join_link([step], _MP)
+
+
+@pytest.mark.parametrize(
+    "register_modes",
+    [
+        {ParallelizationMode.SYNC},
+        {ParallelizationMode.THREADING},
+        {ParallelizationMode.SYNC, ParallelizationMode.THREADING},
+    ],
+)
+def test_join_link_preflight_skips_a_multiprocessing_step_when_the_register_is_not(
+    register_modes: set[ParallelizationMode],
+) -> None:
+    """The register decides dispatch too: without MULTIPROCESSING there, the join never reaches a worker."""
+    link = Link.inner(
+        JoinSpec(_make_local_feature_group(), Index(("left_key",))),
+        JoinSpec(ValidateLinkRight, Index(("right_key",))),
+    )
+    step = _joinstep_for(link)
+    assert ParallelizationMode.MULTIPROCESSING in step.get_parallelization_mode()
+
+    raise_on_unpicklable_join_link([step], register_modes)
 
 
 def test_a_link_with_a_dynamic_feature_group_creator_class_is_rejected() -> None:
@@ -158,7 +182,7 @@ def test_a_link_with_a_dynamic_feature_group_creator_class_is_rejected() -> None
     step = _joinstep_for(link)
 
     with pytest.raises(ValueError) as excinfo:
-        raise_on_unpicklable_join_link([step])
+        raise_on_unpicklable_join_link([step], _MP)
 
     message = str(excinfo.value)
     assert dynamic_fg.__name__ in message, f"the dynamically created class must be named; got: {message}"

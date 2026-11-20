@@ -863,6 +863,23 @@ class TestEnterPrestartsStandbyWorkers:
         shared.assert_not_called()
         assert orchestrator.manager is None
 
+    @pytest.mark.parametrize(
+        "preflight",
+        [
+            "raise_on_unpicklable_join_link",
+            "raise_on_unpicklable_step_feature_group",
+            "raise_on_unpicklable_step_credentials",
+        ],
+    )
+    def test_preflight_multiprocessing_hands_the_register_modes_to_the_step_preflights(self, preflight: str) -> None:
+        orchestrator = self._entering(Mock())
+        modes = {ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING}
+
+        with patch(f"mloda.core.runtime.run.{preflight}") as checked:
+            orchestrator.preflight_multiprocessing(modes, None, RunContext())
+
+        assert checked.call_args.args[:2] == (orchestrator.execution_planner, modes)
+
     def test_preflight_multiprocessing_alone_refuses_missing_flight_server_and_skips_sync(self) -> None:
         orchestrator = self._entering(Mock(), plan=_chain_plan())
 

@@ -5,7 +5,17 @@ from typing import Any, ClassVar
 import pytest
 
 from mloda.provider import ANY_OUTPUT_PART, ComputeFramework, FeatureSet, DataCreatorFeatureGroup
-from mloda.user import Feature, Features, GlobalFilter, Options, ParallelizationMode, PluginCollector
+from mloda.core.filter.filter_engine import BaseFilterEngine
+from mloda.user import (
+    Feature,
+    Features,
+    FilterType,
+    GlobalFilter,
+    Options,
+    SingleFilter,
+    ParallelizationMode,
+    PluginCollector,
+)
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
@@ -197,3 +207,23 @@ def test_unify_options_preserves_key_category() -> None:
     assert "c" not in unified.group, f"context key 'c' must not land in group, got group={unified.group}"
     assert unified.group == {"g": 1}
     assert unified.context == {"c": 2}
+
+
+@pytest.mark.parametrize(
+    "filter_column, expected_applicable",
+    [("fpart__base~s", True), ("fpart__base~other", False), ("fpart__base", True), (None, False)],
+)
+def test_applicable_filters_matches_requested_output_parts(
+    filter_column: str | None, expected_applicable: bool
+) -> None:
+    """A filter on `<base>~<requested part>` is applicable; an unrequested part is not; None filters give []."""
+    feature = Feature("fpart__base")
+    feature.record_part("s")
+    feature_set = FeatureSet([feature])
+    if filter_column is None:
+        feature_set.filters = None
+        assert BaseFilterEngine.applicable_filters(feature_set) == []
+        return
+    single_filter = SingleFilter(filter_column, FilterType.MIN, {"value": 1})
+    feature_set.filters = {single_filter}
+    assert BaseFilterEngine.applicable_filters(feature_set) == ([single_filter] if expected_applicable else [])

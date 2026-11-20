@@ -100,6 +100,22 @@ def _listed(columns: Collection[str] | None) -> str:
     return f"[{text}]"
 
 
+def _declares_clause(names: Collection[str], prefixes: Collection[str]) -> str:
+    def part(values: Collection[str]) -> str:
+        shown = sorted(repr(_clip(scrub_credentials(v), _MAX_COLUMN_NAME)) for v in values)
+        text = ", ".join(shown[:_MAX_LISTED_COLUMNS])
+        if len(shown) > _MAX_LISTED_COLUMNS:
+            text += f", ... and {len(shown) - _MAX_LISTED_COLUMNS} more"
+        return text
+
+    parts = []
+    if names:
+        parts.append(part(names))
+    if prefixes:
+        parts.append(f"names starting with {part(prefixes)}")
+    return f"; it declares {' and '.join(parts)}" if parts else ""
+
+
 def implementation_path(feature_group: type, implementation: Any, match: Any) -> str | None:
     """module:qualname of the implementation, "neutral" for a source group with a match and none, else None."""
     if implementation is not None:
@@ -423,12 +439,8 @@ class SourceFeatureGroup(FeatureGroup):
 
     @classmethod
     def _declared_name(cls, base_name: str) -> bool:
-        return (
-            base_name in cls.declared_names()
-            or any(_prefix_claims(prefix, base_name) for prefix in cls.declared_name_prefixes())
-            or cls.feature_name_equal_to_class_name(base_name)
-            or (cls.feature_name_contains_class_name_as_prefix(base_name) and _prefix_claims(cls.prefix(), base_name))
-            or base_name in cls.feature_names_supported()
+        return base_name in cls.declared_names() or any(
+            _prefix_claims(prefix, base_name) for prefix in cls.declared_name_prefixes()
         )
 
     @classmethod
@@ -771,7 +783,9 @@ class SourceFeatureGroup(FeatureGroup):
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTED_ELSEWHERE
             )
         elif undeclared and not selected:
-            reason = f"'{name}' is not a name {cls.get_class_name()} declares"
+            reason = f"'{name}' is not a name {cls.get_class_name()} declares" + _declares_clause(
+                cls.declared_names(), cls.declared_name_prefixes()
+            )
             record_match_rejection(
                 cls.get_class_name(), reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.NAME_NOT_DECLARED
             )

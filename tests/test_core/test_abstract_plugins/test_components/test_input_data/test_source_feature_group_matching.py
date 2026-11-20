@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import featur
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import (
     SourcePointerError,
 )
+from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     CoreDeclineCode,
@@ -2316,3 +2317,66 @@ class TestDeclaredPartsOnADeclaredRoute:
         seen = _load_seen(_OnlySPartDeclaredFG, [f"{_CONN}~zzz"], pointed)
 
         assert seen == [(f"{_CONN}~zzz", frozenset())]
+
+
+class _RecordingMixin(ToySourceBase):
+    """Records the (name, requested_parts) each load sees, over any toy route."""
+
+    seen: ClassVar[list[tuple[str, frozenset[str]]]] = []
+
+    @classmethod
+    def load_neutral(cls, match: SourceMatch, features: Any) -> Any:
+        cls.seen.extend((str(f.name), frozenset(f.requested_parts)) for f in features.features)
+        return super().load_neutral(match, features)
+
+
+class _AnyPartsCheckedFG(_RecordingMixin, ToySourceFG):
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+
+class _AnyPartsOpenFG(_RecordingMixin, ToyOpenFG):
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+
+class _AnyPartsFixedDeclaredFG(_RecordingMixin, ToyDeclaredFG):
+    OUTPUT_PARTS = (ANY_OUTPUT_PART,)
+
+    @classmethod
+    def declared_names(cls) -> frozenset[str]:
+        return frozenset({"toyfmt_fixed~v"})
+
+
+def _load_whole(group: type[_RecordingMixin], request: str, pointed: bool) -> list[tuple[str, frozenset[str]]]:
+    group.seen = []
+    feature = Feature(request, feature_group=group) if pointed else Feature(request)
+    mloda.run_all(
+        [feature],
+        compute_frameworks=[PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+        data_access_collection=toy_dac(h1={request: [1]}),
+    )
+    return group.seen
+
+
+class TestWholeNameClaimsStayWhole:
+    """A literal or declared `<base>~<part>` name the source claims whole is not split into base plus part."""
+
+    @pytest.mark.parametrize("pointed", [True, False], ids=["pointed", "searched"])
+    def test_a_checked_literal_column_loads_whole(self, pointed: bool) -> None:
+        assert _load_whole(_AnyPartsCheckedFG, "toyfmt_lit~b", pointed) == [("toyfmt_lit~b", frozenset())]
+
+    def test_a_pointed_open_literal_column_loads_whole(self) -> None:
+        assert _load_whole(_AnyPartsOpenFG, "toyfmt_lit~b", True) == [("toyfmt_lit~b", frozenset())]
+
+    @pytest.mark.parametrize("pointed", [True, False], ids=["pointed", "searched"])
+    def test_a_fixed_declared_name_with_a_part_loads_whole(self, pointed: bool) -> None:
+        assert _load_whole(_AnyPartsFixedDeclaredFG, "toyfmt_fixed~v", pointed) == [("toyfmt_fixed~v", frozenset())]
+
+
+class TestPartNameMatchesWithoutPartResolution:
+    """Paths that never retry the base (global filters, kept index columns) match the full name."""
+
+    def test_the_hook_without_resolve_parts_matches_a_declared_part_name(self) -> None:
+        outcome = call_match_hook(_AnyPartsDeclaredFG, f"{_CONN}~s", Options(), toy_dac(h1=_PART_COLUMNS))
+
+        assert outcome.matched is True

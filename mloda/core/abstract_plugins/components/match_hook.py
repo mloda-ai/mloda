@@ -7,6 +7,7 @@ Each keeps only its own recording and option isolation now, driven by the outcom
 
 from __future__ import annotations
 
+from contextvars import ContextVar
 from dataclasses import dataclass
 from typing import TYPE_CHECKING, Any, Callable
 
@@ -40,6 +41,14 @@ class MatchHookOutcome:
     error: Exception | None
     # (base, part) when matched as a declared output part.
     part: tuple[str, str] | None = None
+
+
+_PART_BEING_RESOLVED: ContextVar[tuple[str, str] | None] = ContextVar("mloda_part_being_resolved", default=None)
+
+
+def part_being_resolved() -> tuple[str, str] | None:
+    """The (base, part) split while the hook is asked about the full name on the part-resolving path."""
+    return _PART_BEING_RESOLVED.get()
 
 
 def _in_window(call: Callable[[], Any], sink: list[dict[str, MatchRejection]]) -> Any:
@@ -103,9 +112,13 @@ def call_match_hook(
             return MatchHookOutcome(matched, returned, None)
         base, part = split
         base_options = options._fork()
-        matched, returned = _in_window(
-            lambda: _ask_hook(feature_group, feature_name, options, data_access_collection), windows
-        )
+        part_token = _PART_BEING_RESOLVED.set(split)
+        try:
+            matched, returned = _in_window(
+                lambda: _ask_hook(feature_group, feature_name, options, data_access_collection), windows
+            )
+        finally:
+            _PART_BEING_RESOLVED.reset(part_token)
         full = MatchHookOutcome(matched, returned, None)
         if matched and feature_group.matches_whole_name(str(feature_name)):
             return full

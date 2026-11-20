@@ -10,6 +10,8 @@ import pytest
 import yaml
 from packaging.requirements import Requirement
 from packaging.specifiers import SpecifierSet
+from packaging.utils import canonicalize_name
+from packaging.version import Version
 
 from mloda.interfaces.cli.demo import REQUEST
 from tests.readme_first_run import first_example
@@ -255,7 +257,7 @@ class TestToxConfig:
     """Validate the tox settings the CI and release workflows depend on."""
 
     TOX_INSTALL = re.compile(r"\binstall\b.*(?<![\w-])tox(?![\w-])")
-    TOX_PIN = re.compile(r"uv tool install tox==\S+ --with tox-uv==\S+$")
+    TOX_PIN = re.compile(r"uv tool install tox==\S+ --with tox-uv==\S+")
 
     @staticmethod
     def _tox_parser() -> configparser.ConfigParser:
@@ -294,6 +296,49 @@ class TestToxConfig:
                 pins.setdefault(workflow.name, set()).add(match.group(0))
         assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install tox: {pins}"
         assert len(set().union(*pins.values())) == 1, f"workflows must install the same tox and tox-uv: {pins}"
+
+    UV_INSTALL = re.compile(r"\bpip install\b.*(?<![\w-])uv(?![\w-])")
+    UV_PIN = re.compile(r"(?<![\w-])uv==([\w.+!-]+)")
+
+    @staticmethod
+    def _uv_tool_config() -> dict[str, Any]:
+        with (PROJECT_ROOT / "pyproject.toml").open("rb") as handle:
+            config: dict[str, Any] = tomllib.load(handle)["tool"]["uv"]
+        return config
+
+    def test_workflows_pin_the_same_uv(self) -> None:
+        """Every workflow pins one uv, for pip and for tox-uv, satisfying [tool.uv] required-version."""
+        pins: dict[str, set[str]] = {}
+        for workflow in sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.y*ml")):
+            for line in _read_text(workflow).splitlines():
+                command = line.strip()
+                if command.startswith("#") or not (self.UV_INSTALL.search(command) or self.TOX_INSTALL.search(command)):
+                    continue
+                match = self.UV_PIN.search(command)
+                assert match, f"{workflow.name} must pin `uv==X` (pip install or tox `--with uv==X`), found: {command}"
+                pins.setdefault(workflow.name, set()).add(match.group(1))
+        assert {"ci.yaml", "release.yaml"} <= pins.keys(), f"ci.yaml and release.yaml must install uv: {pins}"
+        versions = set().union(*pins.values())
+        assert len(versions) == 1, f"workflows must install the same uv: {pins}"
+        required = self._uv_tool_config().get("required-version")
+        assert required, "pyproject.toml [tool.uv] must set required-version"
+        version = Version(next(iter(versions)))
+        assert SpecifierSet(required).contains(version), f"uv=={version} violates required-version {required}"
+
+    def test_lock_satisfies_constraint_dependencies(self) -> None:
+        """Every locked version of a constrained package satisfies its constraint."""
+        constraints = self._uv_tool_config().get("constraint-dependencies", [])
+        assert constraints, "pyproject.toml [tool.uv] must set constraint-dependencies"
+        with (PROJECT_ROOT / "uv.lock").open("rb") as handle:
+            packages = tomllib.load(handle)["package"]
+        for entry in constraints:
+            requirement = Requirement(entry)
+            for package in packages:
+                if canonicalize_name(package["name"]) != canonicalize_name(requirement.name):
+                    continue
+                assert requirement.specifier.contains(Version(package["version"]), prereleases=True), (
+                    f"uv.lock pins {package['name']} {package['version']}, violating constraint {entry}"
+                )
 
     def test_tox_splits_tests_from_lint(self) -> None:
         """Plain `tox` runs python311 and lint; lint tools run only in the lint env."""

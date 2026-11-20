@@ -146,11 +146,8 @@ class RunResult(_RunOutcomeFields, list[Any]):
             return pairs[0][1]
         if not pairs:
             available = sorted({n for step, _ in frames for n in step.requested_feature_names})
-            detail = (
-                f" with group options {_redacted(group, frozenset().union(*(_validated(step) for step in self._plan)))}"
-                if group is not None
-                else ""
-            )
+            validated: frozenset[tuple[str, str]] = frozenset().union(*map(_validated, self._plan))
+            detail = f" with group options {_redacted(group, validated)}" if group is not None else ""
             hint = ""
             if name not in available:
                 computed = sorted({str(step.feature_group_name) for step in self._plan if name in step.feature_names})

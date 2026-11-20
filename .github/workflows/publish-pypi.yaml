@@ -44,12 +44,16 @@ jobs:
             exit 1
           fi
 
+      - name: Check the wheel is the released version
+        run: ls "dist/mloda-$VERSION-py3-none-any.whl"
+
       - name: Note a publish without the TestPyPI check
         if: inputs.skip_testpypi_check
         run: echo "::warning ::skip_testpypi_check was set, so $VERSION was not compared with TestPyPI"
 
       - name: Check that TestPyPI serves the same files
         if: ${{ !inputs.skip_testpypi_check }}
+        shell: bash
         run: |
           (cd dist && sha256sum -- *) | sort -k 2 > built.sha256
           curl -fsS "https://test.pypi.org/pypi/mloda/$VERSION/json" \

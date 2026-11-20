@@ -553,7 +553,7 @@ class TestReleaseWorkflow:
     @staticmethod
     def _workflow_names() -> list[str]:
         folder = PROJECT_ROOT / ".github" / "workflows"
-        return sorted({p.name for p in folder.glob("*.y*ml")} | {"release.yaml", "publish-pypi.yaml"})
+        return sorted(p.name for p in folder.glob("*.y*ml"))
 
     @classmethod
     def _all_jobs(cls) -> dict[tuple[str, str], dict[str, Any]]:
@@ -610,6 +610,8 @@ class TestReleaseWorkflow:
         chain = ["build", "publish_testpypi", "smoke_testpypi", "attach_to_release"]
         for previous, current in zip(chain, chain[1:]):
             assert previous in self._needs(jobs[("release.yaml", current)]), f"{current} must need {previous}"
+        smoke_steps = jobs[("release.yaml", "smoke_testpypi")].get("steps", [])
+        assert not any(str(s.get("uses", "")).startswith("actions/checkout") for s in smoke_steps)
 
     def test_publish_pypi_is_manual_with_required_version(self) -> None:
         config = TestToxConfig._workflow("publish-pypi.yaml")
@@ -617,3 +619,16 @@ class TestReleaseWorkflow:
         triggers: dict[str, Any] = by_key["on"] if "on" in by_key else by_key[True]
         assert set(triggers) == {"workflow_dispatch"}
         assert triggers["workflow_dispatch"]["inputs"]["version"]["required"] is True
+        jobs = self._all_jobs()
+        fetch = jobs[("publish-pypi.yaml", "fetch")]
+        assert fetch.get("if") == "github.ref == 'refs/heads/main'"
+        assert "fetch" in self._needs(jobs[("publish-pypi.yaml", "publish_pypi")])
+        checks = [s for s in fetch["steps"] if 'ls "dist/mloda-$VERSION-py3-none-any.whl"' in str(s.get("run", ""))]
+        assert checks, "fetch must check the wheel filename"
+        assert all("if" not in s for s in checks), "the filename check must always run"
+
+    def test_no_expression_interpolation_in_run_steps(self) -> None:
+        for (name, job_name), job in self._all_jobs().items():
+            if name in {"release.yaml", "publish-pypi.yaml"}:
+                for step in job.get("steps", []):
+                    assert "${{" not in str(step.get("run", "")), f"{name}:{job_name} run must use env"

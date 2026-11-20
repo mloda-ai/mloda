@@ -181,7 +181,7 @@ jobs:
         uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
         with:
           repository-url: https://test.pypi.org/legacy/
-          skip-existing: true  # lets "Re-run failed jobs" pass after a later job failed
+          skip-existing: true  # re-run failed jobs only, never `build` (a rebuilt wheel differs from the one TestPyPI kept)
 
   smoke_testpypi:
     name: Smoke test from TestPyPI
@@ -200,6 +200,7 @@ jobs:
           path: dist/
 
       - name: Fetch the wheel TestPyPI serves and compare it with the build
+        shell: bash
         run: |
           (cd dist && sha256sum -- *) | sort -k 2 > built.sha256
           for attempt in $(seq 1 20); do  # the new release can take a few minutes to show up

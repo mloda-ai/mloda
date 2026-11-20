@@ -48,6 +48,8 @@ logger = logging.getLogger(__name__)
 
 _MAX_RENDERED_ENTRIES = 10
 
+_THREAD_STEP_WAIT = 0.1  # safety timeout: a missed wakeup costs at most this
+
 
 def _capped_join(entries: Sequence[str], separator: str, limit: int = _MAX_RENDERED_ENTRIES) -> str:
     """Join at most ``limit`` entries and name how many were left out."""
@@ -411,6 +413,13 @@ class ExecutionOrchestrator:
             return False
         return True
 
+    def _pause_between_passes(self, made_progress: bool, currently_running_steps: set[UUID]) -> None:
+        """Yield between passes: a re-checking loop holds the GIL and starves step threads."""
+        if ParallelizationMode.MULTIPROCESSING in self._register_modes:
+            time.sleep(0.01)  # worker results arrive on queues, which set no signal
+        elif currently_running_steps and not made_progress:
+            self.worker_manager.thread_step_finished.wait(_THREAD_STEP_WAIT)
+
     def compute(self) -> None:
         """
         Executes the mloda pipeline based on the execution plan.
@@ -424,6 +433,7 @@ class ExecutionOrchestrator:
         unwinding = False
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
+                self.worker_manager.thread_step_finished.clear()
                 if self._check_for_error():
                     break
 
@@ -434,8 +444,7 @@ class ExecutionOrchestrator:
 
                 self._raise_if_stalled(made_progress, finished_ids, currently_running_steps)
 
-                if ParallelizationMode.MULTIPROCESSING in self._register_modes:
-                    time.sleep(0.01)
+                self._pause_between_passes(made_progress, currently_running_steps)
 
             # A cfw's last dependent can finish in the same pass that visited its own
             # drop-check with a stale finished_ids (see _run_planner_pass), so nothing
@@ -461,6 +470,7 @@ class ExecutionOrchestrator:
         unwinding = False
         try:
             while to_finish_ids != finished_ids or len(finished_ids) == 0:
+                self.worker_manager.thread_step_finished.clear()
                 if self._check_for_error():
                     break
 
@@ -473,7 +483,7 @@ class ExecutionOrchestrator:
 
                 self._raise_if_stalled(made_progress, finished_ids, currently_running_steps)
 
-                time.sleep(0.01)
+                self._pause_between_passes(made_progress, currently_running_steps)
 
             # See compute(): flush anything left in track_data_to_drop once finished_ids
             # is fully up to date, since no further FeatureGroupStep iteration is guaranteed.

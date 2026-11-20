@@ -53,6 +53,7 @@ def _worker_manager_mock() -> Mock:
     """A WorkerManager double carrying the per-run done set the executor marks steps in."""
     manager = Mock(spec=WorkerManager)
     manager.result_uuids_collection = set()
+    manager.thread_step_finished = threading.Event()
     return manager
 
 
@@ -1272,6 +1273,7 @@ class TestThreadExecuteStep:
                 None,
                 worker_manager.result_uuids_collection.add,
                 False,
+                worker_manager.thread_step_finished.set,
             ),
             daemon=True,
         )
@@ -1401,20 +1403,38 @@ class TestThreadExecuteStep:
         step = Mock(spec=FeatureGroupStep)
         step.uuid = uuid4()
         done: set[UUID] = set()
+        notify = Mock()
 
-        thread_worker(step, Mock(spec=CfwManager), Mock(spec=ComputeFramework), None, mark_done=done.add)
+        thread_worker(
+            step,
+            Mock(spec=CfwManager),
+            Mock(spec=ComputeFramework),
+            None,
+            mark_done=done.add,
+            notify_finished=notify,
+        )
 
         assert done == {step.uuid}
+        notify.assert_called_once_with()
 
     def test_thread_worker_does_not_mark_a_failed_step_done(self) -> None:
         step = Mock(spec=FeatureGroupStep)
         step.uuid = uuid4()
         step.execute.side_effect = RuntimeError("boom")
         done: set[UUID] = set()
+        notify = Mock()
 
-        thread_worker(step, Mock(spec=CfwManager), Mock(spec=ComputeFramework), None, mark_done=done.add)
+        thread_worker(
+            step,
+            Mock(spec=CfwManager),
+            Mock(spec=ComputeFramework),
+            None,
+            mark_done=done.add,
+            notify_finished=notify,
+        )
 
         assert done == set()
+        notify.assert_called_once_with()
 
 
 class TestMultiExecuteStep:
@@ -2255,6 +2275,7 @@ class TestGrantDispatch:
             _RecordingGrantKind.instances[0],
             worker_manager.result_uuids_collection.add,
             False,
+            worker_manager.thread_step_finished.set,
         )
 
         mock_thread_class.reset_mock()

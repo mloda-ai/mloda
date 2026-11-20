@@ -32,6 +32,8 @@ class WorkerManager:
         # loss is that steps were assigned to it and no result ever arrived.
         self.assigned_steps: dict[UUID, set[UUID]] = {}
         self.standby: list[tuple[Any, Any, Any]] = []
+        # Set by a finishing step thread to wake the run loop.
+        self.thread_step_finished = threading.Event()
 
     def add_thread_task(self, task: threading.Thread) -> None:
         """Add task to list and call task.start()."""

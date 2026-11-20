@@ -10,6 +10,7 @@ import inspect
 import logging
 import os
 import threading
+import time
 import uuid as uuid_mod
 from collections.abc import Callable
 from typing import Any
@@ -27,6 +28,7 @@ from mloda.core.prepare.execution_plan import ExecutionPlan
 
 from mloda.core.runtime.run import ExecutionOrchestrator, planned_worker_count, planned_worker_modules
 from mloda.core.runtime.worker_manager import WorkerManager
+from mloda.core.runtime.worker.thread_worker import thread_worker
 from tests.test_core.test_prepare.test_multi_link_group_resolution import SidePathPandasP, _side_path_prepare
 import mloda.core.core.cfw_manager as cfw_manager_module
 from mloda.core.runtime.compute_framework_executor import ComputeFrameworkExecutor
@@ -474,17 +476,11 @@ def _single_step_mock() -> MagicMock:
 
 
 class TestSyncModeSkipsSleep:
-    """Tests that SYNC mode does not call time.sleep in the compute loop.
+    """SYNC mode steps finish inline, so compute() and compute_stream() must not sleep."""
 
-    In SYNC mode, all steps complete inline within sync_execute_step (which
-    marks the step done in the run state before returning). There is no need to poll
-    for results from worker threads or processes, so the time.sleep(0.01) call
-    in the compute() while-loop is pure waste. The compute loop should skip
-    the sleep when running in SYNC mode.
-    """
-
-    def test_sync_mode_does_not_call_time_sleep(self) -> None:
-        """In SYNC mode, compute() should not call time.sleep."""
+    @pytest.mark.parametrize("method", ["compute", "compute_stream"])
+    def test_sync_mode_does_not_call_time_sleep(self, method: str) -> None:
+        """In SYNC mode, neither loop should call time.sleep."""
         planner = ReiterablePlan(_single_step_mock())
 
         orchestrator = ExecutionOrchestrator(planner)  # type: ignore[arg-type]
@@ -498,8 +494,85 @@ class TestSyncModeSkipsSleep:
         orchestrator.join = Mock()  # type: ignore[method-assign]
 
         with patch("mloda.core.runtime.run.time.sleep") as mock_sleep:
-            orchestrator.compute()
+            if method == "compute":
+                orchestrator.compute()
+            else:
+                list(orchestrator.compute_stream())
             mock_sleep.assert_not_called()
+
+
+class TestThreadingWaitsForStepEvent:
+    """In THREADING mode the loops block on thread_step_finished instead of busy-spinning."""
+
+    @pytest.mark.parametrize("method", ["compute", "compute_stream"])
+    @pytest.mark.parametrize("fail", [False, True])
+    def test_loop_wakes_on_event_without_spinning(
+        self, method: str, fail: bool, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr("mloda.core.runtime.run._THREAD_STEP_WAIT", 5.0)
+
+        orchestrator = ExecutionOrchestrator(ReiterablePlan(_single_step_mock()))  # type: ignore[arg-type]
+        orchestrator.cfw_register = CfwManager({ParallelizationMode.THREADING})
+        orchestrator._drop_data_for_finished_cfws = Mock()  # type: ignore[method-assign]
+        orchestrator.join = Mock()  # type: ignore[method-assign]
+
+        release = threading.Event()
+        threads: list[threading.Thread] = []
+
+        def execute(*args: Any, **kwargs: Any) -> None:
+            release.wait(5.0)
+            if fail:
+                raise RuntimeError("boom")
+
+        def fake_execute_step(step: Any) -> None:
+            step.execute = Mock(side_effect=execute)
+            thread = threading.Thread(
+                target=thread_worker,
+                args=(step, orchestrator.cfw_register, Mock(spec=ComputeFramework), None),
+                kwargs={
+                    "mark_done": orchestrator.worker_manager.result_uuids_collection.add,
+                    "notify_finished": orchestrator.worker_manager.thread_step_finished.set,
+                },
+                daemon=True,
+            )
+            threads.append(thread)
+            thread.start()
+
+        orchestrator._execute_step = Mock(side_effect=fake_execute_step)  # type: ignore[method-assign]
+
+        passes = 0
+        real_pass = orchestrator._run_planner_pass
+
+        def counting_pass(finished_ids: set[UUID], running: set[UUID]) -> bool:
+            nonlocal passes
+            passes += 1
+            return real_pass(finished_ids, running)
+
+        orchestrator._run_planner_pass = counting_pass  # type: ignore[method-assign,assignment]
+
+        def run() -> None:
+            if method == "compute":
+                orchestrator.compute()
+            else:
+                list(orchestrator.compute_stream())
+
+        timer = threading.Timer(0.2, release.set)
+        timer.start()
+        start = time.monotonic()
+        try:
+            if fail:
+                with pytest.raises(RuntimeError, match="boom"):
+                    run()
+            else:
+                run()
+        finally:
+            release.set()
+            timer.cancel()
+            for thread in threads:
+                thread.join(5.0)
+
+        assert time.monotonic() - start < 2.0
+        assert passes <= 5
 
 
 class TestJoinAbandonsThreadsOnlyWhenCancelled:

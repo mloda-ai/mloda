@@ -27,6 +27,7 @@ def thread_worker(
     grant: CredentialGrant | None = None,
     mark_done: Callable[[UUID], None] | None = None,
     in_gate_scope: bool = False,
+    notify_finished: Callable[[], None] | None = None,
 ) -> None:
     with (
         registered_secrets_scope(registered_secrets, identity_secrets),
@@ -41,3 +42,6 @@ def thread_worker(
             masked = redact_exception(e, current_registered_secrets())
             msg, exc_info = failure_report(masked)
             cfw_register.set_error(msg, exc_info, exception=masked)
+        finally:
+            if notify_finished is not None:
+                notify_finished()

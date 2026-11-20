@@ -246,7 +246,14 @@ def test_credential_preflight_rejects_an_unpicklable_value_naming_the_handle_not
             PandasDataFrame,
             {"h": _SecretHolder()},
             {ParallelizationMode.SYNC},
-            id="register-without-multiprocessing",
+            id="sync-register",
+        ),
+        pytest.param(
+            ("h",),
+            PandasDataFrame,
+            {"h": _SecretHolder()},
+            {ParallelizationMode.THREADING},
+            id="threading-register",
         ),
         pytest.param((), PandasDataFrame, {"h": _SecretHolder()}, _MP, id="step-without-handles"),
         pytest.param(

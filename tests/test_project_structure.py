@@ -541,3 +541,79 @@ class TestToxConfig:
         assert "pull_request" in group and "run_id" in group, (
             f"concurrency group must be unique per push run (run_id) and shared per PR: {group}"
         )
+
+
+class TestReleaseWorkflow:
+    """Releases use PyPI Trusted Publishing with a TestPyPI stage, no stored token."""
+
+    ACTION = "pypa/gh-action-pypi-publish"
+    PINNED = re.compile(r"^pypa/gh-action-pypi-publish@[0-9a-f]{40}$")
+    EXPECTED_PUBLISHERS = {("release.yaml", "publish_testpypi"), ("publish-pypi.yaml", "publish_pypi")}
+
+    @staticmethod
+    def _workflow_names() -> list[str]:
+        folder = PROJECT_ROOT / ".github" / "workflows"
+        return sorted({p.name for p in folder.glob("*.y*ml")} | {"release.yaml", "publish-pypi.yaml"})
+
+    @classmethod
+    def _all_jobs(cls) -> dict[tuple[str, str], dict[str, Any]]:
+        return {
+            (name, job_name): job
+            for name in cls._workflow_names()
+            for job_name, job in TestToxConfig._workflow_jobs(name).items()
+        }
+
+    @staticmethod
+    def _needs(job: dict[str, Any]) -> set[str]:
+        needs = job.get("needs", [])
+        return {needs} if isinstance(needs, str) else set(needs)
+
+    def test_no_stored_pypi_token_or_twine_upload(self) -> None:
+        for path in sorted((PROJECT_ROOT / ".github" / "workflows").glob("*.y*ml")):
+            text = _read_text(path)
+            assert "PYPI_API_TOKEN" not in text, f"{path.name} still references PYPI_API_TOKEN"
+            assert "twine upload" not in text, f"{path.name} still runs twine upload"
+
+    def test_only_expected_jobs_publish_with_oidc_only(self) -> None:
+        jobs = self._all_jobs()
+        publishers = {
+            key
+            for key, job in jobs.items()
+            if any(str(s.get("uses", "")).startswith(self.ACTION) for s in job.get("steps", []))
+        }
+        assert publishers == self.EXPECTED_PUBLISHERS
+        for key in publishers:
+            job = jobs[key]
+            assert job.get("permissions") == {"id-token": "write"}, f"{key} permissions"
+            assert "environment" not in job, f"{key} must not use an environment"
+            steps = job["steps"]
+            assert not any(str(s.get("uses", "")).startswith("actions/checkout") for s in steps), f"{key} checkout"
+            (publish,) = [s for s in steps if str(s.get("uses", "")).startswith(self.ACTION)]
+            assert self.PINNED.match(publish["uses"]), f"{key} must pin the action by 40-hex SHA"
+            has_url = "repository-url" in publish.get("with", {})
+            if key[1] == "publish_testpypi":
+                assert publish["with"]["repository-url"] == "https://test.pypi.org/legacy/"
+            else:
+                assert not has_url, f"{key} must publish to real PyPI"
+        for key, job in jobs.items():
+            if key not in publishers:
+                assert "id-token" not in (job.get("permissions") or {}), f"{key} must not grant id-token"
+        for name in self._workflow_names():
+            assert "id-token" not in (TestToxConfig._workflow(name).get("permissions") or {}), f"{name} top-level"
+
+    def test_wheel_is_built_once_and_flows_through_the_stages(self) -> None:
+        jobs = self._all_jobs()
+        builders = {
+            key for key, job in jobs.items() if any("uv build" in str(s.get("run", "")) for s in job.get("steps", []))
+        }
+        assert builders == {("release.yaml", "build")}
+        chain = ["build", "publish_testpypi", "smoke_testpypi", "attach_to_release"]
+        for previous, current in zip(chain, chain[1:]):
+            assert previous in self._needs(jobs[("release.yaml", current)]), f"{current} must need {previous}"
+
+    def test_publish_pypi_is_manual_with_required_version(self) -> None:
+        config = TestToxConfig._workflow("publish-pypi.yaml")
+        by_key: dict[Any, Any] = config
+        triggers: dict[str, Any] = by_key["on"] if "on" in by_key else by_key[True]
+        assert set(triggers) == {"workflow_dispatch"}
+        assert triggers["workflow_dispatch"]["inputs"]["version"]["required"] is True

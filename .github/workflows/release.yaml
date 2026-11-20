@@ -120,12 +120,18 @@ jobs:
           sha=$(git rev-parse --verify "refs/tags/$VERSION^{commit}")
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-  publish:
+  # Build once; TestPyPI, the smoke test and later publish-pypi.yaml all use these exact files.
+  build:
+    name: Build
     needs: github_release
     if: >-
       needs.github_release.outputs.new_release_published == 'true' &&
       needs.github_release.outputs.new_release_sha != ''
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.github_release.outputs.new_release_version }}
     steps:
       - name: Check out the released commit
         uses: actions/checkout@v4
@@ -139,9 +145,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install uv==0.13.8 twine setuptools
+        run: python -m pip install uv==0.13.8 twine
 
       - name: Build the package
         run: uv build --out-dir dist --wheel
@@ -149,8 +153,106 @@ jobs:
       - name: Check the package metadata
         run: twine check dist/*
 
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+      - name: Check the wheel is there
+        run: ls "dist/mloda-$VERSION-py3-none-any.whl"
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # Trusted Publishing: the run's OIDC token is traded for a short-lived upload token, no PyPI secret is stored.
+  publish_testpypi:
+    name: Publish to TestPyPI
+    needs: [github_release, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true  # lets "Re-run failed jobs" pass after a later job failed
+
+  smoke_testpypi:
+    name: Smoke test from TestPyPI
+    needs: [github_release, publish_testpypi]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.github_release.outputs.new_release_version }}
+    steps:
+      # No checkout, so `import mloda` cannot pick up a source tree.
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Fetch the wheel TestPyPI serves and compare it with the build
+        run: |
+          (cd dist && sha256sum -- *) | sort -k 2 > built.sha256
+          for attempt in $(seq 1 20); do  # the new release can take a few minutes to show up
+            if curl -fsS "https://test.pypi.org/pypi/mloda/$VERSION/json" -o release.json; then
+              jq -r '.urls[] | "\(.digests.sha256)  \(.filename)"' release.json | sort -k 2 > served.sha256
+              if cmp -s built.sha256 served.sha256; then
+                break
+              fi
+            fi
+            if [ "$attempt" = 20 ]; then
+              echo "::error ::TestPyPI does not serve the files built for $VERSION"
+              diff built.sha256 served.sha256 || true
+              exit 1
+            fi
+            sleep 15
+          done
+          mkdir testpypi
+          wheel_url=$(jq -r '.urls[] | select(.packagetype == "bdist_wheel") | .url' release.json)
+          curl -fsSL -o "testpypi/${wheel_url##*/}" "$wheel_url"
+          (cd testpypi && grep -F -- "${wheel_url##*/}" ../served.sha256 | sha256sum -c -)
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install as a user would
+        run: |
+          python -m venv venv
+          venv/bin/pip install testpypi/*.whl
+
+      - name: Import the package
+        run: venv/bin/python -c "import mloda"
+
+      - name: Run the installed command
+        run: venv/bin/mloda --help
+
+  # Only a version that passed the smoke test gets its wheel on the GitHub release, where publish-pypi.yaml takes it.
+  attach_to_release:
+    name: Attach to the GitHub release
+    needs: [github_release, smoke_testpypi]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.github_release.outputs.new_release_version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Upload the wheel to the release
+        run: gh release upload "$VERSION" dist/*.whl --repo "$GITHUB_REPOSITORY" --clobber

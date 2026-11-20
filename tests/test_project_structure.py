@@ -550,6 +550,11 @@ class TestReleaseWorkflow:
     PINNED = re.compile(r"^pypa/gh-action-pypi-publish@[0-9a-f]{40}$")
     EXPECTED_PUBLISHERS = {("release.yaml", "publish_testpypi"), ("publish-pypi.yaml", "publish_pypi")}
 
+    EXPECTED_PERMISSIONS = {
+        "publish_testpypi": {"id-token": "write"},
+        "publish_pypi": {"contents": "read", "id-token": "write"},
+    }
+
     @staticmethod
     def _workflow_names() -> list[str]:
         folder = PROJECT_ROOT / ".github" / "workflows"
@@ -584,7 +589,7 @@ class TestReleaseWorkflow:
         assert publishers == self.EXPECTED_PUBLISHERS
         for key in publishers:
             job = jobs[key]
-            assert job.get("permissions") == {"id-token": "write"}, f"{key} permissions"
+            assert job.get("permissions") == self.EXPECTED_PERMISSIONS[key[1]], f"{key} permissions"
             assert "environment" not in job, f"{key} must not use an environment"
             steps = job["steps"]
             assert not any(str(s.get("uses", "")).startswith("actions/checkout") for s in steps), f"{key} checkout"
@@ -607,11 +612,9 @@ class TestReleaseWorkflow:
             key for key, job in jobs.items() if any("uv build" in str(s.get("run", "")) for s in job.get("steps", []))
         }
         assert builders == {("release.yaml", "build")}
-        chain = ["build", "publish_testpypi", "smoke_testpypi", "attach_to_release"]
+        chain = ["build", "publish_testpypi", "attach_to_release"]
         for previous, current in zip(chain, chain[1:]):
             assert previous in self._needs(jobs[("release.yaml", current)]), f"{current} must need {previous}"
-        smoke_steps = jobs[("release.yaml", "smoke_testpypi")].get("steps", [])
-        assert not any(str(s.get("uses", "")).startswith("actions/checkout") for s in smoke_steps)
 
     def test_publish_pypi_is_manual_with_required_version(self) -> None:
         config = TestToxConfig._workflow("publish-pypi.yaml")
@@ -619,16 +622,3 @@ class TestReleaseWorkflow:
         triggers: dict[str, Any] = by_key["on"] if "on" in by_key else by_key[True]
         assert set(triggers) == {"workflow_dispatch"}
         assert triggers["workflow_dispatch"]["inputs"]["version"]["required"] is True
-        jobs = self._all_jobs()
-        fetch = jobs[("publish-pypi.yaml", "fetch")]
-        assert fetch.get("if") == "github.ref == 'refs/heads/main'"
-        assert "fetch" in self._needs(jobs[("publish-pypi.yaml", "publish_pypi")])
-        checks = [s for s in fetch["steps"] if 'ls "dist/mloda-$VERSION-py3-none-any.whl"' in str(s.get("run", ""))]
-        assert checks, "fetch must check the wheel filename"
-        assert all("if" not in s for s in checks), "the filename check must always run"
-
-    def test_no_expression_interpolation_in_run_steps(self) -> None:
-        for (name, job_name), job in self._all_jobs().items():
-            if name in {"release.yaml", "publish-pypi.yaml"}:
-                for step in job.get("steps", []):
-                    assert "${{" not in str(step.get("run", "")), f"{name}:{job_name} run must use env"

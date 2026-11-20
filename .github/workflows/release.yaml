@@ -120,12 +120,18 @@ jobs:
           sha=$(git rev-parse --verify "refs/tags/$VERSION^{commit}")
           echo "sha=$sha" >> "$GITHUB_OUTPUT"
 
-  publish:
+  # Build once; TestPyPI and later publish-pypi.yaml use these exact files.
+  build:
+    name: Build
     needs: github_release
     if: >-
       needs.github_release.outputs.new_release_published == 'true' &&
       needs.github_release.outputs.new_release_sha != ''
     runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+    env:
+      VERSION: ${{ needs.github_release.outputs.new_release_version }}
     steps:
       - name: Check out the released commit
         uses: actions/checkout@v4
@@ -139,9 +145,7 @@ jobs:
           python-version: '3.11'
 
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
-          python -m pip install uv==0.13.8 twine setuptools
+        run: python -m pip install uv==0.13.8 twine
 
       - name: Build the package
         run: uv build --out-dir dist --wheel
@@ -149,8 +153,52 @@ jobs:
       - name: Check the package metadata
         run: twine check dist/*
 
-      - name: Publish to PyPI
-        env:
-          TWINE_USERNAME: __token__
-          TWINE_PASSWORD: ${{ secrets.PYPI_API_TOKEN }}
-        run: twine upload dist/*
+      - name: Check the wheel is there
+        run: ls "dist/mloda-$VERSION-py3-none-any.whl"
+
+      - name: Upload dist
+        uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist/
+          if-no-files-found: error
+
+  # Trusted Publishing: the run's OIDC token is traded for a short-lived upload token, no PyPI secret is stored.
+  publish_testpypi:
+    name: Publish to TestPyPI
+    needs: [github_release, build]
+    runs-on: ubuntu-24.04
+    permissions:
+      id-token: write
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Publish to TestPyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3
+        with:
+          repository-url: https://test.pypi.org/legacy/
+          skip-existing: true  # re-run failed jobs only, never `build`
+
+  # publish-pypi.yaml takes the wheel from the GitHub release, so PyPI gets the file TestPyPI got.
+  attach_to_release:
+    name: Attach to the GitHub release
+    needs: [github_release, publish_testpypi]
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    env:
+      VERSION: ${{ needs.github_release.outputs.new_release_version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download dist
+        uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist/
+
+      - name: Upload the wheel to the release
+        run: gh release upload "$VERSION" dist/*.whl --repo "$GITHUB_REPOSITORY" --clobber

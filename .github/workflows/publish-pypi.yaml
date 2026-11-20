@@ -1,0 +1,27 @@
+name: Publish to PyPI
+
+# Manual: copies the wheel the Release workflow attached to the GitHub release (and put on TestPyPI) to PyPI.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Released version to publish, e.g. 0.20.1"
+        required: true
+        type: string
+
+jobs:
+  publish_pypi:
+    name: Publish to PyPI
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      VERSION: ${{ inputs.version }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Download the wheel attached to the GitHub release
+        run: gh release download "$VERSION" --repo "$GITHUB_REPOSITORY" --dir dist --pattern '*.whl'
+
+      - name: Publish to PyPI
+        uses: pypa/gh-action-pypi-publish@7245906fb61fa33a13554f9d5fb856fe61758086  # v1.14.3

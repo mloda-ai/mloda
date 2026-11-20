@@ -1295,17 +1295,14 @@ class Engine:
                 return exact
         compatible = None
         for f in feature_collection:
-            if (
-                f is feature
-                or f.options.cascade_context_keys != feature.options.cascade_context_keys
-                or f.requested_parts != feature.requested_parts
-                or f.parts_only != feature.parts_only
-            ):
+            if f is feature or f.options.cascade_context_keys != feature.options.cascade_context_keys:
                 continue
             if f.child_options_differ(feature) and f.equals_ignoring_child_options(feature):
                 return f
             if (
                 allow_untyped_input
+                and f.requested_parts == feature.requested_parts
+                and f.parts_only == feature.parts_only
                 and (
                     (
                         f.initial_requested_data

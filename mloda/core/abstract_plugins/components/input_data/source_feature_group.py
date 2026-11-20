@@ -7,6 +7,7 @@ from abc import abstractmethod
 from collections.abc import Callable, Collection, Iterable, Mapping
 from typing import TYPE_CHECKING, Any, ClassVar
 
+from mloda.core.abstract_plugins.components.constants import ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
@@ -25,6 +26,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import (
     note_open_claim,
 )
 from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome, probe_source_group
+from mloda.core.abstract_plugins.components.match_hook import part_being_resolved
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
     MATCH_REJECTION_REASONS,
@@ -583,6 +585,17 @@ class SourceFeatureGroup(FeatureGroup):
         return outcome.refused is None and bool(outcome.result)
 
     @classmethod
+    def _declines_for_part_reading(cls, name: str, options: Options) -> bool:
+        """Decline a declared-prefix name so core retries the base and stamps the declared part."""
+        split = part_being_resolved()
+        if split is None or name in cls.declared_names() or not cls._declared_name(split[0]):
+            return False
+        if not any(route.names is NamePolicy.DECLARED for route in cls.CLAIM_ROUTES):
+            return False
+        declared_parts = cls.output_parts(split[0], options._fork())
+        return declared_parts is not None and (ANY_OUTPUT_PART in declared_parts or split[1] in declared_parts)
+
+    @classmethod
     def _matches_by_default_rules(
         cls,
         feature_name: FeatureName | str,
@@ -592,6 +605,8 @@ class SourceFeatureGroup(FeatureGroup):
         name = str(feature_name)
         if inspect.isabstract(cls):
             cls._reject_abstract(name, options, data_access_collection)
+            return False
+        if cls._declines_for_part_reading(name, options):
             return False
         base_name = cls.get_column_base_feature(name)
         pointed = cls.is_pointed(name, options, data_access_collection)

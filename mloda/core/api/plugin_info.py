@@ -78,5 +78,6 @@ class ResolvedFeature:
     credential_refusal: bool = False
     # Class name of an exception that escaped the evaluation; a contained matcher raise leaves it None.
     raised: str | None = None
-    # Why each eliminated candidate lost (reasons credential-scrubbed); empty when matching never ran or a non-FeatureResolutionError escaped.
+    # Why each eliminated candidate lost (reasons credential-scrubbed); empty when matching never ran
+    # or an exception other than FeatureResolutionError escaped.
     eliminations: Mapping[type["FeatureGroup"], "Elimination"] = field(default_factory=dict)

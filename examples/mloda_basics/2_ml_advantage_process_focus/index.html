@@ -52,7 +52,7 @@
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">What makes mloda unique?</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#data-should-be-reuseable">Data should be reuseable</a>
+    <li class="toctree-l2"><a class="reference internal" href="#data-should-be-reusable">Data should be reusable</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#accommodating-different-technologies-across-software-and-ml-lifecycles">Accommodating different technologies across software and ML lifecycles</a>
     </li>
@@ -146,6 +146,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -980,7 +984,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
-<h2 id="data-should-be-reuseable">Data should be reuseable<a class="anchor-link" href="#data-should-be-reuseable">¶</a></h2><p>In most organizations, data pipelines are often built with a single-purpose focus. This tight coupling of data and data transformation within the same process limits reusability. For example:</p>
+<h2 id="data-should-be-reusable">Data should be reusable<a class="anchor-link" href="#data-should-be-reusable">¶</a></h2><p>In most organizations, data pipelines are often built with a single-purpose focus. This tight coupling of data and data transformation within the same process limits reusability. For example:</p>
 <div class="highlight"><pre><span></span><span class="k">select</span><span class="w"> </span><span class="k">lower</span><span class="p">(</span><span class="k">data</span><span class="p">)</span><span class="w"> </span><span class="k">from</span><span class="w"> </span><span class="k">table</span><span class="w"> </span><span class="k">into</span><span class="w"> </span><span class="n">other_table</span><span class="p">;</span>
 </pre></div>
 <p>In this scenario, embedding data specifics into the process prevents sharing or adapting it for other tasks, leading to repeated rewrites and wasted effort.</p>

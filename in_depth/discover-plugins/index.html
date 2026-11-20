@@ -171,6 +171,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -272,7 +276,7 @@ argument to <code>resolve_feature</code>:</p>
   string form, <code>options=</code> and <code>feature_group=</code>).</li>
 <li><code>links</code>: a set of <code>Link</code> objects, threaded to the matcher so link-gated groups
   resolve.</li>
-<li><code>data_access_collection</code>: threaded to the matcher so reader / input-data groups
+<li><code>data_access_collection</code>: threaded to the matcher so source FeatureGroups
   resolve.</li>
 <li><code>plugin_collector</code>: restricts the FeatureGroups considered and threads its
   <code>allow_redefinition</code> flag into deduplication.</li>
@@ -298,12 +302,12 @@ print(result.feature_group, result.supported_compute_frameworks)
 <code>links</code>, <code>data_access_collection</code>, <code>compute_frameworks</code>) is keyword-only, so
 pass them by name.</p>
 <h3 id="scoping-to-a-feature-group">Scoping to a Feature Group</h3>
-<p>When several FeatureGroups match the same name, such as the framework-specific
-<code>AggregatedFeatureGroup</code> subclasses, narrow the resolution with the keyword-only
+<p>When several FeatureGroups match the same name, such as a group and a subclass of it,
+narrow the resolution with the keyword-only
 <code>feature_group</code> argument. It takes a FeatureGroup subclass or its class-name
 string (the string matches the named class and its subclasses), the same forms
 as <code>Feature(..., feature_group=...)</code>:</p>
-<pre><code class="language-python">result = resolve_feature(&quot;sales__sum_aggr&quot;, feature_group=&quot;PandasAggregatedFeatureGroup&quot;)
+<pre><code class="language-python">result = resolve_feature(&quot;sales__sum_aggr&quot;, feature_group=&quot;AggregatedFeatureGroup&quot;)
 </code></pre>
 <p>Scoped failures append <code>Scoped to feature group: '&lt;Name&gt;'.</code> to <code>result.error</code>,
 mirroring the scoped engine error, so a scoped run can be debugged with the
@@ -312,7 +316,7 @@ same scope.</p>
 <code>subtype</code> (resolved from the name, the passed options, or the key's declared
 default, e.g. <code>"sum"</code> for <code>sales__sum_aggr</code>) and <code>subtype_family</code> (the
 parametric family name, <code>"ntile"</code> for <code>ntile_2</code>); both are <code>None</code> when
-nothing resolves.</p>
+nothing resolves. <code>credential_refusal</code> is <code>True</code> when resolution ended on a credential handle refusal; <code>error</code> then holds its text, naming handles and keys only. <code>error</code> is always credential-scrubbed (collection secrets show as <code>***</code>, and credential-shaped text such as key=value secrets, URI user info and bearer tokens is masked even without a collection). <code>raised</code> is the class name of an exception that escaped the evaluation (an escalated match abort, or a crash in a capability hook or the renderer), else <code>None</code>. <code>eliminations</code> maps each candidate that matching eliminated to why it lost (<code>.stage</code>, <code>.reason</code>, and <code>.code</code>, a <code>DeclineCode</code> or <code>None</code>), on success and on failure: the records <code>FeatureResolutionError.result.eliminations</code> holds, with reasons credential-scrubbed like <code>error</code>. It is empty when nothing was eliminated, matching never ran, or the evaluation raised (<code>raised</code> is set).</p>
 <h3 id="inspecting-candidates">Inspecting Candidates</h3>
 <p>When resolution reached matching but ended ambiguous (multiple FeatureGroups
 matched), <code>candidates</code> lists the classes that matched. When the environment
@@ -339,9 +343,12 @@ fgs = get_feature_group_docs(compute_framework=&quot;PandasDataFrame&quot;)
 <p>Each <code>FeatureGroupInfo</code> also carries the subtype declaration: <code>subtype_key</code>
 (the <code>SUBTYPES.key</code>, <code>None</code> for shape-B and undeclared families), <code>subtypes</code>
 (the sorted universe), <code>parametric_subtypes</code>, <code>subtype_support</code> (supported
-subtypes per framework; empty for abstract bases) and <code>subtype_error</code> (set
-when the declaration is invalid). See
-<a href="../compute-framework-integration/#declaring-capability-per-subtype">Declaring capability per subtype</a>.</p>
+subtypes per framework; empty for abstract bases; <code>accepts</code> restrictions of an
+operation group do not show) and <code>subtype_error</code> (set when the declaration is
+invalid). See
+<a href="../compute-framework-integration/#declaring-capability-per-subtype">Declaring capability per subtype</a>.
+A file or document group also reports <code>suffixes</code>, the sorted suffixes it owns by default (empty for other groups).</p>
+<p>It also reports <code>contract_version</code> (the group's <code>CONTRACT_VERSION</code>, <code>None</code> when unset), <code>divergences</code> (the stamped, scrubbed records of the group and of each serving implementation) and <code>variants</code> (the group's sorted <code>VARIANTS</code>). See <a href="../divergence-records/">Divergence Records</a>.</p>
 <h2 id="inspecting-compute-frameworks">Inspecting Compute Frameworks</h2>
 <p>Get documentation for compute frameworks:</p>
 <pre><code class="language-python">from mloda.steward import get_compute_framework_docs
@@ -363,7 +370,7 @@ extenders = get_extender_docs()
 extenders = get_extender_docs(wraps=&quot;formula&quot;)
 </code></pre>
 <h2 id="graceful-degradation-policy">Graceful Degradation Policy</h2>
-<p>The discovery functions above walk every live plugin subclass and introspect it.
+<p>The discovery functions above enumerate every live plugin subclass and introspect it.
 Plugins can be broken, exotic, or built at runtime (via <code>type()</code>, notebook
 re-execution, or <code>importlib.reload</code>), so introspecting one class can fail. The
 guarded catalog reads follow one shared contract so that a broken plugin
@@ -382,8 +389,11 @@ degrades a field instead of sinking the catalog call.</p>
 <li><strong>Skip.</strong> An entry that is not meant to be documented is dropped silently:
   classes defined in <code>__main__</code>, and the abstract bases (<code>get_extender_docs</code>
   skips <code>Extender</code> and <code>CompositeExtender</code> explicitly; the FeatureGroup and
-  ComputeFramework roots never appear because <code>get_all_subclasses</code> omits them).
-  Redefinition duplicates are collapsed rather than listed twice (see below).</li>
+  ComputeFramework roots are never recorded by <code>feature_group_subclasses()</code> /
+  <code>compute_framework_subclasses()</code>). A group or framework whose
+  <code>__init_subclass__</code> chain never reaches the root's <code>__init_subclass__</code>
+  is not recorded either, so it is absent as well. Redefinition duplicates are
+  collapsed rather than listed twice (see below).</li>
 <li><strong>Propagate.</strong> Errors that are not a single plugin's introspection fault are
   left to surface: bad arguments to the discovery function itself, and failures
   in mloda's own catalog machinery. These are bugs to fix, not conditions to
@@ -464,7 +474,7 @@ entry), because the catalog's job is to list a degraded class, not hide it.</p>
 <li><a href="../plugin-loader/">Plugin Loader</a></li>
 <li><a href="../feature-group-matching/">Feature Group Matching</a></li>
 <li><a href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a></li>
-<li><a href="../data-access-patterns/#column-discovery">Column discovery on a reader</a></li>
+<li><a href="../data-access-patterns/#column-discovery-and-row-counts">Column discovery on a source group</a></li>
 </ul>
               
             </div>

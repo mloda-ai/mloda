@@ -159,6 +159,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -229,6 +233,7 @@
 <li>Multi-Index Support: Supports multi-column keys for complex merges.</li>
 <li>Comparison Operations: Methods to compare indexes and determine subset relationships.</li>
 <li>Utility Methods: Provides methods to check if the index is a multi-index.</li>
+<li>Result keys: <code>Feature(..., keep_index=True)</code> returns the key columns with the result, and setting <code>Feature.index</code> also decides which link side a feature binds to when links exist. In a feature config: <code>{"name": "income", "keep_index": true, "index": ["customer_id"]}</code>.</li>
 </ul>
 <p>Example:</p>
 <pre><code class="language-python">from mloda.user import Index
@@ -301,7 +306,7 @@ engine and does not support joins.</p>
     <code>AsOfJoinConfig</code>, default <code>False</code>). With the default, the strict <code>ValueError</code> above applies.
     When <code>True</code>, ISO-8601 string time columns are coerced per backend: <code>pandas</code>, <code>polars</code>,
     <code>pyarrow</code>, and <code>spark</code> cast to native timestamps, <code>python_dict</code> to <code>datetime</code> (a trailing <code>Z</code>
-    is accepted as <code>+00:00</code>), and <code>sqlite</code> to <code>julianday</code> NUMERIC (so a numeric <code>tolerance</code> is in
+    on a datetime is accepted as UTC), and <code>sqlite</code> to <code>julianday</code> NUMERIC (so a numeric <code>tolerance</code> is in
     days). <code>duckdb</code> rejects strings carrying a UTC offset or trailing <code>Z</code> (cast manually), and
     <code>sqlite</code> additionally rejects one-sided string-vs-numeric coercion (cast manually). Coercion
     fails hard on unparseable or non-ISO values and never produces silent null matches; mixed
@@ -415,6 +420,8 @@ links = Link.star(HubFG, SpokeAFG, SpokeBFG, index_column=&quot;row_id&quot;)
 <li><strong>Scope:</strong> <code>Link.star</code> targets joins between distinct feature-group classes and does not carry discriminators, so it cannot disambiguate multiple same-class nodes. For same-class self-joins, use <code>Link.inner</code> with discriminators (see below).</li>
 </ul>
 <p>The returned set is passed straight to <code>mlodaAPI</code> like any other link set.</p>
+<p><strong>Known limits when several links feed one consumer</strong></p>
+<p>Joins feeding one consumer run in sequence, each on the previous join's frame, so the result must not depend on their order. When two links share a group <code>B</code>, as in <code>Link.left(JoinSpec(A, ...), JoinSpec(B, ...))</code> and <code>Link.left(JoinSpec(C, ...), JoinSpec(B, ...))</code>, each join treats <code>B</code> as inner, outer, kept (the kept side of a left, right or asof join) or dropped. Planned: inner with inner, outer with outer, kept with kept, and kept with inner. Rejected at plan time: dropped with inner, dropped with outer, inner with outer, and two left or right joins that drop <code>B</code> and keep different groups. Dropped with kept (a chain such as <code>Link.left(A, B)</code> plus <code>Link.left(B, C)</code>) and kept with outer are rejected only when both joins join <code>B</code> on the same index and the dropped or outer join's two keys share one column name (differently named keys, as in a foreign key chain, stay planned). To fix it, keep <code>B</code> in every left or right join (<code>Link.star(B, A, C, index_column=..., jointype="left")</code>; an inner join beside them is fine), use one join type for all links, or read the joins in separate consumers. Two members of one link side (see below) count as two such links. A consumer that skips a join another consumer reads gets its own joins; the plan-time rejection stays for two members of one link side, unless the skipped join is a left, right or asof join keeping the shared group.</p>
 <h4 id="same-class-joins-with-discriminators">Same-Class Joins with Discriminators</h4>
 <p>When joining a feature group with itself (or two nodes of the same class loading different data sources), you need to distinguish between the left and right instances using <strong>discriminators</strong>.</p>
 <p><strong>Discriminators</strong> are optional dictionary parameters (<code>left_discriminator</code> and <code>right_discriminator</code>) that match against feature options:</p>
@@ -439,13 +446,16 @@ link = Link(&quot;inner&quot;, left, right,
             left_discriminator={&quot;side&quot;: &quot;left&quot;},
             right_discriminator={&quot;side&quot;: &quot;right&quot;})
 
+# Option 3: Derive the discriminators from the two features
+left_age = Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;left&quot;})
+right_age = Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;right&quot;})
+link = Link.from_features(&quot;inner&quot;, left, right, left_age, right_age)
+
 # 2. Tag features with matching options
 # Feature names reference the feature from the feature group
-features = {
-    Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;left&quot;}),
-    Feature(&quot;age&quot;, options={&quot;side&quot;: &quot;right&quot;}),
-}
+features = {left_age, right_age}
 </code></pre>
+<p><code>Link.from_features</code> uses the group options that differ between the two features as discriminators, and raises if a side has none. It also builds ASOF links when given <code>asof_config=AsOfJoinConfig(...)</code>, importable from <code>mloda.user</code>.</p>
 <p>The execution planner validates that the discriminator key-value pairs exist in the corresponding feature's options to correctly identify which instance belongs to which side of the join.</p>
 <p>The two sides may use different key column names: each side's key column is injected only into the nodes matching that side's discriminator.</p>
 <p>Discriminators are part of a link's identity, so two links that differ only by their discriminators are distinct in <code>links=</code>, letting one node join to several same-class nodes.</p>
@@ -490,20 +500,66 @@ link = Link.inner(
 </code></pre>
 <p>The balanced inheritance rule ensures that joins only occur between "parallel" subclasses - both sides must be at the same level in the inheritance hierarchy relative to the link definition.</p>
 <p>Key injection follows the same subclass rule: a link declared on a base class injects its key column into subclass nodes on that side just as it would the declared class, so a subclass must provide that column even when a more specific link also applies. Discriminators narrow the side only when a class matches both sides. A node whose requested feature is itself one of its links' key columns receives no other key, which keeps batches named after their key column distinguishable.</p>
-<p>When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using <code>right_index</code>: first by exact <code>feature.index</code> match, then by checking whether the feature name appears in the join key columns of <code>right_index</code>. Ensure each link's <code>right_index</code> contains the column name that uniquely identifies its right-side batch.</p>
+<p>When multiple batches match (e.g. three subclasses all matching a base-class link), the engine disambiguates using <code>right_index</code>: first by exact <code>feature.index</code> match, then by checking whether the feature name appears in the join key columns of <code>right_index</code>. Ensure each link's <code>right_index</code> contains the column name that uniquely identifies its right-side batch. Members that one link cannot tell apart this way are rejected, see below.</p>
+<p><strong>One consumer joining two members of one link side</strong></p>
+<p>A base class and its subclass can both match one side of a link, for example a consumer reading <code>A</code>, <code>A1(A)</code> and <code>B</code> over one link between <code>A</code> and <code>B</code>. The members are never joined to each other: each is joined to the other side, and the consumer must read the one frame both joins merge into. Whether that plans depends on the compute frameworks:</p>
+<table>
+<thead>
+<tr>
+<th>Members</th>
+<th>Other side</th>
+<th>Consumer</th>
+<th>Result</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>On different frameworks</td>
+<td>On one member's framework</td>
+<td>On that framework</td>
+<td>Planned; a left or right join that keeps the member side is rejected</td>
+</tr>
+<tr>
+<td>On different frameworks</td>
+<td>On one member's framework</td>
+<td>On another framework</td>
+<td>Rejected: the consumer must run where that same-framework join runs</td>
+</tr>
+<tr>
+<td>On different frameworks</td>
+<td>One feature group, on a framework no member uses</td>
+<td>On the other side's framework, reading both members directly</td>
+<td>Planned for inner and outer joins, and for a left or right join that keeps the other side</td>
+</tr>
+<tr>
+<td>On different frameworks</td>
+<td>On a framework no member uses</td>
+<td>On a member's framework, or reading a member through a feature in between</td>
+<td>Rejected: read one member of the link side per consumer</td>
+</tr>
+<tr>
+<td>On one framework</td>
+<td>Any</td>
+<td>Any</td>
+<td>Rejected at plan time when one link joins both members: read one member of the link side per consumer, and declare one link per member (links whose <code>right_index</code> each name one member are fine)</td>
+</tr>
+</tbody>
+</table>
+<p>Each member's join counts as a separate link into the consumer's frame, so the <a href="#star-joins-linkstar">known limits when several links feed one consumer</a> apply to the planned layouts.</p>
 <h4 id="mlodaapi">mlodaAPI</h4>
 <pre><code class="language-py">from mloda.user import mloda
 
 set_of_links = {link}
 
 mloda.run_all(
-    features=[&quot;Feature_of_FeatureGroupA&quot;, &quot;Feature_of_FeatureGroupB&quot;],
+    features=[&quot;Consumer_of_FeatureGroupA_and_FeatureGroupB&quot;],
     links=set_of_links
     )
 </code></pre>
-<p>mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed.</p>
-<p>A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join, also when the variants differ on one side only, and each consumer waits only on its own join.</p>
+<p>mloda will then use the merge implementation in the compute framework and use the given links to join datasets, if needed. A join happens only for a feature group whose <code>input_features()</code> read both linked groups. Requested features of two linked groups come back as separate frames unless a feature reads both; planning logs a warning then.</p>
+<p>A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join, also when the variants differ on one side only, and each consumer waits only on its own join. Consumers of one RIGHT link never split across its two sides; when one consumer cannot run on the right side's framework, siblings on the same side frameworks join on the left with it.</p>
 <p>In the following section, we will see how this can look like.</p>
+<p>If one feature group produces a Link side and also reads that Link's merged frame, batching can make the side wait on its own join. This previously raised <code>Internal error: the steps of the plan form a cycle.</code>; <code>mloda.prepare</code> now names the group and recommends splitting the side feature and the join reader into separate feature groups. For example, keep <code>g1</code> in the group named by the Link and put a feature reading <code>g1</code> and the other side's columns in a separate reader group. The diagnostic requires an actual dependency cycle, including any intervening framework hops; a class used only as a side with a separate reader remains valid.</p>
 <h4 id="merging-data-in-the-compute-framework">Merging Data in the Compute Framework</h4>
 <p>The compute framework uses the base class BaseMergeEngine as configuration.
 In this example, we show the PandasMergeEngine.</p>

@@ -143,6 +143,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -1018,8 +1022,8 @@ print(plugin_loader.list_loaded_modules("sql"))</div>
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>['mloda_plugins.feature_group.input_data.read_file', 'mloda_plugins.feature_group.input_data.read_db_feature', 'mloda_plugins.feature_group.input_data.read_document', 'mloda_plugins.feature_group.input_data.read_db', 'mloda_plugins.feature_group.input_data.read_file_feature', 'mloda_plugins.feature_group.input_data.read_document_feature', 'mloda_plugins.feature_group.input_data.read_files.markdown_document_reader', 'mloda_plugins.feature_group.input_data.read_files.json', 'mloda_plugins.feature_group.input_data.read_files.csv', 'mloda_plugins.feature_group.input_data.read_files.json_document_reader', 'mloda_plugins.feature_group.input_data.read_files.parquet', 'mloda_plugins.feature_group.input_data.read_files.feather', 'mloda_plugins.feature_group.input_data.read_files.text_file_reader', 'mloda_plugins.feature_group.input_data.read_files.orc', 'mloda_plugins.feature_group.input_data.read_files.yaml_document_reader', 'mloda_plugins.feature_group.input_data.read_dbs.sqlite']
-['mloda_plugins.feature_group.input_data.read_dbs.sqlite', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_pyarrow_transformer', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics', 'mloda_plugins.compute_framework.base_implementations.sql.sql_window', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_pyarrow_transformer', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_utils', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_filter_engine']
+<pre>['mloda_plugins.compute_framework.base_implementations.attribute_column_read']
+['mloda_plugins.feature_group.input_data.db_sources.sqlite_fg', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_filter_engine', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_pyarrow_transformer', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_value_sample', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity', 'mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_mask_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_type_semantics', 'mloda_plugins.compute_framework.base_implementations.sql.sql_window', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_pyarrow_transformer', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_merge_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_mask_engine', 'mloda_plugins.compute_framework.base_implementations.sql.sql_utils', 'mloda_plugins.compute_framework.base_implementations.sql.sql_base_filter_engine']
 </pre>
 </div>
 </div>
@@ -1156,7 +1160,6 @@ categorical_features: list[str | Feature] = ["user_age_group", "product_category
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># Step 2: We specify the data sources to load</span>
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataAccessCollection</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
 
 <span class="c1"># Initialize a DataAccessCollection object</span>
 <span class="n">data_access_collection</span> <span class="o">=</span> <span class="n">DataAccessCollection</span><span class="p">()</span>
@@ -1171,12 +1174,11 @@ categorical_features: list[str | Feature] = ["user_age_group", "product_category
 <span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_folder</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">)</span>
 
 <span class="c1"># As a db cannot work with a folder, we need to add a connection for the db.</span>
-<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
+<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="s2">"sqlite"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-5"># Step 2: We specify the data sources to load
 import os
 from mloda.user import DataAccessCollection
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 
 # Initialize a DataAccessCollection object
 data_access_collection = DataAccessCollection()
@@ -1191,7 +1193,7 @@ if not os.path.exists(base_data_path):
 data_access_collection.add_folder(base_data_path)
 
 # As a db cannot work with a folder, we need to add a connection for the db.
-data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})</div>
+data_access_collection.add_credentials({"sqlite": os.path.join(base_data_path, "example.sqlite")})</div>
 </div>
 </div>
 </div>
@@ -1262,32 +1264,32 @@ transaction_type: [["online","online"]]
 user_age_group: [["26-35","26-35"]] &lt;class 'pyarrow.lib.Table'&gt;
 pyarrow.Table
 item_price: double
-product_id: int64
 order_id: int64
+product_id: int64
 quantity: int64
 ----
 item_price: [[74.86,154.56]]
-product_id: [[282,355]]
 order_id: [[1,2]]
+product_id: [[282,355]]
 quantity: [[6,2]] &lt;class 'pyarrow.lib.Table'&gt;
 pyarrow.Table
 merchant_location: string
-user_location: string
 update_date: int64
+user_location: string
 ----
 merchant_location: [["North","East"]]
-user_location: [["East","West"]]
-update_date: [[1640995200000,1641632290909]] &lt;class 'pyarrow.lib.Table'&gt;
+update_date: [[1640995200000,1641632290909]]
+user_location: [["East","West"]] &lt;class 'pyarrow.lib.Table'&gt;
 pyarrow.Table
-valid_datetime: timestamp[ns, tz=UTC]
 payment_id: int64
 payment_status: string
 payment_type: string
+valid_datetime: timestamp[ns, tz=UTC]
 ----
-valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z]]
 payment_id: [[1,2]]
 payment_status: [["failed","pending"]]
-payment_type: [["debit card","debit card"]] &lt;class 'pyarrow.lib.Table'&gt;
+payment_type: [["debit card","debit card"]]
+valid_datetime: [[2024-01-11 23:01:49.090909090Z,2024-01-15 09:41:49.090909090Z]] &lt;class 'pyarrow.lib.Table'&gt;
 </pre>
 </div>
 </div>
@@ -1347,16 +1349,16 @@ for _data in _result:
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>  product_category transaction_type user_age_group
 0         clothing           online          26-35
-1             home           online          26-35 &lt;class 'pandas.core.frame.DataFrame'&gt;
-   item_price  product_id  order_id  quantity
-0       74.86         282         1         6
-1      154.56         355         2         2 &lt;class 'pandas.core.frame.DataFrame'&gt;
-  merchant_location user_location    update_date
-0             North          East  1640995200000
-1              East          West  1641632290909 &lt;class 'pandas.core.frame.DataFrame'&gt;
-                       valid_datetime  payment_id payment_status payment_type
-0 2024-01-11 23:01:49.090909090+00:00           1         failed   debit card
-1 2024-01-15 09:41:49.090909090+00:00           2        pending   debit card &lt;class 'pandas.core.frame.DataFrame'&gt;
+1             home           online          26-35 &lt;class 'pandas.DataFrame'&gt;
+   item_price  order_id  product_id  quantity
+0       74.86         1         282         6
+1      154.56         2         355         2 &lt;class 'pandas.DataFrame'&gt;
+  merchant_location    update_date user_location
+0             North  1640995200000          East
+1              East  1641632290909          West &lt;class 'pandas.DataFrame'&gt;
+   payment_id payment_status payment_type                      valid_datetime
+0           1         failed   debit card 2024-01-11 23:01:49.090909090+00:00
+1           2        pending   debit card 2024-01-15 09:41:49.090909090+00:00 &lt;class 'pandas.DataFrame'&gt;
 </pre>
 </div>
 </div>
@@ -1419,7 +1421,7 @@ for res in _result:
     order_id
 0         1
 1         2
-2         3 &lt;class 'pandas.core.frame.DataFrame'&gt;
+2         3 &lt;class 'pandas.DataFrame'&gt;
 The resulting data structure differs based on the compute framework:
 
  pyarrow.Table
@@ -1454,16 +1456,16 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureName</span><span class="p">,</span> <span class="n">Options</span><span class="p">,</span> <span class="n">Index</span><span class="p">,</span> <span class="n">Link</span><span class="p">,</span> <span class="n">JoinSpec</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.file_formats.csv_fg</span><span class="w"> </span><span class="kn">import</span> <span class="n">CsvFG</span>
 
 <span class="n">index</span> <span class="o">=</span> <span class="n">Index</span><span class="p">((</span><span class="s2">"order_id"</span><span class="p">,))</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeatureJoin</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CsvFGJoin</span><span class="p">(</span><span class="n">CsvFG</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">index_columns</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">list</span><span class="p">[</span><span class="n">Index</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
         <span class="k">return</span> <span class="p">[</span><span class="n">index</span><span class="p">]</span>
 
-<span class="n">link</span> <span class="o">=</span> <span class="n">Link</span><span class="o">.</span><span class="n">inner</span><span class="p">(</span><span class="n">JoinSpec</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span> <span class="n">JoinSpec</span><span class="p">(</span><span class="n">ReadFileFeatureJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">))</span>
+<span class="n">link</span> <span class="o">=</span> <span class="n">Link</span><span class="o">.</span><span class="n">inner</span><span class="p">(</span><span class="n">JoinSpec</span><span class="p">(</span><span class="n">CsvFGJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">),</span> <span class="n">JoinSpec</span><span class="p">(</span><span class="n">CsvFGJoin</span><span class="p">,</span> <span class="n">index</span><span class="p">))</span>
 
 <span class="k">class</span><span class="w"> </span><span class="nc">ExampleMlLifeCycleJoin</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">input_features</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">options</span><span class="p">:</span> <span class="n">Options</span><span class="p">,</span> <span class="n">feature_name</span><span class="p">:</span> <span class="n">FeatureName</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="n">Feature</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
@@ -1491,16 +1493,16 @@ product_id: [[282,355,395]] &lt;class 'pyarrow.lib.Table'&gt;
 <div class="clipboard-copy-txt" id="cell-9">from typing import Any
 from mloda.provider import FeatureGroup, FeatureSet
 from mloda.user import FeatureName, Options, Index, Link, JoinSpec
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
 index = Index(("order_id",))
 
-class ReadFileFeatureJoin(ReadFileFeature):
+class CsvFGJoin(CsvFG):
     @classmethod
     def index_columns(cls) -&gt; list[Index] | None:
         return [index]
 
-link = Link.inner(JoinSpec(ReadFileFeatureJoin, index), JoinSpec(ReadFileFeatureJoin, index))
+link = Link.inner(JoinSpec(CsvFGJoin, index), JoinSpec(CsvFGJoin, index))
 
 class ExampleMlLifeCycleJoin(FeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
@@ -1549,7 +1551,7 @@ print(
 98        99         5         192
 99       100         6         271
 
-[100 rows x 3 columns] &lt;class 'pandas.core.frame.DataFrame'&gt; 
+[100 rows x 3 columns] &lt;class 'pandas.DataFrame'&gt; 
 
 Final result:     ExampleMlLifeCycleJoin
 0                       1
@@ -1572,7 +1574,7 @@ Note: As no specific compute framework was defined for the result, the output co
 <h2 id="what-have-we-observed-so-far">What Have We Observed So Far?<a class="anchor-link" href="#what-have-we-observed-so-far">¶</a></h2><ol>
 <li><p>mloda unifies the interfaces for data for various sources, formats and technologies for the definition of the processes and applying the processes on the data. We used the FeatureGroup, the ComputeFramework and mlodaAPI as interfaces.</p>
 </li>
-<li><p>It integrates with any techologies, e.g. PyArrow and Pandas, enabling flexible tool choices for data processing.</p>
+<li><p>It integrates with any technologies, e.g. PyArrow and Pandas, enabling flexible tool choices for data processing.</p>
 </li>
 <li><p>mloda combines data access and computation, reducing complexity and providing a reusable approach to ML workflows. Data Access can be controlled centrally for different sources of data. Here, we showed folders and a database access.</p>
 </li>

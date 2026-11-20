@@ -123,7 +123,15 @@
                 </li>
                 <li class="toctree-l2 current"><a class="reference internal current" href="#">Feature Group Testing</a>
     <ul class="current">
-    <li class="toctree-l3"><a class="reference internal" href="#what-to-test">What to Test</a>
+    <li class="toctree-l3"><a class="reference internal" href="#the-conformance-kit">The conformance kit</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#shape-check">Shape check</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#other-checks">Other checks</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#unit-tests-next-to-the-kit">Unit tests next to the kit</a>
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#1-feature-name-pattern-matching">1. Feature Name Pattern Matching</a>
     </li>
@@ -138,8 +146,6 @@
     <li class="toctree-l4"><a class="reference internal" href="#6-testing-with-mock-input-data">6. Testing with Mock Input Data</a>
     </li>
         </ul>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#test-organization">Test Organization</a>
     </li>
     </ul>
                 </li>
@@ -158,6 +164,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -210,8 +220,41 @@
             <div class="section" itemprop="articleBody">
               
                 <h1 id="feature-group-testing">Feature Group Testing</h1>
-<p>This guide outlines key aspects to test in feature groups and provides brief examples.</p>
-<h2 id="what-to-test">What to Test</h2>
+<p>Start with the conformance kit, which checks the contract every feature group shares, then add unit tests for what only your group does.</p>
+<h2 id="the-conformance-kit">The conformance kit</h2>
+<p>The kit is <code>mloda.testing</code>, from the <code>mloda-testing</code> package. It needs pytest; adapters that build frames through Arrow need the <code>mloda-testing[pyarrow]</code> extra. Each <code>check_*</code> function returns a <code>CheckResult</code> (<code>failures</code>, <code>notes</code>, <code>passed</code>); its <code>assert_*</code> twin fails the running test instead.</p>
+<h3 id="shape-check">Shape check</h3>
+<p><code>check_feature_group_shape(cls, base_options=None, *, input_data=None, adapter=None, require_run=False, requests=None)</code> from <code>mloda.testing.feature_group_shape</code> probes the match contract: the class name and declared names match, a foreign name and an undeclared option do not, declared inputs are a set of <code>Feature</code>, dropping a required option records a <code>required_option_absent</code> rejection naming it, a strict option rejects an unknown value, and <code>version()</code>, <code>compute_framework_rule()</code> and secret-shaped options are declared soundly. Given <code>input_data</code> (a <code>TypedTestData</code> from <code>mloda.testing.typed_data</code>), it also runs the names on the <code>adapter</code>'s compute framework (Python dict by default) and checks outputs, types, zero rows, error values and determinism. <code>assert_feature_group_shape</code> defaults to <code>require_run=True</code>, so a run that cannot happen fails instead of leaving a note.</p>
+<p>Each failure starts with its sub-check: <code>names:</code>, <code>foreign:</code>, <code>inputs:</code>, <code>required:</code>, <code>strict:</code>, <code>secrets:</code>, <code>declaration:</code>, <code>run:</code>, <code>outputs:</code>, <code>type:</code>, <code>zero_rows:</code>, <code>error_values:</code>, <code>determinism:</code>.</p>
+<pre><code class="language-py">from mloda.testing.feature_group_shape import assert_feature_group_shape
+from mloda.testing.framework_adapter import PandasAdapter
+from mloda.testing.typed_data import TypedTestData
+from mloda.user import DataType
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation  # noqa: F401
+
+
+def test_aggregation_shape() -&gt; None:
+    assert_feature_group_shape(
+        AggregatedFeatureGroup,
+        requests=[&quot;x__sum_aggr&quot;, &quot;x__count_aggr&quot;, &quot;x__median_aggr&quot;],
+        input_data=TypedTestData({&quot;x&quot;: (DataType.DOUBLE, [1.0, 2.0, 3.0, 4.0])}),
+        adapter=PandasAdapter(),
+    )
+</code></pre>
+<p>An operation group's serving Implementation must be imported (or plugins loaded) before the check runs it.</p>
+<ul>
+<li><strong><code>requests=</code></strong> probes and runs these names instead of the class name and declared names; a name-path group needs it. Pass a sequence of names, not a string, and check names that bind different option keys in separate calls.</li>
+<li><strong>Configuration path</strong>: with <code>in_features</code> in <code>base_options</code>, a mixin group matches any name and a missing required key records no rejection, so <code>foreign:</code> and <code>required:</code> failures are expected there. Pass <code>requests=</code> with the real names instead.</li>
+<li><strong><code>secrets:</code></strong> is described in <a href="../named-data-access-handles/#declaring-a-credential-handle">Declaring a credential handle</a>; <code>check_feature_group_secrets</code> runs that sub-check alone.</li>
+<li><strong>Type notes</strong>: a <code>type</code> or <code>gap</code> <a href="../divergence-records/">divergence record</a> of the group or its serving Implementation turns a type failure, or a column that changes type on zero rows, into a <code>type:</code> note naming the record. A <code>type</code> record on the serving Implementation whose columns all match exactly on a typed framework fails as stale; on the group it is a note.</li>
+</ul>
+<h3 id="other-checks">Other checks</h3>
+<ul>
+<li>Subclass scope (<code>mloda.testing.subclass_scope</code>), operation group shape (<code>mloda.testing.operation_group_shape</code>) and the source group suites (<code>mloda.testing.source</code>): see <a href="../troubleshooting/feature-group-resolution-errors/#a-loaded-subclass-replaces-its-parent">A loaded subclass replaces its parent</a>.</li>
+<li>ComputeFramework suites and framework adapters: see <a href="../compute-framework-integration/#testing">Testing</a>.</li>
+</ul>
+<h2 id="unit-tests-next-to-the-kit">Unit tests next to the kit</h2>
 <h3 id="1-feature-name-pattern-matching">1. Feature Name Pattern Matching</h3>
 <p>Test that your feature group correctly identifies feature names it should handle.</p>
 <p><strong>Example:</strong></p>
@@ -222,46 +265,54 @@ from mloda.user import Options
 assert ClusteringFeatureGroup.match_feature_group_criteria(&quot;customer_behavior__cluster_kmeans_5&quot;, Options())
 assert not ClusteringFeatureGroup.match_feature_group_criteria(&quot;invalid_name&quot;, Options())
 </code></pre>
-<p>The reader veto gate reads the engine's per-candidate rejection window, so a direct <code>match_feature_group_criteria</code> call without an active window does not exercise it; engine-shaped assertions go through <code>IdentifyFeatureGroupClass.evaluate</code>.</p>
+<p>A bare direct call records nothing; wrap one call in <code>collect_match_rejections()</code> to read the reasons it recorded (see section 4), and full engine-shaped assertions go through <code>IdentifyFeatureGroupClass.evaluate</code>.</p>
 <h3 id="2-input-feature-extraction">2. Input Feature Extraction</h3>
 <p>Test that your feature group correctly extracts source features from feature names.</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-python">from mloda.user import Feature, FeatureName, Options
-from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 
 # Test extracting source features from a feature name
-input_features = PandasAggregatedFeatureGroup().input_features(Options(), FeatureName(&quot;sales__sum_aggr&quot;))
+input_features = AggregatedFeatureGroup().input_features(Options(), FeatureName(&quot;sales__sum_aggr&quot;))
 assert Feature(&quot;sales&quot;) in input_features
 </code></pre>
-<p><code>input_features</code> is an instance method, so instantiate the feature group before calling it.</p>
+<p><code>input_features</code> is an instance method, so instantiate the feature group before calling it. For an abstract base, call <code>declared_input_features(options, feature_name)</code> on the abstract base class itself to get the declared inputs.</p>
 <h3 id="3-calculation-logic">3. Calculation Logic</h3>
 <p>Test that your feature group correctly transforms input data into output features.</p>
 <p><strong>Example:</strong></p>
 <pre><code class="language-python">import pandas as pd
 from mloda.user import Feature
 from mloda.provider import FeatureSet
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pandas import PandasAggregation
 
 # Test calculation with sample data
 sample_data = pd.DataFrame({&quot;sales&quot;: [10.0, 20.0, 30.0]})
 feature_set = FeatureSet()
 feature_set.add(Feature(&quot;sales__sum_aggr&quot;))
-result = PandasAggregatedFeatureGroup.calculate_feature(sample_data, feature_set)
+result = PandasAggregation.calculate(AggregatedFeatureGroup, sample_data, feature_set, None)
 assert &quot;sales__sum_aggr&quot; in result.columns
 </code></pre>
 <h3 id="4-configuration-based-feature-creation">4. Configuration-Based Feature Creation</h3>
 <p>Test that your feature group correctly parses features from configuration options.</p>
 <p><strong>Example:</strong></p>
-<pre><code class="language-python"># Test that the options a request carries are enough for the feature group to match
+<pre><code class="language-python">from mloda.provider import collect_match_rejections
+from mloda.user import Options
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
+
+# Test that the options a request carries are enough for the feature group to match
 options = Options(context={
     &quot;aggregation_type&quot;: &quot;sum&quot;,
     &quot;in_features&quot;: &quot;sales&quot;
 })
-assert PandasAggregatedFeatureGroup.match_feature_group_criteria(&quot;sales__sum_aggr&quot;, options)
+assert AggregatedFeatureGroup.match_feature_group_criteria(&quot;sales__sum_aggr&quot;, options)
 
-# Assert the negative too, or the test passes on a name the group never claims
-assert not PandasAggregatedFeatureGroup.match_feature_group_criteria(&quot;sales__sum_aggr&quot;, Options(context={
-    &quot;aggregation_type&quot;: &quot;not_an_aggregation&quot;
-}))
+# Assert the negative too, or the test passes on a name the group never claims; collect the recorded reason
+with collect_match_rejections() as reasons:
+    assert not AggregatedFeatureGroup.match_feature_group_criteria(&quot;sales__sum_aggr&quot;, Options(context={
+        &quot;aggregation_type&quot;: &quot;not_an_aggregation&quot;
+    }))
+assert &quot;not_an_aggregation&quot; in reasons[&quot;AggregatedFeatureGroup&quot;].reason
 </code></pre>
 <h3 id="5-integration-with-mloda-api">5. Integration with mloda API</h3>
 <p>Test that your feature group works correctly with the mloda API.</p>
@@ -282,16 +333,16 @@ assert &quot;sales__sum_aggr&quot; in result[0].columns
 <p><strong>Example:</strong></p>
 <pre><code class="language-python">from typing import Any
 
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
 
 
-class HandGenerator(FeatureGroup):
+class HandGenerator(DataCreatorFeatureGroup):
     &quot;&quot;&quot;The expensive dependency under test, replaced by mock data below.&quot;&quot;&quot;
 
     @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({&quot;hand&quot;})
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {&quot;hand&quot;}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
@@ -331,13 +382,6 @@ assert &quot;hand_score&quot; in results[0].columns
 - Testing derived features without running expensive upstream computations
 - Providing controlled test data for reproducible tests
 - Isolating the feature under test from its dependencies</p>
-<h2 id="test-organization">Test Organization</h2>
-<p>Organize tests into three categories:</p>
-<ol>
-<li><strong>Base Class Tests</strong>: Test feature name parsing, input feature extraction, and configuration</li>
-<li><strong>Framework Implementation Tests</strong>: Test calculation logic for specific compute frameworks</li>
-<li><strong>Integration Tests</strong>: Test with the mloda API and other components</li>
-</ol>
               
             </div>
           </div><footer>

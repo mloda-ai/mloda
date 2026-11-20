@@ -171,6 +171,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -1043,7 +1047,6 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="kn">import</span><span class="w"> </span><span class="nn">os</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">Feature</span><span class="p">,</span> <span class="n">DataAccessCollection</span><span class="p">,</span> <span class="n">PluginLoader</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_dbs.sqlite</span><span class="w"> </span><span class="kn">import</span> <span class="n">SQLITEReader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user.pyarrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">PyArrowTable</span>
 
 <span class="n">plugin_loader</span> <span class="o">=</span> <span class="n">PluginLoader</span><span class="o">.</span><span class="n">all</span><span class="p">()</span>
@@ -1061,7 +1064,7 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_folder</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">)</span>
 
 <span class="c1"># As a db cannot work with a folder, we need to add a connection for the db.</span>
-<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="n">SQLITEReader</span><span class="o">.</span><span class="n">db_path</span><span class="p">():</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
+<span class="n">data_access_collection</span><span class="o">.</span><span class="n">add_credentials</span><span class="p">({</span><span class="s2">"sqlite"</span><span class="p">:</span> <span class="n">os</span><span class="o">.</span><span class="n">path</span><span class="o">.</span><span class="n">join</span><span class="p">(</span><span class="n">base_data_path</span><span class="p">,</span> <span class="s2">"example.sqlite"</span><span class="p">)})</span>
 
 <span class="n">order_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"order_id"</span><span class="p">,</span> <span class="s2">"product_id"</span><span class="p">,</span> <span class="s2">"quantity"</span><span class="p">,</span> <span class="s2">"item_price"</span><span class="p">]</span>
 <span class="n">payment_features</span><span class="p">:</span> <span class="nb">list</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="n">Feature</span><span class="p">]</span> <span class="o">=</span> <span class="p">[</span><span class="s2">"payment_id"</span><span class="p">,</span> <span class="s2">"payment_type"</span><span class="p">,</span> <span class="s2">"payment_status"</span><span class="p">,</span> <span class="s2">"valid_datetime"</span><span class="p">]</span>
@@ -1070,13 +1073,11 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 <span class="n">all_features</span> <span class="o">=</span> <span class="n">order_features</span> <span class="o">+</span> <span class="n">payment_features</span> <span class="o">+</span> <span class="n">location_features</span> <span class="o">+</span> <span class="n">categorical_features</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginCollector</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_document_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadDocumentFeature</span>
 
 <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">all_features</span><span class="p">,</span>
     <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span>
     <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="n">PyArrowTable</span><span class="p">],</span>
-    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PluginCollector</span><span class="o">.</span><span class="n">disabled_feature_groups</span><span class="p">({</span><span class="n">ReadDocumentFeature</span><span class="p">}),</span>
 <span class="p">)</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2"># We reuse the data from the first example and just rerun it for the sake of the example, but just in one cell.
@@ -1084,7 +1085,6 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 import os
 from mloda.user import mloda
 from mloda.user import Feature, DataAccessCollection, PluginLoader
-from mloda_plugins.feature_group.input_data.read_dbs.sqlite import SQLITEReader
 from mloda.user.pyarrow import PyArrowTable
 
 plugin_loader = PluginLoader.all()
@@ -1102,7 +1102,7 @@ if not os.path.exists(base_data_path):
 data_access_collection.add_folder(base_data_path)
 
 # As a db cannot work with a folder, we need to add a connection for the db.
-data_access_collection.add_credentials({SQLITEReader.db_path(): os.path.join(base_data_path, "example.sqlite")})
+data_access_collection.add_credentials({"sqlite": os.path.join(base_data_path, "example.sqlite")})
 
 order_features: list[str | Feature] = ["order_id", "product_id", "quantity", "item_price"]
 payment_features: list[str | Feature] = ["payment_id", "payment_type", "payment_status", "valid_datetime"]
@@ -1111,13 +1111,11 @@ categorical_features: list[str | Feature] = ["user_age_group", "product_category
 all_features = order_features + payment_features + location_features + categorical_features
 
 from mloda.user import PluginCollector
-from mloda_plugins.feature_group.input_data.read_document_feature import ReadDocumentFeature
 
 mloda.run_all(
     all_features,
     data_access_collection=data_access_collection,
     compute_frameworks=[PyArrowTable],
-    plugin_collector=PluginCollector.disabled_feature_groups({ReadDocumentFeature}),
 )</div>
 </div>
 </div>
@@ -1145,7 +1143,7 @@ mloda.run_all(
 
     <span class="c1"># Root feature definition</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">feature_names_supported</span><span class="p">(</span><span class="o">...</span><span class="p">)</span>  <span class="c1"># names a root group serves</span>
         <span class="o">...</span>
 
     <span class="c1"># Features derived from other features</span>
@@ -1167,38 +1165,18 @@ mloda.run_all(
 <div class="jp-InputArea jp-Cell-inputArea"><div class="jp-InputPrompt jp-InputArea-prompt">
 </div><div class="jp-RenderedHTMLCommon jp-RenderedMarkdown jp-MarkdownOutput" data-mime-type="text/markdown">
 <h3 id="simple-example-implementation-of-the-featuregroup-mloda">Simple example implementation of the FeatureGroup mloda<a class="anchor-link" href="#simple-example-implementation-of-the-featuregroup-mloda">¶</a></h3><p>In the background, mloda loads the plugins, which were created before, like this one.</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
+<p>A file format is one feature group. <code>CsvFG</code> claims CSV files and lists their columns:</p>
+<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">CsvFG</span><span class="p">(</span><span class="n">ReadFileFG</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseInputData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">ReadFile</span><span class="p">()</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">suffixes</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">(</span><span class="s2">".csv"</span><span class="p">,</span> <span class="s2">".CSV"</span><span class="p">)</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">reader</span> <span class="o">=</span> <span class="bp">cls</span><span class="o">.</span><span class="n">input_data</span><span class="p">()</span>
-        <span class="k">if</span> <span class="n">reader</span> <span class="ow">is</span> <span class="ow">not</span> <span class="kc">None</span><span class="p">:</span>
-            <span class="n">data</span> <span class="o">=</span> <span class="n">reader</span><span class="o">.</span><span class="n">load</span><span class="p">(</span><span class="n">features</span><span class="p">)</span>
-            <span class="k">return</span> <span class="n">data</span>
-        <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Reading file failed for feature </span><span class="si">{</span><span class="n">features</span><span class="o">.</span><span class="n">get_name_of_one_feature</span><span class="p">()</span><span class="si">}</span><span class="s2">."</span><span class="p">)</span>
-</pre></div>
-<p>We use composition to read different data sources. A ReadFile object looks like this:</p>
-<div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">CsvReader</span><span class="p">(</span><span class="n">ReadFile</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">suffix</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">tuple</span><span class="p">[</span><span class="nb">str</span><span class="p">,</span> <span class="o">...</span><span class="p">]:</span>
-        <span class="k">return</span> <span class="p">(</span>
-            <span class="s2">".csv"</span><span class="p">,</span>
-            <span class="s2">".CSV"</span><span class="p">,</span>
-        <span class="p">)</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">FileSource</span><span class="p">(</span><span class="n">path</span><span class="o">=</span><span class="n">data_access</span><span class="p">,</span> <span class="nb">format</span><span class="o">=</span><span class="s2">"csv"</span><span class="p">,</span> <span class="n">columns</span><span class="o">=</span><span class="nb">tuple</span><span class="p">(</span><span class="nb">sorted</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">())))</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">get_column_names</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">file_name</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">file_name</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8-sig"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">column_names</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">path</span><span class="p">:</span> <span class="nb">str</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Collection</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">with</span> <span class="nb">open</span><span class="p">(</span><span class="n">path</span><span class="p">,</span> <span class="n">newline</span><span class="o">=</span><span class="s2">""</span><span class="p">,</span> <span class="n">encoding</span><span class="o">=</span><span class="s2">"utf-8-sig"</span><span class="p">)</span> <span class="k">as</span> <span class="n">f</span><span class="p">:</span>
             <span class="k">return</span> <span class="nb">next</span><span class="p">(</span><span class="n">csv</span><span class="o">.</span><span class="n">reader</span><span class="p">(</span><span class="n">f</span><span class="p">),</span> <span class="p">[])</span>
 </pre></div>
-<p><code>load_data</code> returns a lightweight <code>FileSource</code> descriptor; the target compute framework materializes it into its native table type. Overriding <code>load_data</code> to return a concrete table directly is equally supported.</p>
+<p>Its neutral form is a lightweight <code>FileSource</code> descriptor; the target compute framework materializes it into its native table type. An <code>Implementation</code> class for a compute framework, whose <code>calculate(group, data, features, framework)</code> returns the data, replaces that for the framework.</p>
 <p>As you can see, the implementation is flexible in the sense that if you need something, you can adjust it quite easily. The other files like .json, .parquet and the sqlite access are implemented in a similar fashion.</p>
 </div>
 </div>
@@ -1222,35 +1200,23 @@ mloda.run_all(
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># In the following, we will just adjust a bit the CsvReader to handle a different delimiter.</span>
-<span class="c1"># CsvReader2 overrides load_data wholesale, returning a concrete table instead of a FileSource.</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># In the following, we will just adjust a bit the CsvFG to handle a different delimiter.</span>
+<span class="c1"># CsvFG2 gets its own PyArrowTable Implementation, returning a concrete table instead of a FileSource.</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Any</span>
 
 <span class="kn">from</span><span class="w"> </span><span class="nn">pyarrow</span><span class="w"> </span><span class="kn">import</span> <span class="n">csv</span> <span class="k">as</span> <span class="n">pyarrow_csv</span>
 
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureSet</span><span class="p">,</span> <span class="n">BaseInputData</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_file_feature</span><span class="w"> </span><span class="kn">import</span> <span class="n">ReadFileFeature</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.read_files.csv</span><span class="w"> </span><span class="kn">import</span> <span class="n">CsvReader</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">ComputeFramework</span><span class="p">,</span> <span class="n">FeatureSet</span><span class="p">,</span> <span class="n">Implementation</span><span class="p">,</span> <span class="n">SourceMatch</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda_plugins.feature_group.input_data.file_formats.csv_fg</span><span class="w"> </span><span class="kn">import</span> <span class="n">CsvFG</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">CsvReader2</span><span class="p">(</span><span class="n">CsvReader</span><span class="p">):</span>
-    <span class="c1"># Adjusted CsvReader2 to handle the new delimiter</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">CsvFG2</span><span class="p">(</span><span class="n">CsvFG</span><span class="p">):</span>
+    <span class="c1"># Adjusted CsvFG2 to handle the new delimiter</span>
     <span class="n">_parse_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ParseOptions</span><span class="p">(</span>
         <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span>  <span class="c1"># Default delimiter</span>
         <span class="n">quote_char</span><span class="o">=</span><span class="s1">'"'</span><span class="p">,</span>  <span class="c1"># Handles quoted strings</span>
         <span class="n">ignore_empty_lines</span><span class="o">=</span><span class="kc">True</span><span class="p">,</span>  <span class="c1"># Skips empty lines</span>
     <span class="p">)</span>
-
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">load_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data_access</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
-        <span class="n">result</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data_access</span><span class="p">,</span> <span class="n">parse_options</span><span class="o">=</span><span class="bp">cls</span><span class="o">.</span><span class="n">_parse_options</span><span class="p">)</span>
-        <span class="nb">print</span><span class="p">(</span><span class="s2">"We used CsvReader2 to load the data."</span><span class="p">)</span>
-        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">()))</span>
-
-<span class="k">class</span><span class="w"> </span><span class="nc">ReadFileFeature2</span><span class="p">(</span><span class="n">ReadFileFeature</span><span class="p">):</span>
-    <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseInputData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">CsvReader2</span><span class="p">()</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">validate_output_features</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
@@ -1259,20 +1225,31 @@ mloda.run_all(
                 <span class="n">column</span> <span class="o">=</span> <span class="n">data</span><span class="p">[</span><span class="n">column_name</span><span class="p">]</span>
                 <span class="k">if</span> <span class="n">column</span><span class="o">.</span><span class="n">null_count</span> <span class="o">==</span> <span class="n">column</span><span class="o">.</span><span class="n">length</span><span class="p">:</span>
                     <span class="k">raise</span> <span class="ne">ValueError</span><span class="p">(</span><span class="sa">f</span><span class="s2">"Column '</span><span class="si">{</span><span class="n">column_name</span><span class="si">}</span><span class="s2">' contains only null values."</span><span class="p">)</span>
+
+<span class="k">class</span><span class="w"> </span><span class="nc">CsvFG2PyArrowTable</span><span class="p">(</span><span class="n">Implementation</span><span class="p">[</span><span class="n">CsvFG2</span><span class="p">]):</span>
+    <span class="n">feature_group</span> <span class="o">=</span> <span class="n">CsvFG2</span>
+    <span class="n">compute_framework</span> <span class="o">=</span> <span class="n">PyArrowTable</span>
+
+    <span class="nd">@classmethod</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">calculate</span><span class="p">(</span>
+        <span class="bp">cls</span><span class="p">,</span> <span class="n">group</span><span class="p">:</span> <span class="nb">type</span><span class="p">[</span><span class="n">CsvFG2</span><span class="p">],</span> <span class="n">data</span><span class="p">:</span> <span class="n">SourceMatch</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">,</span> <span class="n">framework</span><span class="p">:</span> <span class="n">ComputeFramework</span> <span class="o">|</span> <span class="kc">None</span>
+    <span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
+        <span class="n">result</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">read_csv</span><span class="p">(</span><span class="n">data</span><span class="o">.</span><span class="n">access</span><span class="p">,</span> <span class="n">parse_options</span><span class="o">=</span><span class="n">group</span><span class="o">.</span><span class="n">_parse_options</span><span class="p">)</span>
+        <span class="nb">print</span><span class="p">(</span><span class="s2">"We used CsvFG2 to load the data."</span><span class="p">)</span>
+        <span class="k">return</span> <span class="n">result</span><span class="o">.</span><span class="n">select</span><span class="p">(</span><span class="nb">list</span><span class="p">(</span><span class="n">features</span><span class="o">.</span><span class="n">get_all_names</span><span class="p">()))</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-3"># In the following, we will just adjust a bit the CsvReader to handle a different delimiter.
-# CsvReader2 overrides load_data wholesale, returning a concrete table instead of a FileSource.
+<div class="clipboard-copy-txt" id="cell-3"># In the following, we will just adjust a bit the CsvFG to handle a different delimiter.
+# CsvFG2 gets its own PyArrowTable Implementation, returning a concrete table instead of a FileSource.
 
 from typing import Any
 
 from pyarrow import csv as pyarrow_csv
 
-from mloda.provider import FeatureSet, BaseInputData
-from mloda_plugins.feature_group.input_data.read_file_feature import ReadFileFeature
-from mloda_plugins.feature_group.input_data.read_files.csv import CsvReader
+from mloda.provider import ComputeFramework, FeatureSet, Implementation, SourceMatch
+from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 
-class CsvReader2(CsvReader):
-    # Adjusted CsvReader2 to handle the new delimiter
+class CsvFG2(CsvFG):
+    # Adjusted CsvFG2 to handle the new delimiter
     _parse_options = pyarrow_csv.ParseOptions(
         delimiter=",",  # Default delimiter
         quote_char='"',  # Handles quoted strings
@@ -1280,23 +1257,24 @@ class CsvReader2(CsvReader):
     )
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -&gt; Any:
-        result = pyarrow_csv.read_csv(data_access, parse_options=cls._parse_options)
-        print("We used CsvReader2 to load the data.")
-        return result.select(list(features.get_all_names()))
-
-class ReadFileFeature2(ReadFileFeature):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return CsvReader2()
-
-    @classmethod
     def validate_output_features(cls, data: Any, features: FeatureSet) -&gt; None:
         for column_name in features.get_all_names():
             if column_name in data.column_names:
                 column = data[column_name]
                 if column.null_count == column.length:
-                    raise ValueError(f"Column '{column_name}' contains only null values.")</div>
+                    raise ValueError(f"Column '{column_name}' contains only null values.")
+
+class CsvFG2PyArrowTable(Implementation[CsvFG2]):
+    feature_group = CsvFG2
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(
+        cls, group: type[CsvFG2], data: SourceMatch, features: FeatureSet, framework: ComputeFramework | None
+    ) -&gt; Any:
+        result = pyarrow_csv.read_csv(data.access, parse_options=group._parse_options)
+        print("We used CsvFG2 to load the data.")
+        return result.select(list(features.get_all_names()))</div>
 </div>
 </div>
 </div>
@@ -1321,22 +1299,22 @@ class ReadFileFeature2(ReadFileFeature):
 </div>
 </clipboard-copy>
 </div>
-<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We can see that the data was loaded using the new CsvReader2.</span>
+<div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We can see that the data was loaded using the new CsvFG2.</span>
 <span class="c1"># However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.</span>
 <span class="n">result</span> <span class="o">=</span> <span class="n">mloda</span><span class="o">.</span><span class="n">run_all</span><span class="p">(</span>
     <span class="n">order_features</span><span class="p">,</span>
     <span class="n">data_access_collection</span><span class="o">=</span><span class="n">data_access_collection</span><span class="p">,</span>
     <span class="n">compute_frameworks</span><span class="o">=</span><span class="p">[</span><span class="n">PyArrowTable</span><span class="p">],</span>
-    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PluginCollector</span><span class="o">.</span><span class="n">enabled_feature_groups</span><span class="p">({</span><span class="n">ReadFileFeature2</span><span class="p">}),</span>
+    <span class="n">plugin_collector</span><span class="o">=</span><span class="n">PluginCollector</span><span class="o">.</span><span class="n">enabled_feature_groups</span><span class="p">({</span><span class="n">CsvFG2</span><span class="p">}),</span>
 <span class="p">)</span>
 </pre></div>
-<div class="clipboard-copy-txt" id="cell-4"># We can see that the data was loaded using the new CsvReader2.
+<div class="clipboard-copy-txt" id="cell-4"># We can see that the data was loaded using the new CsvFG2.
 # However, this is a rather simple use case. In a real-world scenario, we would have more complex data and more complex operations.
 result = mloda.run_all(
     order_features,
     data_access_collection=data_access_collection,
     compute_frameworks=[PyArrowTable],
-    plugin_collector=PluginCollector.enabled_feature_groups({ReadFileFeature2}),
+    plugin_collector=PluginCollector.enabled_feature_groups({CsvFG2}),
 )</div>
 </div>
 </div>
@@ -1349,7 +1327,7 @@ result = mloda.run_all(
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>We used CsvReader2 to load the data.
+<pre>We used CsvFG2 to load the data.
 </pre>
 </div>
 </div>
@@ -1393,8 +1371,8 @@ result = mloda.run_all(
 </ul>
 <p>An integration test could be done by using mlodamloda.run_all and custom data.</p>
 <p>An example of a unit test could look like:</p>
-<div class="highlight"><pre><span></span><span class="k">def</span><span class="w"> </span><span class="nf">test_csv_reader_2</span><span class="p">(</span><span class="bp">self</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="kc">None</span><span class="p">:</span>
-   <span class="k">def</span><span class="w"> </span><span class="nf">test_parse_options_are_customized</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_read_csv</span><span class="p">):</span>
+<div class="highlight"><pre><span></span><span class="nd">@patch</span><span class="p">(</span><span class="s2">"pyarrow.csv.read_csv"</span><span class="p">)</span>
+<span class="k">def</span><span class="w"> </span><span class="nf">test_parse_options_are_customized</span><span class="p">(</span><span class="bp">self</span><span class="p">,</span> <span class="n">mock_read_csv</span><span class="p">):</span>
         <span class="c1"># Ensure the parse options are as expected</span>
         <span class="n">expected_parse_options</span> <span class="o">=</span> <span class="n">pyarrow_csv</span><span class="o">.</span><span class="n">ParseOptions</span><span class="p">(</span>
             <span class="n">delimiter</span><span class="o">=</span><span class="s2">","</span><span class="p">,</span>
@@ -1402,11 +1380,11 @@ result = mloda.run_all(
             <span class="n">ignore_empty_lines</span><span class="o">=</span><span class="kc">True</span>
         <span class="p">)</span>
 
-        <span class="c1"># Call the method to trigger parse options usage</span>
-        <span class="n">CsvReader2</span><span class="o">.</span><span class="n">load_data</span><span class="p">(</span><span class="n">Mock</span><span class="p">(),</span> <span class="n">Mock</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">FeatureSet</span><span class="p">))</span>
+        <span class="c1"># The custom read lives in the Implementation for PyArrowTable</span>
+        <span class="n">CsvFG2PyArrowTable</span><span class="o">.</span><span class="n">calculate</span><span class="p">(</span><span class="n">CsvFG2</span><span class="p">,</span> <span class="n">SourceMatch</span><span class="p">(</span><span class="n">source</span><span class="o">=</span><span class="s2">"data.csv"</span><span class="p">,</span> <span class="n">access</span><span class="o">=</span><span class="s2">"data.csv"</span><span class="p">),</span> <span class="n">Mock</span><span class="p">(</span><span class="n">spec</span><span class="o">=</span><span class="n">FeatureSet</span><span class="p">),</span> <span class="kc">None</span><span class="p">)</span>
 
-        <span class="c1"># Verify that the _parse_options in CsvReader2 are customized</span>
-        <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">(</span><span class="n">CsvReader2</span><span class="o">.</span><span class="n">_parse_options</span><span class="p">,</span> <span class="n">expected_parse_options</span><span class="p">)</span>
+        <span class="c1"># Verify that the read used the customized parse options</span>
+        <span class="bp">self</span><span class="o">.</span><span class="n">assertEqual</span><span class="p">(</span><span class="n">mock_read_csv</span><span class="o">.</span><span class="n">call_args</span><span class="o">.</span><span class="n">kwargs</span><span class="p">[</span><span class="s2">"parse_options"</span><span class="p">],</span> <span class="n">expected_parse_options</span><span class="p">)</span>
 </pre></div>
 <p>This allows us to apply software engineering practices consistently throughout the entire data workflow.</p>
 </div>
@@ -1436,7 +1414,7 @@ result = mloda.run_all(
 <div class="highlight"><pre><span></span><span class="k">class</span><span class="w"> </span><span class="nc">mlodaAPI</span><span class="p">:</span>
     <span class="k">def</span><span class="w"> </span><span class="fm">__init__</span><span class="p">(</span>
         <span class="bp">self</span><span class="p">,</span>
-        <span class="n">requested_features</span><span class="p">:</span> <span class="n">Features</span> <span class="o">|</span> <span class="nb">list</span><span class="p">[</span><span class="n">Feature</span> <span class="o">|</span> <span class="nb">str</span><span class="p">],</span>
+        <span class="n">requested_features</span><span class="p">:</span> <span class="n">Features</span> <span class="o">|</span> <span class="n">Sequence</span><span class="p">[</span><span class="n">Feature</span> <span class="o">|</span> <span class="nb">str</span><span class="p">],</span>
         <span class="n">compute_frameworks</span><span class="p">:</span> <span class="n">Sequence</span><span class="p">[</span><span class="nb">str</span> <span class="o">|</span> <span class="nb">type</span><span class="p">[</span><span class="n">ComputeFramework</span><span class="p">]]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">links</span><span class="p">:</span> <span class="nb">set</span><span class="p">[</span><span class="n">Link</span><span class="p">]</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
         <span class="n">data_access_collection</span><span class="p">:</span> <span class="n">DataAccessCollection</span> <span class="o">|</span> <span class="kc">None</span> <span class="o">=</span> <span class="kc">None</span><span class="p">,</span>
@@ -1464,7 +1442,7 @@ result = mloda.run_all(
 <ul>
 <li>POC notebooks</li>
 <li>Production code scenarios (model training or realtime prediction)</li>
-<li>Micro service endpont</li>
+<li>Micro service endpoint</li>
 <li>KPI or QA test data ingestion</li>
 </ul>
 <p>With this, the whole ml lifecycle is represented and plugins can be reused in a testable and repeatable way along this cycle.</p>

@@ -159,6 +159,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -245,6 +249,7 @@ class ClippedValue(FeatureGroup):
         return clip(data)
 </code></pre>
 <p>Changing <code>LIMIT</code> or the body of <code>clip</code> changes <code>ClippedValue.version()</code>, even if <code>clip</code> lives in another module of the same package.</p>
+<p><code>Implementation.version()</code> works the same way and is not folded into the group's version.</p>
 <h2 id="third-party-dependencies">Third-party dependencies</h2>
 <p>The code of third-party packages is never hashed. By default, <code>ThirdPartyVersionMode.INCLUDE</code> adds the name and version of every third-party package the reachable code references, so upgrading pandas changes the version of every feature group that uses pandas. A package's version comes from its distribution metadata or its <code>__version__</code>. A package with neither is recorded by name only. To leave dependency versions out, override <code>version_third_party_mode()</code>. A shared base class sets it for all its subclasses:</p>
 <pre><code class="language-python">from mloda.provider import FeatureGroup, ThirdPartyVersionMode
@@ -260,7 +265,7 @@ class DependencyAgnostic(FeatureGroup):
 <li>mloda itself, beyond the version prefix. Edits to an editable mloda install do not change it.</li>
 <li>Code reached only through runtime values:<ul>
 <li>registries filled elsewhere (<code>REGISTRY["k"] = f</code>, <code>REGISTRY.update(...)</code>),</li>
-<li>classes discovered by reflection, such as the file readers <code>ReadFileFeature</code> finds through <code>__subclasses__()</code> (see below),</li>
+<li>classes discovered by reflection, such as plugins found through <code>__subclasses__()</code> (see below),</li>
 <li>imports by a computed name (<code>importlib.import_module(name)</code>),</li>
 <li>attributes assigned outside the class body,</li>
 <li><code>getattr</code> on objects that are not modules,</li>
@@ -272,7 +277,7 @@ class DependencyAgnostic(FeatureGroup):
 <li>Data and configuration files the code reads.</li>
 <li>Source edited after import in a long-lived process. The hash reads the source files the first time it runs for a class, then caches the result for that class object.</li>
 </ul>
-<p>Imports are never executed to close these gaps: <code>version()</code> runs during computation, and importing a module can register new feature groups or readers mid-run.</p>
+<p>Imports are never executed to close these gaps: <code>version()</code> runs during computation, and importing a module can register new feature groups mid-run.</p>
 <h3 id="code-reached-by-reflection">Code reached by reflection</h3>
 <p>To make such code count, reference it in the class body. Any class attribute works, the name carries no meaning:</p>
 <pre><code class="language-python">from typing import Any
@@ -292,7 +297,7 @@ class ScaledValue(FeatureGroup):
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
         return data
 </code></pre>
-<p>Editing <code>Scaler.apply</code> now changes <code>ScaledValue.version()</code>. A third-party class referenced this way records only its package name and version, and nothing under <code>ThirdPartyVersionMode.EXCLUDE</code>. <code>ReadFileFeature</code> and <code>ReadDocumentFeature</code> declare nothing: the readers they find depend on what is imported at runtime, which would make the version depend on import order. The readers shipped with mloda are covered by the version prefix. To version a custom reader, subclass the reader feature group and reference the reader in it.</p>
+<p>Editing <code>Scaler.apply</code> now changes <code>ScaledValue.version()</code>. A third-party class referenced this way records only its package name and version, and nothing under <code>ThirdPartyVersionMode.EXCLUDE</code>. The source groups shipped with mloda (<code>CsvFG</code>, <code>TextFG</code>, ...) are covered by the version prefix. To version a custom source group, subclass it and reference it in your feature group.</p>
 <h2 id="when-it-is-computed">When it is computed</h2>
 <p><code>version()</code> runs for every hook call while an extender is active, and in <code>get_feature_group_docs()</code>. The hash is computed once per class and cached for the lifetime of the class object. Each imported module is parsed once per process (a module found only through a function-local import, once per hash), and only the definitions the walk reaches are hashed.</p>
 <h2 id="custom-versioning">Custom versioning</h2>

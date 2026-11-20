@@ -125,19 +125,19 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#timezone-and-unit-validation-merge-and-filter-engines">Timezone and unit validation (merge and filter engines)</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#framework-specific-implementations">Framework-Specific Implementations</a>
+    <li class="toctree-l4"><a class="reference internal" href="#operation-groups-one-group-one-implementation-per-framework">Operation Groups: one group, one Implementation per framework</a>
     </li>
-        </ul>
+    <li class="toctree-l4"><a class="reference internal" href="#choosing-among-implementations">Choosing among implementations</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#implementation-pattern">Implementation Pattern</a>
-        <ul>
-    <li class="toctree-l4"><a class="reference internal" href="#1-base-class">1. Base Class</a>
+    <li class="toctree-l4"><a class="reference internal" href="#pinning-an-implementation">Pinning an implementation</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#2-framework-specific-implementation">2. Framework-Specific Implementation</a>
+    <li class="toctree-l4"><a class="reference internal" href="#migrating-from-per-framework-classes">Migrating from per-framework classes</a>
     </li>
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#framework-selection-process">Framework Selection Process</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#appending-results">Appending Results</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#data-transformation">Data Transformation</a>
     </li>
@@ -145,9 +145,19 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#sql-relation-helpers-duckdb-sqlite">SQL Relation Helpers (DuckDB / SQLite)</a>
         <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#result-type">Result type</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#reading-column-types">Reading column types</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#window-functions">Window functions</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#testing">Testing</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#pipeline-result-policies">Pipeline result policies</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#writing-a-frameworkadapter">Writing a FrameworkAdapter</a>
     </li>
         </ul>
     </li>
@@ -184,6 +194,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -253,7 +267,7 @@ feature group runs on SQLite in general, but <em>this particular operation</em> 
 unsupported there." For that, override <code>supports_compute_framework</code>, a
 per-feature hook evaluated at match time:</p>
 <pre><code class="language-py">@classmethod
-def supports_compute_framework(cls, feature_name, options, compute_framework) -&gt; bool:
+def supports_compute_framework(cls, feature_name, options, compute_framework, *, part=None) -&gt; bool:
     &quot;&quot;&quot;Reject an operation on a specific framework. Default returns True.&quot;&quot;&quot;
     if compute_framework is SqliteFramework and is_median_op(feature_name, options):
         return False  # median is unsupported on SQLite
@@ -298,8 +312,12 @@ runnable:</p>
   maps to an empty framework set and resolution fails closed with the ordinary
   <code>No feature groups found for feature name: '&lt;name&gt;'.</code> error. It does <strong>not</strong>
   read as runnable on a framework you cannot actually run.</li>
+<li><strong>Install hint.</strong> When a user names a framework in <code>compute_frameworks</code> or <code>output_framework</code>,
+  or pins it on a requested feature or an input feature, and it is unavailable, the error shows its <code>INSTALL_HINT</code> (for example
+  <code>pip install "my-plugin[backend]"</code>). Subclasses inherit it.</li>
 </ul>
 <h3 id="declaring-capability-per-subtype">Declaring capability per subtype</h3>
+<p>This section covers ordinary feature groups; operation groups declare it on their implementations (<code>supported</code>).</p>
 <p>Families with multiple subtypes declare per-backend capability as data
 instead of a hand-written <code>supports_compute_framework</code>.</p>
 <p><strong>The data provider</strong> declares the dimension once with <code>SUBTYPES</code>:</p>
@@ -339,10 +357,15 @@ becomes <code>ntile</code>) and gates declared subtypes by the declaration; unde
 subtypes and features without one stay open.</p>
 <p><strong>The data steward</strong> audits capability via <code>subtype_support_matrix()</code>
 (supported subtypes per framework from <code>compute_framework_definition()</code>;
-empty for abstract bases) and <code>get_feature_group_docs()</code> (<code>subtype_key</code>,
-<code>subtypes</code>, <code>parametric_subtypes</code>, <code>subtype_support</code>, <code>subtype_error</code>). A
-hand-overridden <code>supports_compute_framework</code> yields no declared matrix; the
-misfit surfaces as <code>subtype_error</code>.</p>
+empty for abstract bases; for an operation group read from its
+implementations) and <code>get_feature_group_docs()</code> (<code>subtype_key</code>, <code>subtypes</code>,
+<code>parametric_subtypes</code>, <code>subtype_support</code>, <code>subtype_error</code>). A
+hand-overridden <code>supports_compute_framework</code> (ordinary or operation group)
+yields no declared matrix and surfaces as <code>subtype_error</code>. An operation group's
+matrix is its implementations' <code>supported</code> intersected with the group's
+<code>SUBTYPES.supported</code>, whose keys are checked against the frameworks its loaded
+implementations serve; <code>accepts</code> narrows features at match time without
+showing there. <code>resolve_feature(name, options=...)</code> gives the exact answer.</p>
 <p><strong>The data user</strong> sees the outcome on <code>resolve_feature(name, options=...)</code>:
 <code>subtype</code> (e.g. <code>ntile_2</code>) and <code>subtype_family</code> (<code>ntile</code>, parametric
 instances only).</p>
@@ -360,7 +383,8 @@ no rows, and mloda passes these through unchanged.</p>
 <p><code>EmptyResultError</code> is a <code>ValueError</code> subclass and is importable from the public
 API: <code>from mloda.provider import EmptyResultError</code>. Intermediate feature groups
 (those whose output feeds another feature group rather than the caller directly)
-are never subject to this check.</p>
+are never subject to this check, but an intermediate step must still return a
+column for every feature it computes.</p>
 <h4 id="the-schema-presence-gate">The schema-presence gate</h4>
 <p>The guard detects a missing schema via the framework's existing
 <code>ComputeFramework.extract_column_names(data) -&gt; set[str]</code> (a classmethod): an empty set
@@ -388,11 +412,30 @@ Filtering an empty result is a no-op, so neither the column check nor row
 elimination has anything to do. Data on which the framework cannot see columns
 but that is not an empty result still fails the missing-filter-column check
 loudly.</p>
+<h4 id="undeclared-column-reads">Undeclared column reads</h4>
+<p>A <code>KeyError</code> from <code>calculate_feature</code>, or an exception for which a framework's
+<code>is_missing_column_error()</code> returns true (it must not raise), becomes a
+<code>ValueError</code> pointing at <code>input_features()</code>, with the original as <code>__cause__</code>.
+Code that caught the backend exception around <code>run_all</code> now gets that <code>ValueError</code>.
+Matched errors are translated from <code>calculate_feature</code> through final-filter validation and column-name resolution, so lazy plans failing on schema resolution are covered.</p>
+<p>Matched per framework:</p>
+<ul>
+<li>Polars (eager and lazy): <code>ColumnNotFoundError</code>, and an attribute read (<code>df.x</code>, Polars has no attribute column access); execution errors at the final collect are not translated.</li>
+<li>Pandas: <code>UndefinedVariableError</code> from <code>query</code> / <code>eval</code>, except local-variable references, and an attribute read (<code>df.x</code>).</li>
+<li>PyArrow and Iceberg: <code>ArrowInvalid</code> for an unmatched field reference.</li>
+<li>Iceberg native projection: pyiceberg's <code>Could not find column</code> error from <code>Schema.select</code>.</li>
+<li>DuckDB: <code>BinderException</code> for a column missing from the relation, and <code>MissingRelationColumnError</code>.</li>
+<li>SQLite: <code>OperationalError</code> for a missing column, and <code>MissingRelationColumnError</code>.</li>
+<li>Spark: <code>AnalysisException</code> with an <code>UNRESOLVED_COLUMN</code> condition, and an attribute read (<code>df.x</code>, <code>ATTRIBUTE_NOT_SUPPORTED</code>).</li>
+<li>PythonDict: only the <code>KeyError</code> path.</li>
+</ul>
+<p>Attribute reads exclude private names, method names, near-misses of a method name for names of six or more characters (such as <code>df.fliter</code>), and errors with a non-default message (e.g. a removed-API hint). Lazy Polars cannot check columns, so a declared column read as an attribute also gets the hint.</p>
+<p>A native Iceberg <code>scan(row_filter=...)</code> on a missing field is not translated: its pyiceberg error (<code>Could not find field with name ...</code>) carries no <code>KeyError</code> cause, so it cannot be told apart from other <code>ValueError</code>s.</p>
 <h3 id="column-name-case-sensitivity">Column name case sensitivity</h3>
 <p>mloda matches column and feature names exactly (case-sensitive) in every lookup, match and presence check; engines that resolve names differently add the rules below.</p>
 <ul>
 <li>DuckDB and SQLite compare identifiers ignoring ASCII case only (<code>val</code> and <code>VAL</code> are one column; <code>é</code> and <code>É</code> are two), and mloda's checks for new and helper column names fold case the same way. A join, as-of merge, union, append, <code>from_arrow</code> or <code>from_dict</code> whose output names differ only in case, or repeat a name exactly, raises <code>ValueError</code>; rename one side upstream.</li>
-<li>On those engines, mask primitives, the <code>partition_by</code> / <code>order_by</code> columns of <code>with_row_number</code> / <code>window</code>, merge keys, as-of <code>by</code> and time columns, <code>select</code> names and SQLite <code>order</code> names must be exact column names. SQLite also accepts its <code>rowid</code> / <code>oid</code> / <code>_rowid_</code> pseudo-columns in <code>select</code>, <code>order</code>, <code>with_row_number</code> and <code>window</code>. Raw SQL fragments (<code>filter</code> conditions, <code>project</code> expressions, the <code>window</code> function, DuckDB <code>order</code>) bind through the engine and stay case-insensitive; on SQLite an unresolvable quoted name there is read as a string literal, not an error.</li>
+<li>On those engines, mask primitives, the <code>partition_by</code> / <code>order_by</code> columns of <code>with_row_number</code> / <code>window</code>, merge keys, as-of <code>by</code> and time columns, <code>select</code> names and SQLite <code>order</code> names must be exact column names. SQLite also accepts its <code>rowid</code> / <code>oid</code> / <code>_rowid_</code> pseudo-columns in <code>select</code>, <code>order</code>, <code>with_row_number</code> and <code>window</code>. Raw SQL fragments (<code>filter</code> conditions, <code>project</code> expressions, the <code>window</code> function, DuckDB <code>order</code>) bind through the engine and stay case-insensitive. On SQLite (Python 3.12+) a quoted unknown name there raises <code>no such column</code> like an unquoted one. On Python 3.11 it is still read as a string literal.</li>
 <li>Spark column resolution follows <code>spark.sql.caseSensitive</code> (default <code>false</code>, folding like Python's <code>str.lower</code>, Unicode included). The Spark as-of merge and adding a feature column in <code>transform</code> raise <code>ValueError</code> on names that collide under that setting; Spark joins, union and append are not checked. Spark as-of time columns must match exactly; other Spark lookups (keys, masks, filters) bind through Spark's resolver.</li>
 </ul>
 <h3 id="row-count-for-observability">Row count for observability</h3>
@@ -416,62 +459,87 @@ is skipped entirely, so you are never forced to implement the hook. An engine th
 opts in but forgets the hook raises a clear error rather than silently skipping
 validation. As-of joins always require <code>_column_semantics</code> regardless of the flag,
 since ordered time columns are intrinsic to the operation.</p>
-<h3 id="framework-specific-implementations">Framework-Specific Implementations</h3>
-<p>Feature groups follow a layered architecture:
-- Base class defines the interface and common functionality
-- Framework-specific classes implement the actual calculations</p>
-<pre><code>FeatureGroup
-  └── BaseFeatureGroup (e.g., SegmentationFeatureGroup)
-        ├── PandasImplementation
-        ├── PyArrowImplementation
-        └── PythonDictFrameworkImplementation
-</code></pre>
-<h2 id="implementation-pattern">Implementation Pattern</h2>
-<h3 id="1-base-class">1. Base Class</h3>
-<p>The base class defines the interface and common functionality:</p>
-<pre><code class="language-py">class MyFeatureGroup(FeatureGroup):
-    &quot;&quot;&quot;Base class for MyFeatureGroup.&quot;&quot;&quot;
+<h3 id="operation-groups-one-group-one-implementation-per-framework">Operation Groups: one group, one Implementation per framework</h3>
+<p>An operation is written once as an <code>OperationFeatureGroup</code> (naming, options, input features) and served by one <code>Implementation</code> per compute framework. Both come from <code>mloda.provider</code>. <code>AggregatedFeatureGroup</code>, <code>TimeWindowFeatureGroup</code>, <code>MissingValueFeatureGroup</code>, <code>TextCleaningFeatureGroup</code>, <code>GeoDistanceFeatureGroup</code>, <code>ScalingFeatureGroup</code>, <code>EncodingFeatureGroup</code>, <code>SklearnPipelineFeatureGroup</code>, <code>ClusteringFeatureGroup</code>, <code>DimensionalityReductionFeatureGroup</code>, <code>NodeCentralityFeatureGroup</code> and <code>ForecastingFeatureGroup</code> are built this way.</p>
+<pre><code class="language-py">class MyOperation(OperationFeatureGroup):
+    ...  # naming, PROPERTY_MAPPING, input_features
 
-    def input_features(self, options, feature_name):
-        # Common logic for extracting input features
+class PandasMyOperation(Implementation[MyOperation]):
+    feature_group = MyOperation
+    compute_framework = PandasDataFrame
 
     @classmethod
-    def calculate_feature(cls, data, features):
-        # This will be overridden by framework-specific implementations
-        raise NotImplementedError()
+    def calculate(
+        cls, group: type[MyOperation], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -&gt; Any:
+        ...  # group is the matched feature group class
 </code></pre>
-<h3 id="2-framework-specific-implementation">2. Framework-Specific Implementation</h3>
-<p>Each framework-specific implementation:
-- Specifies which compute frameworks it supports
-- Implements the calculation logic for that framework</p>
-<pre><code class="language-py">class PandasMyFeatureGroup(MyFeatureGroup):
-    @classmethod
-    def compute_framework_rule(cls):
-        &quot;&quot;&quot;Define supported compute frameworks.&quot;&quot;&quot;
-        return {PandasDataFrame}
-
-    @classmethod
-    def calculate_feature(cls, data, features):
-        &quot;&quot;&quot;Implement calculation using pandas.&quot;&quot;&quot;
-        # Pandas-specific implementation
+<p>An <code>Implementation[G]</code> serves both operation groups (<code>data</code> is the input frame) and source groups (<code>data</code> is the <code>SourceMatch</code>). <code>feature_group</code> must be <code>G</code> or a subclass of it; a mismatch raises <code>TypeError</code> at class definition.</p>
+<ul>
+<li><strong>Framework set</strong>: the frameworks that have an implementation (a framework subclass is served by its parent's implementation), intersected with <code>compute_framework_rule()</code>. A group with no implementation has no framework and never matches.</li>
+<li><strong>Shared loop</strong>: put the shared per-feature loop on the group as a classmethod that takes the per-framework pieces as keyword-only callables (<code>AggregatedFeatureGroup.aggregate(data, features, perform=..., add_column=..., columns=...)</code>). Each implementation's <code>calculate</code> hands its own methods over through the <code>group</code> it is called with, never through <code>cls.feature_group</code>, so a subclass of the group is served with its overrides. An <code>Implementation</code> subclass that leaves <code>calculate</code> abstract is ignored when implementations are loaded.</li>
+<li><strong>Capability</strong>: <code>supported</code> (a frozenset of subtypes, <code>None</code> means all) and the classmethod <code>accepts(feature_name, options, *, part=None)</code> (default <code>True</code>) decide whether an implementation can run a feature. A framework whose implementation rejects it is not a candidate for that feature. <code>subtype_support_matrix()</code> reflects the implementations' <code>supported</code> and the group's <code>SUBTYPES.supported</code>, but not <code>accepts</code>, so a restriction made in <code>accepts</code> (e.g. on a second option) does not show there; <code>resolve_feature(name, options=...)</code> gives the exact answer.</li>
+<li><strong>Divergence</strong>: <code>divergences</code> is a tuple of <code>Divergence</code> records (<code>mloda.provider</code>) for where the result differs from the group's reference contract. A record has a <code>kind</code> (<code>DivergenceKind.VALUE</code>, <code>TYPE</code>, <code>VARIANT</code> or <code>GAP</code>), a <code>cause</code> (<code>Cause</code>), a one-line <code>reason</code> (required unless the cause is <code>NOT_IMPLEMENTED</code>, though <code>check_operation_group_shape</code> still requires a reason on every record), and optional <code>subtypes</code> or <code>outputs</code> (not both; neither means the whole plugin; <code>outputs</code> names literal parts, never <code>*</code>). <code>VARIANT</code> needs a <code>variant</code> name and cause <code>OTHER</code> needs <code>docs</code>. A record applies when its subtype matches or, for <code>outputs</code>, when the feature is requested whole or for one of its parts. Every kind except <code>GAP</code> ranks the implementation below a matching one; <code>GAP</code> is only recorded. Implementations on a source group are not ranked. Divergence is declared, not detected from the data. A FeatureGroup declares <code>DIVERGENCES</code> with the same record; the planner does not rank by it. A group may set <code>CONTRACT_VERSION</code> (an int of at least 1) for the reference contract it follows; an operation group must, or <code>check_operation_group_shape</code> fails. The stamped, credential-scrubbed records and the version show on <code>PlanStep</code> (and so in <code>explain</code>), in the plan lock, on <code>HookContext</code> and on <code>FeatureGroupInfo</code>.</li>
+<li><strong>Variants</strong>: a group lists the variant names its contract allows in <code>VARIANTS</code>; a <code>VARIANT</code> record naming an unlisted variant fails at class definition. The default behavior is the reference: an Implementation that follows a variant is chosen only when the feature allows it with the group option <code>allow_variants</code> (a string or a collection of strings, forwarded to inputs like any group option). Without it that implementation is not a candidate; when it is the only fit (a framework or implementation pin) resolution fails at stage <code>rule variant</code>, and the error prints the <code>allow_variants</code> option to add. When several frameworks fit, the default-behavior one keeps the lead. A group's own <code>DIVERGENCES</code> <code>VARIANT</code> records are listed but not gated. An inherited Implementation that follows a variant the subclass does not list in <code>VARIANTS</code> cannot be allowed: it stays blocked and the error offers no option. A pin on a chained step that a variant blocks raises <code>ImplementationPinError</code> with the same reason, naming the options of the requested feature. The option is read from the group options only, not the context options.</li>
+<li><strong>Loading</strong>: an operation group's implementations are found by import, so call <code>PluginLoader.all()</code> (or import the implementation modules) before running.</li>
+<li><strong>Contract</strong>: the loop's keyword-only callables are the group's contract and mypy checks the <code>aggregate</code>, <code>window</code>, <code>impute</code>, <code>clean</code>, <code>measure</code>, <code>scale</code>, <code>encode</code>, <code>run_pipeline</code>, <code>cluster</code>, <code>reduce</code>, <code>centrality</code> or <code>forecast</code> call inside each implementation's <code>calculate</code>.</li>
+</ul>
+<h3 id="choosing-among-implementations">Choosing among implementations</h3>
+<p>When several frameworks can run a step, the choice order is: frameworks the step must run on (pins, a single allowed framework), then an implementation that matches the reference contract before one that differs, then fewer conversions, then converting later, then the run's <code>compute_frameworks</code> list order, then the default order. The recorded reason says what happened:</p>
+<ul>
+<li><code>prefers a matching version</code>: a divergent implementation was skipped although it would otherwise have won.</li>
+<li><code>reads in place</code>: a source read from a connection in the collection costs one conversion when served off a framework that accepts that connection, so the work stays in the database ahead of list order.</li>
+<li><code>loads natively</code>: without a <code>compute_frameworks</code> list, a source whose group declares <code>neutral_type</code> pays one conversion off a framework that takes that type (or serves the group through an Implementation); a step such a source pulls onto its framework reports it too. <code>ApiDataFG</code> is a stock source declaring it.</li>
+<li><code>&lt;reason&gt;; runs a version that differs: skips NaN in sum</code>: the step runs a divergent implementation (only option, pinned, or no matching alternative). A reasonless <code>NOT_IMPLEMENTED</code> record reads <code>not implemented</code>.</li>
+</ul>
+<h3 id="pinning-an-implementation">Pinning an implementation</h3>
+<pre><code class="language-py">Feature(&quot;sales__sum_aggr&quot;, implementation=&quot;PandasAggregation&quot;)
+Feature(&quot;sales__sum_aggr&quot;, implementation=PandasAggregation)
+Feature(&quot;x__sum_aggr__max_aggr&quot;, implementation=[&quot;PandasAggregation&quot;, &quot;PyArrowAggregation&quot;])
 </code></pre>
+<p><code>implementation=</code> takes a class name (or <code>module:qualname</code>), an <code>Implementation</code> class, or a list of either. One entry pins every step of that group in the feature's chain; a list of N entries pins N steps of the same group in input order (inner step first). The pin is part of the feature's identity and is not passed to input features. In a feature config use the <code>implementation</code> key. Pinned steps get the reason <code>pinned</code>.</p>
+<p>An unknown name, a name shared by two loaded classes, an implementation that is disabled, denied or whose framework is unavailable, one that conflicts with <code>compute_framework=</code>, a wrong entry count, or two requests pinning one step differently raises <code>ImplementationPinError</code> (a <code>ValueError</code>) naming the feature and the class.</p>
+<h3 id="migrating-from-per-framework-classes">Migrating from per-framework classes</h3>
+<ul>
+<li><code>PandasAggregatedFeatureGroup</code>, <code>PyArrowAggregatedFeatureGroup</code> and <code>PolarsLazyAggregatedFeatureGroup</code> are replaced by <code>AggregatedFeatureGroup</code> with <code>PandasAggregation</code>, <code>PyArrowAggregation</code> and <code>PolarsLazyAggregation</code>.</li>
+<li>The per-framework time window, missing value, text cleaning, geo distance and sklearn scaling, encoding and pipeline classes are replaced by <code>TimeWindowFeatureGroup</code> (<code>PandasTimeWindow</code>, <code>PyArrowTimeWindow</code>), <code>MissingValueFeatureGroup</code> (<code>PandasMissingValueImputation</code>, <code>PyArrowMissingValueImputation</code>, <code>PythonDictMissingValueImputation</code>), <code>TextCleaningFeatureGroup</code> (<code>PandasTextCleaning</code>, <code>PythonDictTextCleaning</code>), <code>GeoDistanceFeatureGroup</code> (<code>PandasGeoDistance</code>), <code>ScalingFeatureGroup</code> (<code>PandasScaling</code>), <code>EncodingFeatureGroup</code> (<code>PandasEncoding</code>) and <code>SklearnPipelineFeatureGroup</code> (<code>PandasSklearnPipeline</code>). The replaced sklearn classes are <code>PandasScalingFeatureGroup</code>, <code>PandasEncodingFeatureGroup</code> and <code>PandasSklearnPipelineFeatureGroup</code>. Artifact declaration, save and load stay on the group; an <code>Implementation</code> has no artifact hooks and reaches the artifact through the <code>FeatureSet</code>.</li>
+<li><code>PandasClusteringFeatureGroup</code>, <code>PandasDimensionalityReductionFeatureGroup</code>, <code>PandasNodeCentralityFeatureGroup</code> and <code>PandasForecastingFeatureGroup</code> are replaced by <code>ClusteringFeatureGroup</code> (<code>PandasClustering</code>), <code>DimensionalityReductionFeatureGroup</code> (<code>PandasDimensionalityReduction</code>), <code>NodeCentralityFeatureGroup</code> (<code>PandasNodeCentrality</code>) and <code>ForecastingFeatureGroup</code> (<code>PandasForecasting</code>). Names, options and results are unchanged, and forecasting artifacts saved before the move still load.</li>
+<li>A subclass of one of these group bases that implemented the abstract methods for another framework now gets no framework: write an <code>Implementation[&lt;group&gt;]</code> for that framework instead.</li>
+<li>Implementations are found by import: import the implementation modules or call <code>PluginLoader.all()</code>.</li>
+<li>An allow or deny list that names an old class must name the group or the implementation instead.</li>
+<li>Plan locks recorded before the move no longer match.</li>
+<li>A subclass of an old per-framework class must subclass the group (or the implementation) instead.</li>
+<li>Aggregations and time windows treat NaN like null on every framework: skipped, and not counted by <code>count</code>; time window first and last keep it.</li>
+<li>Time window: a sum over no values gives 0 on Pandas and PyArrow, like aggregations (single-column windows used to give NaN on Pandas and null on PyArrow, and PyArrow multi-column rows NaN).</li>
+<li>PythonDict text cleaning turns NaN into an empty string, like Pandas.</li>
+<li>PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break <code>mode</code> ties by the smallest value, like Pandas; string ties change too.</li>
+<li>Grouped imputation leaves rows with a null or NaN group key out of every group: statistics fill them from the column, <code>ffill</code>/<code>bfill</code> leave them. PythonDict used to group those keys, and Pandas <code>ffill</code>/<code>bfill</code> erased their values. PythonDict now also treats NaT, <code>pd.NA</code>, numpy and Decimal NaN as missing, in keys and values.</li>
+<li>PyArrow <code>std</code> and <code>var</code> windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.</li>
+<li><code>feature_group="&lt;old per-framework class&gt;"</code> becomes <code>implementation="&lt;implementation&gt;"</code>, or <code>compute_framework=...</code>, for every moved family.</li>
+<li>A steward disables one implementation with <code>PluginCollector.add_disabled_implementation_classes</code>.</li>
+<li>A provider overrides a step in one of three places. On an implementation subclass (the most derived implementation for a group and framework serves it): the computation (for example <code>_perform_aggregation</code>, <code>_perform_window_operation</code>, <code>_perform_imputation</code>, <code>_apply_operation</code>, <code>_calculate_distance</code>, <code>_extract_training_data</code>, <code>_apply_scaler</code>, <code>_apply_encoder</code>, <code>_apply_pipeline</code>, <code>_perform_clustering</code>, <code>_perform_reduction</code>, <code>_calculate_centrality</code>, <code>_perform_forecasting</code>), <code>_add_result_to_data</code> (the loop's <code>add_column</code>), and <code>calculate</code> for any other callable it passes, such as <code>column_semantics</code>. On a <code>ComputeFramework</code> subclass: <code>extract_column_names</code> (the <code>columns</code> callable of <code>aggregate</code>, <code>window</code>, <code>impute</code>, <code>cluster</code> and <code>forecast</code>, the loops that resolve <code>~</code> multi-column sources), seen only by runs on that framework. On a group subclass: the loop (<code>aggregate</code>, <code>window</code>, <code>impute</code>, <code>clean</code>, <code>measure</code>, <code>scale</code>, <code>encode</code>, <code>run_pipeline</code>, <code>cluster</code>, <code>reduce</code>, <code>centrality</code>, <code>forecast</code>). Core checks every declared input before <code>calculate_feature</code>, so the loops do not check source columns themselves.</li>
+</ul>
 <h2 id="framework-selection-process">Framework Selection Process</h2>
 <p>mloda picks one compute framework per step group (the features of one FeatureGroup that run as one step) in one planning step, before link joins are resolved.</p>
 <ul>
 <li><strong>Allowed set</strong>: the framework must fit the FeatureGroup (<code>compute_framework_rule</code>, <code>supports_compute_framework</code>), any pin via <code>Feature(compute_framework=...)</code>, and the run's enabled frameworks.</li>
-<li><strong>Connection skip</strong>: a <code>REQUIRED</code> framework is skipped for an unpinned feature whose options carry no connection under its FeatureGroup class name, unless no other framework fits. It is kept when every parent can run on that framework, because the step then uses the connection its input data carries. Parents carrying different connections keep the step off that framework. It is also kept when the feature has parents and the DataAccessCollection holds exactly one matching connection. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with <code>compute_frameworks=[DuckDBFramework]</code>.</li>
+<li><strong>Connection skip</strong>: a <code>REQUIRED</code> framework (DuckDB, SQLite) is a candidate for a feature, roots included, when the DataAccessCollection resolves a connection for it: by the feature's <code>connection_handle</code> option, or as the single matching connection. Two matching connections without a handle drop it, with a reason naming the handles. A non-root feature can also use the connection a parent carries, so the framework is kept when every parent can run on it; parents carrying different connections keep the step off that framework. Connections come only from the DataAccessCollection. A connection alone does not select DuckDB or SQLite: pin the feature or restrict the run with <code>compute_frameworks=[DuckDBFramework]</code>. A source read from that connection (<code>DuckdbFG</code>) is the exception, see <code>reads in place</code> below.</li>
+<li><strong>Bound connection</strong>: the resolved connection is bound to every step that needs it, roots included. Parents on two different handles never share a DuckDB or SQLite consumer; a consumer pinned or restricted to that framework fails at planning naming both handles.</li>
 <li><strong>Joins</strong>: a link's child runs on one of its two sides. RIGHT joins run on the right side's framework, unless the consumers cannot run there, then on the left side's (only for links joining two different FeatureGroups). APPEND and UNION on the left. Children of one link agree on the side.</li>
 <li><strong>Filters</strong>: a filter pinned to a framework moves its host feature onto that framework.</li>
 <li><strong>Conversions</strong>: a transformer chain must exist between every parent and child on different frameworks.</li>
-<li><strong>Choice among valid plans</strong>: lowest cost first (one point per conversion), then the order of the run's <code>compute_frameworks</code> list, then the default order. The default order puts Pandas, Polars, PyArrow before <code>SELF_MANAGED</code> frameworks (Spark, Iceberg), before <code>REQUIRED</code> ones (DuckDB, SQLite), then class name.</li>
-<li><strong>Reason</strong>: each step records why it got its framework: <code>pinned</code>, <code>only allowed framework</code>, <code>rules exclude preferred frameworks</code>, <code>saves N conversion(s)</code>, <code>your list order</code> or <code>default order</code>. "saves N conversions" counts the conversions added by moving only that step to a preferred framework.</li>
-<li><strong>Equal-cost plans</strong>: blocks are settled in a fixed order (by FeatureGroup and feature names), each taking the most preferred framework still possible.</li>
+<li><strong>Choice among valid plans</strong>: lowest cost first (one point per conversion, plus one point when a source read from a connection in the DataAccessCollection runs off a framework that accepts that connection, ranked before any conversion; reason <code>reads in place</code>; without a <code>compute_frameworks</code> list, a source group declaring <code>neutral_type</code> likewise pays one conversion off a framework that takes that type or serves the group through an Implementation, reason <code>loads natively</code>; with a list, its order decides), then the plan that converts later (a conversion deeper in the feature graph, by longest path from a root, of the features that convert, or at the end into <code>output_framework</code>), then the order of the run's <code>compute_frameworks</code> list, then the default order. The default order puts Pandas, Polars, PyArrow before <code>SELF_MANAGED</code> frameworks (Spark, Iceberg), before <code>REQUIRED</code> ones (DuckDB, SQLite), then class name.</li>
+<li><strong>Reason</strong>: each step records why it got its framework: <code>pinned</code>, <code>only allowed framework</code>, <code>rules exclude preferred frameworks</code>, <code>saves N conversion(s)</code>, <code>converts later</code>, <code>reads in place</code>, <code>loads natively</code>, <code>your list order</code> or <code>default order</code>. "saves N conversions" counts the conversions added by moving only that step to a preferred framework. Frameworks dropped for the step's connection or file source follow as <code>&lt;Framework&gt;: &lt;why&gt;</code> clauses, separated by <code>;</code>.</li>
+<li><strong>Plans equal in cost and lateness</strong>: blocks are settled in a fixed order (by FeatureGroup and feature names), each taking the most preferred framework still possible.</li>
 <li><strong>Both ways</strong>: a Polars-only consumer pulls its unrestricted source onto Polars, and a Polars-only source pulls its unrestricted consumers, so no transform step is needed.</li>
 <li><strong>No valid plan</strong>: planning raises an error naming the features and their allowed sets.</li>
 </ul>
 <p>List order is a tie-break after cost, not "first listed wins". To force a framework, pin the feature or restrict the run's list.</p>
 <p><code>Feature.get_compute_framework()</code> returns the chosen framework. On a feature that allows several frameworks and was never planned, it raises.</p>
 <p>Framework authors declare the connection rule by overriding <code>connection_requirement()</code> (default <code>ConnectionRequirement.NONE</code>). A <code>REQUIRED</code> framework also overrides <code>connection_of(data)</code> to return the connection its native data carries, so a step after a parent on the same framework needs no connection of its own.</p>
+<h2 id="appending-results">Appending Results</h2>
+<p>Override <code>_append_columns(data, columns)</code> to append a non-root dict result to the frame. The default returns <code>None</code>, which replaces the frame. Frameworks holding a lazy plan with unstable row order override the classmethod <code>_positional_append_needs_pinned_frame</code> to return <code>True</code>, which appends only onto a frame mloda built itself.</p>
+<p>A single returned column (a list or Series) follows the same rule: on such a framework <code>transform</code> raises a <code>ValueError</code> naming the feature unless the frame is pinned. The fix is to return the column inside the frame the feature group received, in the framework's own data type. A frame counts as pinned when it was built from a dict, converted by a transformer in a step or at a framework transfer, appended onto a pinned frame, filtered from one, or passed unchanged through a same-framework hop from a pinned frame. The output of a framework's own <code>transform()</code> for a non-native result is treated as pinned too, so it must not reorder rows. A feature group that returns its own native frame leaves it unpinned for the next feature group on that frame.</p>
 <h2 id="data-transformation">Data Transformation</h2>
 <p>When data needs to move between compute frameworks:</p>
 <ol>
@@ -482,13 +550,17 @@ since ordered time columns are intrinsic to the operation.</p>
 <p>For more details on how data transformation works between compute frameworks, see <a href="../framework-transformers/">Framework Transformers</a>.</p>
 <h2 id="framework-notes">Framework Notes</h2>
 <ul>
-<li><strong>DuckDB</strong>: a FeatureGroup step gets its connection object from the feature's options under the FeatureGroup class name, or from the relation its parents hand in (the data access collection supplies it only to transform steps); mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.</li>
-<li><strong>Spark</strong>: requires PySpark and a Java 17+ runtime (<code>JAVA_HOME</code>). mloda can auto-create a local <code>SparkSession</code>; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.</li>
+<li><strong>DuckDB</strong>: a step gets its connection from the DataAccessCollection (select one with the <code>connection_handle</code> option), or from the relation its parents hand in; a connection object in a feature option raises at planning. mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. An <code>output_framework</code> of DuckDB or SQLite needs one only when a requested step runs on another framework and its result is converted. mloda reuses the supplied connection for its lazy relations without per-thread cursors, and the live connection cannot cross a process boundary. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.</li>
+<li><strong>SQLite</strong>: mloda registers a <code>REGEXP</code> function and, on Python 3.12+ with SQLite 3.29+, turns off double-quoted string literals for DML on the connection it is given. The setting persists on that connection after the run, so SQL run on it afterwards, including existing views, must use single-quoted string literals. Python 3.11 keeps SQLite's default. mloda reuses the supplied connection, which Python's default <code>check_same_thread=True</code> restricts to its creating thread; the live connection also cannot cross a process boundary, so SQLite steps run in SYNC mode only.</li>
+<li><strong>Spark</strong>: requires PySpark 4.0+ and a Java 17+ runtime (<code>JAVA_HOME</code>). mloda can auto-create a local <code>SparkSession</code>; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.</li>
 <li><strong>Iceberg</strong>: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.</li>
 </ul>
 <p>A run requesting only <code>{ParallelizationMode.MULTIPROCESSING}</code> drops these frameworks at setup; a run left with no usable framework, or a feature pinned to a dropped one, raises. Request <code>{SYNC, MULTIPROCESSING}</code> or <code>{THREADING, MULTIPROCESSING}</code> to combine them with worker-dispatched frameworks.</p>
 <h2 id="sql-relation-helpers-duckdb-sqlite">SQL Relation Helpers (DuckDB / SQLite)</h2>
 <p>The DuckDB and SQLite frameworks expose a relation object (<code>DuckdbRelation</code>, <code>SqliteRelation</code>) inside <code>calculate_feature</code>. Both share the same helper surface so a feature group can be written once against either.</p>
+<h3 id="result-type">Result type</h3>
+<p>A requested feature computed on DuckDB or SQLite comes back as a <code>pa.Table</code>, fetched in full when the result is selected. With <code>output_framework=DuckDBFramework</code> or <code>output_framework=SqliteFramework</code>, a step that ran on that framework returns the relation it computed, on the connection the step used. The relation is lazy: every read runs the query again, the connection must stay open, and SQLite leaves one temporary view on it. A result converted from another framework is loaded as a new relation onto the matching connection in the DataAccessCollection. A run whose requested steps all run on the output framework needs no such connection.</p>
+<p>Framework authors: <code>select_native_data_by_column_names</code> returns the selection in the framework's own type (the default delegates to <code>select_data_by_column_names</code>). A framework whose <code>select_data_by_column_names</code> returns another framework's data type must also override <code>result_framework()</code> to name that framework. With that framework as <code>output_framework</code>, a run calls <code>select_native_data_by_column_names</code> instead of <code>select_data_by_column_names</code>, so a subclass that customizes one should customize the other.</p>
 <h3 id="reading-column-types">Reading column types</h3>
 <p>The <code>.types</code> property returns column types aligned with <code>.columns</code>. The element type differs by backend:</p>
 <ul>
@@ -498,8 +570,12 @@ since ordered time columns are intrinsic to the operation.</p>
 <pre><code class="language-py">relation.columns   # [&quot;user_id&quot;, &quot;amount&quot;]
 relation.types     # backend-specific dtype objects, same order as columns
 </code></pre>
+<p><code>SqliteRelation.to_arrow_table()</code> types a column by its propagated hint, else by its non-null values (int and float mixed gives float64, any other mix gives string, with numbers as text).
+A computed column without a non-null value takes the type its SQL expression yields for two placeholder rows, so its type is the same with and without rows unless the expression's type depends on the values; a projection reading <code>rowid</code> cannot be probed and is string.
+A relation mloda did not build falls back to the declared column affinity when it has no rows. In a table, a typeless or <code>NUMERIC</code>-affinity column (<code>NUMERIC</code>, <code>DECIMAL</code>, <code>BOOLEAN</code>, <code>DATE</code>) is then string, like an all-null column; with rows, its values decide. The relation's <code>select</code>, <code>filter</code>, <code>limit</code>, <code>order</code>, <code>join</code>, and <code>append_columns</code> results keep these types, as do union, append, and as-of merge results. Any other view reports the affinity SQLite gives its columns, so a typeless column there is large_binary when it has no rows.
+A column Arrow cannot build (for example bytes that are not UTF-8 in a text column, or text that is not a date in a date column) raises a <code>ValueError</code> naming it.</p>
 <h3 id="window-functions">Window functions</h3>
-<p><code>with_row_number</code> appends a <code>ROW_NUMBER()</code> column; <code>window</code> appends an arbitrary window expression. Both quote every identifier and raise <code>ValueError</code> if the new <code>alias</code> collides with an existing column (the comparison ignores ASCII case) or if a <code>partition_by</code> / <code>order_by</code> column is not an exact column name.</p>
+<p><code>with_row_number</code> appends a <code>ROW_NUMBER()</code> column; <code>window</code> appends an arbitrary window expression. Rows keep their input order. Both quote every identifier and raise <code>ValueError</code> if the new <code>alias</code> collides with an existing column (the comparison ignores ASCII case) or if a <code>partition_by</code> / <code>order_by</code> column is not an exact column name.</p>
 <pre><code class="language-py">from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
     OrderBy,
     WindowFrame,
@@ -526,6 +602,79 @@ rolling = relation.window(
 <p><code>order_by</code> accepts plain column-name strings or <code>OrderBy(column, descending=..., nulls="first"|"last")</code>. The <code>func</code> passed to <code>window</code> is inlined verbatim as raw SQL, so never build it from user-controlled input.</p>
 <p>!!! warning "SQLite version requirement"
     On SQLite, <code>with_row_number</code> and <code>window</code> require SQLite &gt;= 3.28.0; using <code>NULLS</code> placement in <code>order_by</code> additionally requires SQLite &gt;= 3.30.0. Both raise <code>ValueError</code> on older runtimes. DuckDB has no such gate.</p>
+<h2 id="testing">Testing</h2>
+<p>Use <code>assert_compute_framework_shape</code> (or <code>check_compute_framework_shape</code>) from <code>mloda.testing.compute_framework_shape</code> to verify a framework. The constructor must work with no arguments and accept a <code>uuid=</code> keyword, keeping it as <code>.uuid</code>. Accessors are skipped when <code>is_available()</code> is False, <code>applicable_aspects</code> lists which of filter, mask and merge it serves, and dtype is not covered.</p>
+<h3 id="pipeline-result-policies">Pipeline result policies</h3>
+<p>A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on <code>RunAllSuite</code> from <code>mloda.testing.compute_framework.run_all_suite</code>, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares <code>sync_only_reason</code> on its adapter. Each case is a <code>PolicySuccess</code> or a <code>PolicyRaises</code>. <code>EmptyResultRunAllSuite</code> is the worked example, and a host only sets <code>adapter_class</code>.</p>
+<p>Drive the policy through <code>run_all</code> rather than testing one enforcement surface: the retired <code>allow_empty_result()</code> flag had three, and the one in <code>DataLifecycleManager.get_result_data</code> shipped broken while unit tests of the other two passed, and only the full <code>run_all</code> on every framework and mode caught it. A framework adapter's <code>rows</code> / <code>row_count</code> must read the frame its framework's <code>run_all</code> returns.</p>
+<h3 id="writing-a-frameworkadapter">Writing a FrameworkAdapter</h3>
+<p>The suites build and read frames through a <code>FrameworkAdapter</code> from <code>mloda.testing.framework_adapter</code>; the kit ships one per built-in framework. For your own framework, subclass it and implement <code>compute_framework</code>, <code>from_arrow</code>, <code>column_names</code>, <code>row_count</code>, <code>column_values</code>, <code>column_type</code> and <code>lost_type</code>. Set <code>capabilities</code> to an <code>AdapterCapabilities</code> (<code>typed_columns=False</code> when the framework keeps no native type per column, <code>sql_relation=True</code> to run the SQL relation suites), and <code>sync_only_reason</code> when the framework serves no THREADING; a missing reason fails the run-all suites, and a reason on a framework that serves THREADING is reported stale. A host subclasses a suite and sets <code>adapter_class</code>.</p>
+<pre><code class="language-py">from typing import Any
+
+from mloda.testing.compute_framework.run_all_suite import EmptyResultRunAllSuite
+from mloda.testing.framework_adapter import AdapterCapabilities, FrameworkAdapter
+from my_package.framework import MyFramework
+
+
+class MyFrameworkAdapter(FrameworkAdapter):
+    capabilities = AdapterCapabilities(typed_columns=False)
+    sync_only_reason = &quot;The client is not thread-safe.&quot;
+
+    def compute_framework(self) -&gt; type[MyFramework]:
+        return MyFramework
+
+    def from_arrow(self, table: Any) -&gt; Any:
+        return MyFramework.from_arrow(table)
+
+    def column_names(self, result: Any) -&gt; list[str]:
+        return list(result.columns)
+
+    def row_count(self, result: Any) -&gt; int:
+        return len(result)
+
+    def column_values(self, result: Any, column: str) -&gt; list[Any]:
+        return list(result[column])
+
+    def column_type(self, result: Any, column: str) -&gt; Any:
+        return None
+
+    def lost_type(self, result: Any, column: str) -&gt; bool:
+        return False
+
+
+class TestMyFrameworkEmptyResult(EmptyResultRunAllSuite):
+    adapter_class = MyFrameworkAdapter
+</code></pre>
+<p>On a framework with typed columns, <code>column_type</code> must return the native type object and <code>lost_type</code> whether the column lost its declared type.</p>
+<p><code>SparkAdapter</code> borrows the caller's active SparkSession and never starts or stops one. Create the session in a fixture and make the host's <code>adapter</code> fixture depend on it:</p>
+<pre><code class="language-py">from collections.abc import Iterator
+from typing import Any
+
+import pytest
+
+pytest.importorskip(&quot;pyspark&quot;)
+
+from pyspark.sql import SparkSession  # noqa: E402
+
+from mloda.testing.compute_framework.run_all_suite import EmptyResultRunAllSuite
+from mloda.testing.framework_adapter import FrameworkAdapter, SparkAdapter
+
+
+@pytest.fixture(scope=&quot;session&quot;)
+def spark_session() -&gt; Iterator[Any]:
+    spark = SparkSession.builder.master(&quot;local[1]&quot;).getOrCreate()
+    yield spark
+    spark.stop()
+
+
+class TestSparkEmptyResult(EmptyResultRunAllSuite):
+    adapter_class = SparkAdapter
+
+    @pytest.fixture
+    def adapter(self, spark_session: Any) -&gt; Iterator[FrameworkAdapter]:
+        with self.adapter_class() as adapter:
+            yield adapter
+</code></pre>
               
             </div>
           </div><footer>

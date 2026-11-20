@@ -181,6 +181,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -241,19 +245,17 @@
 <li>Validating data types and ranges.</li>
 <li>Ensuring data consistency and integrity.</li>
 </ul>
+<p>Before <code>validate_input_features</code> and any extender on that hook, core checks that every declared input exists in the incoming data and raises <code>MissingInputFeatureError</code> (a <code>ValueError</code>) otherwise. Root steps and schema-less empty data are skipped.</p>
 <p>Example: Input Feature Validation Using Custom Validators</p>
 <h6 id="simple-validator">Simple validator</h6>
 <pre><code class="language-python">from typing import Any
 from mloda.user import mloda
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Options, FeatureName, Feature
 from mloda.user.pyarrow import PyArrowTable
 
 
-class DocBaseValidateInputFeaturesBase(FeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
+class DocBaseValidateInputFeaturesBase(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
@@ -383,14 +385,11 @@ results = mloda.run_all(
 <p><strong>The implementation and use is very similar to validating input features.</strong></p>
 <h6 id="simple-validator_1">Simple validator</h6>
 <pre><code class="language-python">from mloda.user import mloda
-from mloda.provider import BaseInputData, DataCreator, FeatureGroup, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Options
 
 
-class DocBaseValidateOutputFeaturesBase(FeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
+class DocBaseValidateOutputFeaturesBase(DataCreatorFeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:

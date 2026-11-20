@@ -159,6 +159,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -978,8 +982,8 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </div>
 </div>
 </div>
-</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs">
-<div class="jp-Cell jp-CodeCell jp-Notebook-cell jp-mod-noOutputs" id="cell-id=bkHC">
+</div><div class="jp-Cell jp-CodeCell jp-Notebook-cell">
+<div class="jp-Cell jp-CodeCell jp-Notebook-cell" id="cell-id=bkHC">
 <div class="jp-Cell-inputWrapper" tabindex="0">
 <div class="jp-Collapser jp-InputCollapser jp-Cell-inputCollapser">
 </div>
@@ -998,9 +1002,9 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
 </clipboard-copy>
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">import</span><span class="w"> </span><span class="nn">numpy</span><span class="w"> </span><span class="k">as</span><span class="w"> </span><span class="nn">np</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">DataCreator</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">DataCreatorFeatureGroup</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">DummyData</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">DummyData</span><span class="p">(</span><span class="n">DataCreatorFeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">,</span> <span class="n">features</span><span class="p">):</span>
         <span class="n">n_samples</span> <span class="o">=</span> <span class="n">features</span><span class="o">.</span><span class="n">get_options_key</span><span class="p">(</span><span class="s2">"n_samples"</span><span class="p">)</span> <span class="ow">or</span> <span class="mi">100</span>
@@ -1012,13 +1016,13 @@ span.linenos.special { color: #000000; background-color: #ffffc0; padding-left: 
         <span class="p">}</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">):</span>
-        <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">feature_names_supported</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">}</span>
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-2">import numpy as np
-from mloda.provider import FeatureGroup, DataCreator
+from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
 
-class DummyData(FeatureGroup):
+class DummyData(DataCreatorFeatureGroup):
     @classmethod
     def calculate_feature(cls, data, features):
         n_samples = features.get_options_key("n_samples") or 100
@@ -1030,8 +1034,59 @@ class DummyData(FeatureGroup):
         }
 
     @classmethod
-    def input_data(cls):
-        return DataCreator({"age", "weight", "state", "gender"})</div>
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {"age", "weight", "state", "gender"}</div>
+</div>
+</div>
+</div>
+</div>
+<div class="jp-Cell-outputWrapper">
+<div class="jp-Collapser jp-OutputCollapser jp-Cell-outputCollapser">
+</div>
+<div class="jp-OutputArea jp-Cell-outputArea">
+<div class="jp-OutputArea-child">
+<div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>
+Traceback (most recent call last):
+  File "", line 2, in &lt;module&gt;
+    from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
+  File "/home/tom/nexus-tk/code/mloda/mloda/provider/__init__.py", line 23, in &lt;module&gt;
+    from mloda.core.abstract_plugins.feature_group import FeatureGroup as FeatureGroup
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/feature_group.py", line 10, in &lt;module&gt;
+    from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/base_artifact.py", line 4, in &lt;module&gt;
+    from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/feature_set.py", line 7, in &lt;module&gt;
+    from mloda.core.abstract_plugins.components.divergence import Divergence
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/divergence.py", line 12, in &lt;module&gt;
+    from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/credential_scrub.py", line 105, in &lt;module&gt;
+    _KEYWORD_PATTERN = _keyword_pattern(r"[^;&amp;\s'\"]*(?:['\"]++(?![\s,;&amp;:)\]}&gt;]|$)[^;&amp;\s'\"]+)*")
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/credential_scrub.py", line 95, in _keyword_pattern
+    return re.compile(
+  File "/usr/lib/python3.10/re.py", line 251, in compile
+    return _compile(pattern, flags)
+  File "/usr/lib/python3.10/re.py", line 303, in _compile
+    p = sre_compile.compile(pattern, flags)
+  File "/usr/lib/python3.10/sre_compile.py", line 788, in compile
+    p = sre_parse.parse(p, flags)
+  File "/usr/lib/python3.10/sre_parse.py", line 955, in parse
+    p = _parse_sub(source, state, flags &amp; SRE_FLAG_VERBOSE, 0)
+  File "/usr/lib/python3.10/sre_parse.py", line 444, in _parse_sub
+    itemsappend(_parse(source, state, verbose, nested + 1,
+  File "/usr/lib/python3.10/sre_parse.py", line 841, in _parse
+    p = _parse_sub(source, state, sub_verbose, nested + 1)
+  File "/usr/lib/python3.10/sre_parse.py", line 444, in _parse_sub
+    itemsappend(_parse(source, state, verbose, nested + 1,
+  File "/usr/lib/python3.10/sre_parse.py", line 841, in _parse
+    p = _parse_sub(source, state, sub_verbose, nested + 1)
+  File "/usr/lib/python3.10/sre_parse.py", line 444, in _parse_sub
+    itemsappend(_parse(source, state, verbose, nested + 1,
+  File "/usr/lib/python3.10/sre_parse.py", line 672, in _parse
+    raise source.error("multiple repeat",
+re.error: multiple repeat at position 314
+</pre>
 </div>
 </div>
 </div>
@@ -1096,21 +1151,16 @@ print(_result)</div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[    age state gender     weight
-0    55    NY      F  92.048332
-1    36    TX      M  74.012635
-2    40    FL      M  71.355146
-3    77    CA      M  55.414713
-4    36    TX      M  60.180648
-..  ...   ...    ...        ...
-95   63    CA      M  47.563638
-96   42    TX      M  61.098454
-97   35    NY      F  82.741975
-98   35    FL      M  48.767208
-99   63    CA      M  92.380329
-
-[100 rows x 4 columns]]
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre>
+Traceback (most recent call last):
+  File "", line 2, in &lt;module&gt;
+    from mloda.user import mloda, PluginLoader
+  File "/home/tom/nexus-tk/code/mloda/mloda/user/__init__.py", line 14, in &lt;module&gt;
+    from mloda.core.api.request import mlodaAPI
+  File "/home/tom/nexus-tk/code/mloda/mloda/core/api/request.py", line 5, in &lt;module&gt;
+    from datetime import UTC, datetime
+ImportError: cannot import name 'UTC' from 'datetime' (/usr/lib/python3.10/datetime.py)
 </pre>
 </div>
 </div>
@@ -1182,26 +1232,8 @@ print(_result)</div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[shape: (100, 1)
-┌───────────────┐
-│ age__sum_aggr │
-│ ---           │
-│ i64           │
-╞═══════════════╡
-│ 4846          │
-│ 4846          │
-│ 4846          │
-│ 4846          │
-│ 4846          │
-│ …             │
-│ 4846          │
-│ 4846          │
-│ 4846          │
-│ 4846          │
-│ 4846          │
-└───────────────┘]
-</pre>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre></pre>
 </div>
 </div>
 </div>
@@ -1265,20 +1297,8 @@ print(_result)</div>
 <div class="jp-OutputArea jp-Cell-outputArea">
 <div class="jp-OutputArea-child">
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
-<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
-<pre>[shape: (5, 1)
-┌─────────────────────┐
-│ CustomConfiguration │
-│ ---                 │
-│ i64                 │
-╞═════════════════════╡
-│ 246                 │
-│ 246                 │
-│ 246                 │
-│ 246                 │
-│ 246                 │
-└─────────────────────┘]
-</pre>
+<div class="jp-RenderedText jp-OutputArea-output" data-mime-type="application/vnd.jupyter.stderr" tabindex="0">
+<pre></pre>
 </div>
 </div>
 </div>

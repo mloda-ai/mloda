@@ -1,7 +1,7 @@
 {
   "version": "1",
   "metadata": {
-    "marimo_version": "0.23.8",
+    "marimo_version": "0.23.9",
     "script_metadata_hash": null
   },
   "cells": [
@@ -111,12 +111,12 @@
     },
     {
       "id": "BYtC",
-      "code_hash": "ea3563f2e580f6738b7ab6ee958dab6e",
+      "code_hash": "11b3a9d7b1666c85023f68ff810d0e53",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "### Let us look a bit more into: _filter_feature_group_by_criteria\n\n```python\n@classmethod\ndef match_feature_group_criteria(\n    feature_name: FeatureName | str,\n    options: Options,\n    data_access_collection: DataAccessCollection | None = None\n    )\n    ...\n```\n\nEvery feature group must implement this function. However, most will inherit the default behaviour from the FeatureGroup base class.\n\nThe default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).\nBut this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.\n\nAs example could be this sqlite database, where we check the table for metainformation.\n\n```python\n@classmethod\ndef check_feature_in_data_access(cls, feature_name: str, data_access: Any) -> bool:\n    # get tables in the database\n    result, _ = cls.read_db(data_access, query=\"SELECT name FROM sqlite_master WHERE type='table';\")\n    table_names = [table[0] for table in result]\n\n    # check if the feature_name is in the tables\n    for table in table_names:\n        result, _ = cls.read_db(data_access, query=f\"PRAGMA table_info({quote_ident(table)});\")\n        column_names = [column[1] for column in result]\n        if feature_name in column_names:\n            return True\n    return False\n```\n\nThis means, you are open to customize this logic to match a Feature to a FeatureGroup. But please, do not query the database for every single feature to feature group match lookup. :)"
+            "text/markdown": "### Let us look a bit more into: _filter_feature_group_by_criteria\n\n```python\n@classmethod\ndef match_feature_group_criteria(\n    feature_name: FeatureName | str,\n    options: Options,\n    data_access_collection: DataAccessCollection | None = None\n    )\n    ...\n```\n\nEvery feature group must implement this function. However, most will inherit the default behaviour from the FeatureGroup base class.\n\nThe default behaviour covers mostly name based approaches to identify a feature (equal or prefix of a feature name).\nBut this can be also a call to a webservice, which knows which data supports or could be any other algorithmic solution.\n\nAs example could be this sqlite database, where we check the table catalog for metainformation.\n\n```python\n@classmethod\ndef table_columns(cls, connection: Any, table: str) -> Collection[str]:\n    return [row[1] for row in connection.execute(f\"PRAGMA table_info({quote_ident(table)});\")]\n```\n\nThe database group lists the tables and their columns once per run and matches a feature when a table has the column.\n\nThis means, you are open to customize this logic to match a Feature to a FeatureGroup. But please, do not query the database for every single feature to feature group match lookup. :)"
           }
         }
       ],
@@ -124,12 +124,12 @@
     },
     {
       "id": "RGSE",
-      "code_hash": "bc106c81403ba655c598ec56fdf40bb6",
+      "code_hash": "7597455ca5d3b004ede6ea4c4bef8820",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "## What if we have multiple Features sharing the same FeatureGroup?\n\nTo group features under the same FeatureGroup, we use the FeatureSet object.\n\nFor features to share a FeatureSet, they must also have the same configuration and compute_framework.\nIf the configurations differ, mloda will automatically create separate FeatureSets.\n\n```python\ndef similarity_hash(self) -> int:\n    compute_frameworks_hashable = (\n        frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None\n    )\n    return hash((self.options, compute_frameworks_hashable))\n```\n\nExamples:\n\n - Testing migrations: Feature(A, Polars), Feature(B, Pandas)\n - Sliding time windows: Feature(A, 10 days), Feature(B, 20 days)\n\nThis means inbetween Data to Feature, we have another abstraction, the FeatureSet."
+            "text/markdown": "## What if we have multiple Features sharing the same FeatureGroup?\n\nTo group features under the same FeatureGroup, we use the FeatureSet object.\n\nFor features to share a FeatureSet, they must also have the same configuration and compute_framework.\nIf the configurations differ, mloda will automatically create separate FeatureSets.\n\n```python\ndef similarity_hash(self) -> int:\n    compute_frameworks_hashable = (\n        frozenset(self.compute_frameworks) if self.compute_frameworks is not None else None\n    )\n    return hash((self.options, compute_frameworks_hashable))\n```\n\nExamples:\n\n - Testing migrations: Feature(A, Polars), Feature(B, Pandas)\n - Sliding time windows: Feature(A, 10 days), Feature(B, 20 days)\n\nThis means in between Data to Feature, we have another abstraction, the FeatureSet."
           }
         }
       ],
@@ -137,12 +137,12 @@
     },
     {
       "id": "Kclp",
-      "code_hash": "6b60472e886152697670978f6183800f",
+      "code_hash": "8322ad0469ac469c60a9be94d5dcfb8a",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "## FeatureSet\n\nA FeatureSet is a collection of Features, which share the same configuration and the same FeatureGroup. This FeatureSet is used by the FeatureGroup to apply the operations on the data to receive the requested Feature.\n\nThey are created by mloda. One can access its properties during the calculate_feature function, but are not created by any user.\n\n```python\n@classmethod\ndef calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n    ...\n```\n\nIn that sense, the FeatureSet has informations of\n\n- the Features itself\n- filters\n- names\n- artifacts\n- and has some convenience functionalities for easier access for the user."
+            "text/markdown": "## FeatureSet\n\nA FeatureSet is a collection of Features, which share the same configuration and the same FeatureGroup. This FeatureSet is used by the FeatureGroup to apply the operations on the data to receive the requested Feature.\n\nThey are created by mloda. One can access its properties during the calculate_feature function, but are not created by any user.\n\n```python\n@classmethod\ndef calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n    ...\n```\n\nIn that sense, the FeatureSet has information of\n\n- the Features itself\n- filters\n- names\n- artifacts\n- and has some convenience functionalities for easier access for the user."
           }
         }
       ],

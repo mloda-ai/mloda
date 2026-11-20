@@ -175,6 +175,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -250,7 +254,7 @@
 </code></pre>
 <p>Key features:
 - Maintains a registry of available transformers
-- Auto-loads transformer files from the <code>compute_framework</code> group once per process on first use
+- Auto-loads transformer files from the <code>compute_framework</code> group on first use; pandas, polars, duckdb, iceberg and spark ones load once that library is imported
 - Provides a lookup mechanism to find the appropriate transformer for any framework pair</p>
 <h3 id="pandaspyarrowtransformer">PandasPyArrowTransformer</h3>
 <p>The <code>PandasPyArrowTransformer</code> is a concrete implementation of <code>BaseTransformer</code> that handles conversions between Pandas DataFrames and PyArrow Tables.</p>
@@ -288,12 +292,12 @@
 - Leverages Spark's native PyArrow integration for efficient conversions
 - Can use a provided SparkSession or auto-create one if needed
 - Handles distributed data processing through Spark's execution engine
-- Requires PySpark installation and Java 8+ environment</p>
+- Requires PySpark 4.0+ and Java 17+ environment</p>
 <p><strong>Note</strong>: The Spark transformer can optionally use a SparkSession connection object. If none is provided, it will attempt to get the active session or create a new local session.</p>
 <h2 id="how-framework-transformers-work">How Framework Transformers Work</h2>
 <h3 id="registration-process">Registration Process</h3>
 <ol>
-<li>On first use in a process, <code>ComputeFrameworkTransformer</code> auto-loads only <code>*transformer*</code> files from the <code>compute_framework</code> group, then collects every <code>BaseTransformer</code> subclass</li>
+<li>On first use in a process, <code>ComputeFrameworkTransformer</code> auto-loads only <code>*transformer*</code> files from the <code>compute_framework</code> group (heavy backends once their library is imported, refreshed on a lookup miss), then collects every <code>BaseTransformer</code> subclass</li>
 <li>Each transformer is registered in a mapping from framework pairs to transformer classes</li>
 <li>Each direction is registered only if the transformer implements that direction's hook: two-way transformers register both edges, one-way transformers register only the edge whose hook they implement</li>
 </ol>
@@ -339,7 +343,8 @@
 <ul>
 <li>Never override an unsupported hook with <code>raise NotImplementedError</code>: registration keys off the override itself, not its body, so the dead edge is registered, and a chain routes through it and crashes instead of reporting "no chain exists".</li>
 <li>Override detection resolves through the MRO, so a subclass of a two-way transformer (for example <code>DuckDBPyArrowTransformer</code>) inherits both overrides and cannot drop a direction by omission.</li>
-<li><code>FileSourcePyArrowTransformer</code> and <code>FileSourceDictTransformer</code> are the reference one-way implementations; both omit <code>transform_other_fw_to_fw()</code>.</li>
+<li>A transformer into a framework whose <code>_positional_append_needs_pinned_frame()</code> is <code>True</code> must build from materialized data, since mloda treats its output as pinned.</li>
+<li><code>FileSourcePyArrowTransformer</code> and <code>FileSourceDictTransformer</code> are the reference one-way implementations; both omit <code>transform_other_fw_to_fw()</code>. They read csv, parquet, json, feather and orc.</li>
 </ul>
 <p>Example of a two-way transformer:</p>
 <pre><code class="language-python">from typing import Any

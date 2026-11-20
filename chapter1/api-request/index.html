@@ -155,6 +155,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -209,7 +213,7 @@
 <blockquote>
 <p><strong>Tip:</strong> For AI agents or quick prototyping, you can also use inline data with <code>api_data</code>, see the <a href="../installation/#4-quick-start">30-second example</a>.</p>
 </blockquote>
-<p>In this example, mloda automatically determines that a <strong>CsvReader</strong> feature group will fulfill the request and respond with the resulting DataFrame.</p>
+<p>In this example, mloda automatically determines that the <strong>CsvFG</strong> feature group will fulfill the request and respond with the resulting DataFrame.</p>
 <h4 id="1-import-the-required-modules">1. Import the Required Modules</h4>
 <p>We first need to import the necessary components to set up our request:</p>
 <pre><code class="language-python">from mloda.user import mloda
@@ -256,9 +260,10 @@ batch jobs, but in latency-sensitive scenarios the repeated planning overhead ma
 <p>The two-phase API lets you pay the planning cost once at startup and then execute
 cheaply per request:</p>
 <pre><code class="language-python"># 1. Prepare once (e.g. at server startup)
-session = mloda.prepare(feature_list, compute_frameworks=[&quot;PyArrowTable&quot;], data_access_collection=data_access_collection)
+session = mloda.prepare(feature_list, compute_frameworks=[&quot;PyArrowTable&quot;], data_access_collection=data_access_collection,
+                       api_data={&quot;MyKey&quot;: {&quot;col&quot;: [0]}})
 
-# 2. Execute per request with fresh data
+# 2. Execute per request with fresh data (same set keys and column names)
 result = session.run(api_data={&quot;MyKey&quot;: {&quot;col&quot;: [1, 2]}})
 </code></pre>
 <p>See <a href="../../in_depth/mloda-api/#two-phase-execution-prepare-run">mloda API: Two-Phase Execution</a> for details.</p>

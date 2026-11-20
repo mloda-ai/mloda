@@ -183,6 +183,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -298,7 +302,7 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | 
 </code></pre>
 <h3 id="using-duckdb-with-mloda-api">Using DuckDB with mloda API</h3>
 <p>The API examples below are sketches, not executed: <code>feature1</code> and <code>feature2</code> stand for columns your own
-tables or readers provide, so a connection alone does not make the request resolve.</p>
+tables or source groups provide, so a connection alone does not make the request resolve.</p>
 <pre><code class="language-py">from mloda.user import mloda
 from mloda.user import DataAccessCollection
 import duckdb
@@ -316,6 +320,17 @@ result = mloda.run_all(
     data_access_collection=data_access_collection
 )
 </code></pre>
+<p>Connections live only in the <code>DataAccessCollection</code>. With one matching connection no selection is needed; with several, name each in a feature's options:</p>
+<pre><code class="language-python">import duckdb
+from mloda.user import DataAccessCollection, Feature
+
+data_access_collection = DataAccessCollection(
+    connections={&quot;warehouse&quot;: duckdb.connect(), &quot;scratch&quot;: duckdb.connect()}
+)
+
+feature = Feature(&quot;feature1&quot;, options={&quot;connection_handle&quot;: &quot;warehouse&quot;})
+</code></pre>
+<p>On DuckDB 2.0, an <code>execute()</code> result on your connection that was not fetched to the end (even <code>fetchone()</code> on a one-row result) blocks reading any relation mloda returns on that connection: use <code>fetchall()</code> or a separate <code>connection.cursor()</code>.</p>
 <h3 id="using-spark-with-mloda-api">Using Spark with mloda API</h3>
 <pre><code class="language-py">from mloda.user import mloda
 from mloda.user import DataAccessCollection
@@ -397,9 +412,19 @@ def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | 
 <h2 id="troubleshooting">Troubleshooting</h2>
 <h3 id="common-issues">Common Issues</h3>
 <ol>
-<li><strong>Missing Connection Object</strong>:
+<li>
+<p><strong>Missing Connection Object</strong>:
    <code>ValueError: A connection object is required for this transformation.</code>
-   <strong>Solution</strong>: Ensure you're providing a connection object when using stateful frameworks. Currently, parent features are not receiving the connection details automatically. Thus, you might need to give them a second time to root features!</li>
+   <strong>Solution</strong>: Put the connection in the <code>DataAccessCollection</code>. mloda binds it to every step that needs it, roots included, so nothing is repeated per feature. With several connections, name one per feature with the <code>connection_handle</code> option (see below).</p>
+</li>
+<li>
+<p><strong>Connection object in a feature option</strong>: a connection object under any feature option (for example the group's class name) raises at planning, naming the key.
+   <strong>Solution</strong>: Move it to the <code>DataAccessCollection</code> and select it with <code>connection_handle</code>.</p>
+</li>
+<li>
+<p><strong>Two handles in one step</strong>: parents on different handles never share a DuckDB or SQLite consumer, and a consumer pinned to that framework fails at planning naming both handles.
+   <strong>Solution</strong>: Give the consumer one <code>connection_handle</code>, or run the branches as separate features.</p>
+</li>
 </ol>
 <h2 id="summary">Summary</h2>
 <p>The Framework Connection Object is a powerful feature that enables mloda to work with stateful compute frameworks while maintaining the flexibility to work with stateless frameworks as well. By understanding when and how to use connection objects, you can:</p>

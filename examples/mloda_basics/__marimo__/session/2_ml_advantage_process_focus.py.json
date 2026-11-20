@@ -1,7 +1,7 @@
 {
   "version": "1",
   "metadata": {
-    "marimo_version": "0.23.8",
+    "marimo_version": "0.23.9",
     "script_metadata_hash": null
   },
   "cells": [
@@ -46,12 +46,12 @@
     },
     {
       "id": "bkHC",
-      "code_hash": "1fdab58f6b6c469825203b290b69702f",
+      "code_hash": "a5b24f63a0ceab9fd1f926a9313bbd50",
       "outputs": [
         {
           "type": "data",
           "data": {
-            "text/markdown": "## Data should be reuseable\n\nIn most organizations, data pipelines are often built with a single-purpose focus. This tight coupling of data and data transformation within the same process limits reusability. For example:\n\n```SQL\nselect lower(data) from table into other_table;\n```\n\nIn this scenario, embedding data specifics into the process prevents sharing or adapting it for other tasks, leading to repeated rewrites and wasted effort.\n\nmloda addresses this issue by decoupling data and process definitions, the features. Instead of combining them in a single process, data and the features are treated as separate entities that come together only during calculation time. The following code snippet of mloda brings together data and features:\n\n```python\ndef calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n    ...\n```\n\nIn this model:\n\n- Data remains independent and can be sourced from various locations\n- Features represent the process definitions (transformations) applied to the data\n\nBenefits of Decoupling Data and Features:\n\n- Process Flexibility: Switching between different processing modes is made simple and intuitive, such as batch and stream processing could be done using the same features\n- Artifact and Validation Reusability: Input and output feature artifacts, along with their validations, can be repurposed across projects or teams\n- Production-Ready Functionality: Centralized features such as global logging, monitoring of data usage, and lineage tracking can be consistently applied across all pipelines\n\nThis modular approach not only reduces redundancy but also creates a robust framework for scaling data transformations efficiently across diverse use cases."
+            "text/markdown": "## Data should be reusable\n\nIn most organizations, data pipelines are often built with a single-purpose focus. This tight coupling of data and data transformation within the same process limits reusability. For example:\n\n```SQL\nselect lower(data) from table into other_table;\n```\n\nIn this scenario, embedding data specifics into the process prevents sharing or adapting it for other tasks, leading to repeated rewrites and wasted effort.\n\nmloda addresses this issue by decoupling data and process definitions, the features. Instead of combining them in a single process, data and the features are treated as separate entities that come together only during calculation time. The following code snippet of mloda brings together data and features:\n\n```python\ndef calculate_feature(cls, data: Any, features: FeatureSet) -> Any:\n    ...\n```\n\nIn this model:\n\n- Data remains independent and can be sourced from various locations\n- Features represent the process definitions (transformations) applied to the data\n\nBenefits of Decoupling Data and Features:\n\n- Process Flexibility: Switching between different processing modes is made simple and intuitive, such as batch and stream processing could be done using the same features\n- Artifact and Validation Reusability: Input and output feature artifacts, along with their validations, can be repurposed across projects or teams\n- Production-Ready Functionality: Centralized features such as global logging, monitoring of data usage, and lineage tracking can be consistently applied across all pipelines\n\nThis modular approach not only reduces redundancy but also creates a robust framework for scaling data transformations efficiently across diverse use cases."
           }
         }
       ],

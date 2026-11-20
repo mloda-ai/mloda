@@ -30,9 +30,9 @@ def _(mo):
 @app.cell
 def _():
     import numpy as np
-    from mloda.provider import FeatureGroup, DataCreator
+    from mloda.provider import FeatureGroup, DataCreatorFeatureGroup
 
-    class DummyData(FeatureGroup):
+    class DummyData(DataCreatorFeatureGroup):
         @classmethod
         def calculate_feature(cls, data, features):
             n_samples = features.get_options_key("n_samples") or 100
@@ -44,8 +44,8 @@ def _():
             }
 
         @classmethod
-        def input_data(cls):
-            return DataCreator({"age", "weight", "state", "gender"})
+        def feature_names_supported(cls) -> set[str]:
+            return {"age", "weight", "state", "gender"}
 
     return
 

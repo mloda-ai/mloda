@@ -171,6 +171,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -239,13 +243,10 @@ Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.<
 <p>The following example demonstrates how to implement and test an artifact.</p>
 <p>Here, we create a <code>FeatureGroup</code> with a configured <code>BaseArtifact</code>.</p>
 <pre><code class="language-python">from typing import Any
-from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreator, BaseInputData
+from mloda.provider import FeatureGroup, FeatureSet, BaseArtifact, DataCreatorFeatureGroup
 
 
-class BaseExampleArtifactFeature(FeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({cls.get_class_name()})
+class BaseExampleArtifactFeature(DataCreatorFeatureGroup):
 
     @staticmethod
     def artifact() -&gt; type[BaseArtifact] | None:
@@ -267,8 +268,7 @@ class BaseExampleArtifactFeature(FeatureGroup):
 from mloda.user.pyarrow import PyArrowTable
 
 api = mloda([&quot;BaseExampleArtifactFeature&quot;], [PyArrowTable])
-api.run()
-artifacts = api.get_artifacts()
+artifacts = api.run().artifacts
 print(artifacts)
 </code></pre>
 <p>Result:</p>
@@ -297,8 +297,7 @@ from mloda.user.pyarrow import PyArrowTable
 session = mloda.prepare([&quot;BaseExampleArtifactFeature&quot;], [PyArrowTable])
 
 # 2. First run: save mode (train)
-session.run()
-saved_artifacts = session.get_artifacts()
+saved_artifacts = session.run().artifacts
 # {'BaseExampleArtifactFeature': 'BasicArtifact'}
 
 # 3. Second run: load mode (predict), using artifacts from step 2
@@ -310,8 +309,7 @@ session = mloda.prepare([&quot;MyArtifactFeature&quot;], [PyArrowTable])
 
 for fold_data in folds:
     # Train fold
-    session.run()
-    trained = session.get_artifacts()
+    trained = session.run().artifacts
 
     # Predict fold
     session.run(artifacts=trained)
@@ -321,6 +319,16 @@ for fold_data in folds:
 supplying it via <code>run(artifacts=...)</code> for the same feature are mutually
 exclusive: resolving a runtime artifact when the key is already present in
 <code>Options.group</code> raises, rather than silently picking one over the other.</p>
+<p>Runtime keys are validated at run start against <code>session.artifact_inputs</code>: an
+unknown key and the <code>Options.group</code> conflict are refused before any step runs.
+A feature set without a runtime artifact keeps its prepare-time mode. Produced
+artifacts come back only in <code>RunResult.artifacts</code>; the plan is never written.
+Runtime keys must be the feature names the plan lists in <code>session.artifact_inputs</code>
+(a custom saver returning a dict keyed by other names cannot be passed back as
+is), and a loaded artifact value is shared by concurrent runs, so treat it as
+read-only in <code>calculate_feature</code>.</p>
+<p>Provider migration: a custom <code>custom_loader</code> reads <code>features.artifact_value</code>
+(the prepare-time Options value or this run's <code>artifacts</code> value), not Options.</p>
 <h4 id="testing-artifacts">Testing Artifacts</h4>
 <p>Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the <code>BaseTestArtifactFeature</code> class.</p>
 <p><a href="https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py">View the test file on GitHub</a></p>

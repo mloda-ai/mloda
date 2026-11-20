@@ -1,7 +1,7 @@
 {
   "version": "1",
   "metadata": {
-    "marimo_version": "0.23.8",
+    "marimo_version": "0.23.9",
     "script_metadata_hash": null
   },
   "cells": [
@@ -112,7 +112,7 @@
     },
     {
       "id": "SFPL",
-      "code_hash": "dc0368b82dbb5aee04ad26a2dc4bb303",
+      "code_hash": "26fb36d54ddfaaaaf6b0c4cdf289fe1b",
       "outputs": [
         {
           "type": "data",
@@ -125,7 +125,7 @@
         {
           "type": "stream",
           "name": "stdout",
-          "text": "\u2705 Transformed dataset with split fit/transform:\n   state__onehot_encoded~3  gender__onehot_encoded~0  \\\n0                      0.0                       1.0   \n1                      0.0                       0.0   \n\n   gender__onehot_encoded~1  state__onehot_encoded~2  state__onehot_encoded~1  \\\n0                       0.0                      1.0                      0.0   \n1                       1.0                      1.0                      0.0   \n\n   state__onehot_encoded~0  \n0                      0.0  \n1                      0.0  \n   age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled\n0                            0.339295                               1.243621\n1                            1.057320                              -0.677472\nResult: ['state__onehot_encoded~3', 'gender__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~1', 'state__onehot_encoded~0'] \n [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] columns total\n",
+          "text": "\u2705 Transformed dataset with split fit/transform:\n   gender__onehot_encoded~0  gender__onehot_encoded~1  \\\n0                       1.0                       0.0   \n1                       0.0                       1.0   \n\n   state__onehot_encoded~0  state__onehot_encoded~1  state__onehot_encoded~2  \\\n0                      0.0                      0.0                      1.0   \n1                      0.0                      0.0                      1.0   \n\n   state__onehot_encoded~3  \n0                      0.0  \n1                      0.0  \n   age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled\n0                            0.339295                               1.243621\n1                            1.057320                              -0.677472\nResult: ['gender__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~0', 'state__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~3'] \n ['age__mean_imputed__standard_scaled', 'weight__mean_imputed__standard_scaled'] columns total\n",
           "mimetype": "text/plain"
         }
       ]
@@ -152,7 +152,7 @@
     },
     {
       "id": "RGSE",
-      "code_hash": "49f8e60343240d274a0420cfa9e785d4",
+      "code_hash": "b62fd5175da610e2f665b494fc62cbdf",
       "outputs": [
         {
           "type": "data",

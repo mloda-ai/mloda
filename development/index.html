@@ -139,6 +139,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -156,8 +160,6 @@
               <ul class="current">
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Contributors</a>
     <ul class="current">
-    <li class="toctree-l2"><a class="reference internal" href="#dev-container-optional">Dev Container (Optional)</a>
-    </li>
     <li class="toctree-l2"><a class="reference internal" href="#building-the-docs-locally">Building the docs locally</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#authoring-example-notebooks-marimo">Authoring example notebooks (marimo)</a>
@@ -199,16 +201,9 @@
             <div class="section" itemprop="articleBody">
               
                 <h2 id="development-setup-for-contributors">Development Setup (for Contributors)</h2>
-<p>Thanks for your interest in contributing to mloda. The canonical contributor guide is <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>, and all participants are expected to follow our <a href="https://github.com/mloda-ai/mloda/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>. This page covers two topics that are specific to working on the docs and the dev environment.</p>
-<h4 id="dev-container-optional">Dev Container (Optional)</h4>
-<p>Prerequisite: Docker.</p>
-<ul>
-<li>Open the project in a dev container (in VS Code or a compatible tool).</li>
-<li>The dev container includes all necessary dependencies and tools to work on mloda.</li>
-</ul>
-<p>If you don't use Docker, follow the local setup in <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup">CONTRIBUTING.md</a> (<code>uv sync --all-extras</code>, then <code>source .venv/bin/activate</code>).</p>
+<p>Thanks for your interest in contributing to mloda. The canonical contributor guide is <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md">CONTRIBUTING.md</a>, and all participants are expected to follow our <a href="https://github.com/mloda-ai/mloda/blob/main/CODE_OF_CONDUCT.md">Code of Conduct</a>.</p>
 <h4 id="building-the-docs-locally">Building the docs locally</h4>
-<p>After completing the setup in CONTRIBUTING.md (<code>uv sync --all-extras</code>), you can preview docs changes with:</p>
+<p>After completing <a href="https://github.com/mloda-ai/mloda/blob/main/CONTRIBUTING.md#local-development-setup">the setup in CONTRIBUTING.md</a> (<code>uv sync --all-extras</code>), you can preview docs changes with:</p>
 <pre><code class="language-bash">mkdocs serve --config-file docs/mkdocs.yml
 </code></pre>
 <p>The build executes the example notebooks to capture their outputs, so it needs the example notebooks' compute backends. <code>uv sync --all-extras</code> (or installing <code>mloda[docs]</code>) provides them.</p>

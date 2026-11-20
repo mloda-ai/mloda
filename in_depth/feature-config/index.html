@@ -181,6 +181,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -326,13 +330,31 @@ result = mloda.run_all(
 <td><code>propagate_context_keys</code></td>
 <td>array</td>
 <td>No</td>
-<td>Context keys that propagate to dependent features</td>
+<td>Context keys pushed to the feature's direct input features</td>
+</tr>
+<tr>
+<td><code>cascade_context_keys</code></td>
+<td>array</td>
+<td>No</td>
+<td>Context keys pushed to every input feature down the chain</td>
 </tr>
 <tr>
 <td><code>column_index</code></td>
 <td>integer</td>
 <td>No</td>
 <td>Index for multi-output features (adds <code>~N</code> suffix)</td>
+</tr>
+<tr>
+<td><code>keep_index</code></td>
+<td>boolean</td>
+<td>No</td>
+<td>Return the key columns with the result (default <code>false</code>)</td>
+</tr>
+<tr>
+<td><code>index</code></td>
+<td>array of strings</td>
+<td>No</td>
+<td>Unique key columns of the feature; the columns <code>keep_index</code> returns</td>
 </tr>
 <tr>
 <td><code>feature_group</code></td>
@@ -379,9 +401,11 @@ result = mloda.run_all(
 ]
 </code></pre>
 <p>The config form takes a non-empty class-name string only, since JSON cannot express a class object. In Python, <code>Feature("subject_token", feature_group=ClaimsReader)</code> also accepts the class object.</p>
-<p>The string matches the named class and its subclasses, preferring the most specific one, exactly like the class object. Naming an abstract family base such as <code>"AggregatedFeatureGroup"</code> therefore selects the concrete subclass, so the config does not have to name a compute-framework-specific class.</p>
+<p>The string matches the named class and its subclasses, preferring the most specific one, exactly like the class object. Naming an abstract family base therefore selects the concrete subclass, so the config does not have to name a compute-framework-specific class.</p>
+<p>For an operation group such as <code>AggregatedFeatureGroup</code>, add an <code>implementation</code> key next to <code>feature_group</code> (a string, or a list of strings for a chain) to choose the framework implementation, e.g. <code>{"name": "sales__sum_aggr", "implementation": "PandasAggregation"}</code>. See <a href="../compute-framework-integration/#pinning-an-implementation">Compute Framework Integration</a>.</p>
 <p>The scope narrows candidates but does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does; enable one framework for the run. Two classes with the same name in different modules likewise both match and stay ambiguous, and the root <code>FeatureGroup</code> base is rejected.</p>
 <p>The scope is read by feature resolution and by filter matching, and stays excluded from feature identity, so requesting the same name scoped to two different sources in one list raises <code>ValueError: Duplicate feature setup: &lt;name&gt;</code> rather than silently dropping one; see <a href="../troubleshooting/feature-group-resolution-errors/">Feature Group resolution errors</a>.</p>
+<p><code>keep_index</code> (boolean, default <code>false</code>) and <code>index</code> (non-empty array of column names) are top-level fields that set <code>Feature.keep_index</code> and <code>Feature.index</code>, e.g. <code>{"name": "income", "keep_index": true, "index": ["customer_id"]}</code>. A nested <code>in_features</code> dict rejects both.</p>
 <p><code>feature_group</code> is a top-level field next to <code>name</code>: writing it inside <code>options</code>, <code>group_options</code>, or <code>context_options</code> is rejected with a validation error.</p>
 <h2 id="worked-example-window-rank-and-percentile-features">Worked Example: Window, Rank, and Percentile Features</h2>
 <p>Row-preserving operations (window aggregation, rank, percentile) cannot be requested by a bare name: the Feature Group only matches when the request also carries the partition/order options its matcher needs. The feature name encodes the operation (<code>{source}__{operation}</code>); the matcher then requires those options to be present. It reads them via <code>options.get</code> (group first, then context), so they resolve from either side, but <code>context_options</code> is the right home.</p>
@@ -470,7 +494,7 @@ result = mloda.run_all(
     }
 ]
 </code></pre>
-<p>A nested dict supports <code>name</code>, <code>options</code>, <code>in_features</code> and <code>feature_group</code> only, in <code>options</code>, <code>group_options</code> and <code>context_options</code> alike. A nested feature built from <code>group_options</code> stays in the group options, one built from <code>context_options</code> stays in the context options. In a nested <code>in_features</code> dict, the top-level-only fields (<code>column_index</code>, <code>group_options</code>, <code>context_options</code>, <code>propagate_context_keys</code>) are rejected, and so is an unknown key. A feature dict must be the direct value of <code>in_features</code>: an <code>in_features</code> list holds source feature names, not feature dicts.</p>
+<p>A nested dict supports <code>name</code>, <code>options</code>, <code>in_features</code> and <code>feature_group</code> only, in <code>options</code>, <code>group_options</code> and <code>context_options</code> alike. A nested feature built from <code>group_options</code> stays in the group options, one built from <code>context_options</code> stays in the context options. In a nested <code>in_features</code> dict, the top-level-only fields (<code>column_index</code>, <code>keep_index</code>, <code>index</code>, <code>group_options</code>, <code>context_options</code>, <code>propagate_context_keys</code>, <code>cascade_context_keys</code>) are rejected, and so is an unknown key. A feature dict must be the direct value of <code>in_features</code>: an <code>in_features</code> list holds source feature names, not feature dicts.</p>
 <p>The container decides identity: a nested source feature declared under <code>group_options</code> is part of the feature's identity, so it affects Options hashing and equality and therefore Feature Group splitting, while one declared under <code>context_options</code> is not.</p>
 <p>The top-level <code>in_features</code> array cannot be combined with an <code>in_features</code> key inside <code>options</code>, <code>group_options</code> or <code>context_options</code>, and <code>in_features</code> cannot be a key of <code>group_options</code> and <code>context_options</code> at once: declare the source features in one place.</p>
 <h2 id="multi-column-features">Multi-Column Features</h2>
@@ -484,7 +508,7 @@ result = mloda.run_all(
 </code></pre>
 <p>This produces a feature named <code>pca_result~0</code>.</p>
 <h2 id="context-propagation">Context Propagation</h2>
-<p>By default, context parameters are local to each feature and do not propagate through feature chains. Use <code>propagate_context_keys</code> to specify which context keys should flow to dependent features:</p>
+<p>By default, context parameters are local to each feature and do not propagate through feature chains. Use <code>propagate_context_keys</code> to push specific context keys to the feature's direct input features:</p>
 <pre><code class="language-json">[
     {
         &quot;name&quot;: &quot;my_feature&quot;,
@@ -496,7 +520,18 @@ result = mloda.run_all(
     }
 ]
 </code></pre>
-<p>In this example, <code>session_id</code> propagates to any features that depend on <code>my_feature</code>, while <code>window_function</code> stays local.</p>
+<p>In this example, <code>session_id</code> is pushed to the direct input features of <code>my_feature</code>, while <code>window_function</code> stays local. The push is one hop; see <a href="../property-mapping/#context-propagation">Context propagation</a> for inputs further down a chain.</p>
+<p><code>cascade_context_keys</code> pushes the listed keys on through every input down the chain. The value is then visible to every feature group down the chain, see <a href="../property-mapping/#context-propagation">Context propagation</a> for the rules.</p>
+<pre><code class="language-json">[
+    {
+        &quot;name&quot;: &quot;my_feature&quot;,
+        &quot;context_options&quot;: {
+            &quot;session_id&quot;: &quot;abc123&quot;
+        },
+        &quot;cascade_context_keys&quot;: [&quot;session_id&quot;]
+    }
+]
+</code></pre>
 <h2 id="complete-example">Complete Example</h2>
 <pre><code class="language-python">from mloda.user import load_features_from_config, mloda
 

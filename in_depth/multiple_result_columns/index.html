@@ -139,6 +139,8 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#consuming-multiple-columns">Consuming Multiple Columns</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#declaring-output-parts">Declaring Output Parts</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#how-it-works">How It Works</a>
@@ -160,6 +162,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -313,6 +319,51 @@ temperature~std
 <ul>
 <li><code>Feature("base_feature")</code> → Returns ALL columns: <code>base_feature~0</code>, <code>base_feature~1</code>, etc.</li>
 <li><code>Feature("base_feature~1")</code> → Returns ONLY <code>base_feature~1</code> column</li>
+<li><code>Feature("measure~value")</code> → Returns ONLY <code>measure~value</code>, if the group declares <code>value</code> as an output part (see below)</li>
+</ul>
+<h3 id="declaring-output-parts">Declaring Output Parts</h3>
+<p>A group that returns named parts declares them, so <code>Feature("measure~value")</code> resolves to the group that produces <code>measure</code>, at the top level and as a dependency:</p>
+<pre><code class="language-python">from typing import Any
+
+from mloda.provider import DataCreatorFeatureGroup, FeatureGroup, FeatureSet
+from mloda.user import PluginCollector, mloda
+
+
+class DocMeasureFeatureGroup(DataCreatorFeatureGroup):
+    OUTPUT_PARTS = (&quot;value&quot;, &quot;unit&quot;)  # or (ANY_OUTPUT_PART,) if parts are only named at run time
+
+    @classmethod
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {&quot;measure&quot;}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
+        return {&quot;measure~value&quot;: [1, 2], &quot;measure~unit&quot;: [&quot;m&quot;, &quot;m&quot;]}
+
+
+result = mloda.run_all(
+    [&quot;measure~value&quot;],
+    compute_frameworks=[&quot;PandasDataFrame&quot;],
+    plugin_collector=PluginCollector.enabled_feature_groups({DocMeasureFeatureGroup}),
+)
+assert list(result[0].columns) == [&quot;measure~value&quot;]
+</code></pre>
+<p>If the parts depend on the feature name or options, override the classmethod <code>output_parts(feature_name, options)</code> instead.</p>
+<ul>
+<li><code>measure</code> is computed once, even if several parts are requested with the same options and data type; only the requested part columns are returned.</li>
+<li>An undeclared part (<code>measure~bogus</code>) fails at resolution and lists the declared parts. With <code>ANY_OUTPUT_PART</code>, a part that was not produced fails after the computation.</li>
+<li>A name any group matches as a whole (a literal <code>a~b</code> column or a config-based feature) is kept whole and wins over another group's part reading; a base name that itself contains <code>~</code> cannot have parts.</li>
+<li>An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.</li>
+<li>A declared part matches only in full: declare <code>0</code> and <code>0~lower</code> to resolve both <code>f~0</code> and <code>f~0~lower</code>, or override <code>output_parts</code> for variable-width nested parts. A request for <code>f~0</code> still returns its nested columns.</li>
+<li>Groups that declare nothing still resolve <code>vec~1</code>, which now returns only <code>vec~1</code>; a missing index fails after the computation.</li>
+<li><code>match_feature_group_criteria</code> matches the base name only; the part rule applies during feature resolution, not in global filters.</li>
+<li>Artifacts are keyed by the base feature name, not a part column.</li>
+<li><code>supports_compute_framework</code> and <code>Implementation.accepts</code> take a keyword-only <code>part</code>, the requested declared output part, so a part can run on a framework that refuses the whole.</li>
+<li><code>feature_name</code> is the base name when <code>part</code> is set, otherwise the requested name.</li>
+<li>With <code>part=None</code> a <code>~</code> name can still arrive whole: the implicit <code>vec~N</code> path of a group declaring no parts, a group matching <code>x~k</code> as a whole name, and global filters (which pass the filter feature's name unsplit).</li>
+<li>A whole and a part request fold into one step when one framework allows both. Otherwise (pins, or a consumer whose framework rule excludes the whole's framework) each runs as its own step computing the base, so the producer should honor <code>parts_only</code>.</li>
+<li>A trailing <code>~N</code> is also read against the declared parts: <code>measure~0</code> fails at resolution unless <code>0</code> is declared.</li>
+<li>A part's declared data type is checked on its own column (<code>measure~value</code>).</li>
 </ul>
 <h2 id="how-it-works">How It Works</h2>
 <p>The mloda framework automatically handles the selection of columns that follow this naming convention:</p>
@@ -334,7 +385,7 @@ temperature~std
     request_feature_order: list[str] | None = None,
 ) -&gt; set[str] | list[str]: ...
 </code></pre>
-<p>It collects every column that equals a requested feature name or starts with <code>feature_name~</code>, and raises a <code>ValueError</code> if no column matches. By default it returns a set; with <code>ordering="alphabetical"</code> it returns a sorted list, and with <code>ordering="request_order"</code> it returns a list ordered by <code>request_feature_order</code> (falling back to <code>selected_feature_names</code>). Any other <code>ordering</code> value raises a <code>ValueError</code>.</p>
+<p>It collects every column that equals a requested feature name or starts with <code>feature_name~</code>, and raises a <code>ValueError</code> if no column matches. By default it returns a list sorted by name; with <code>ordering="alphabetical"</code> it returns a sorted list, and with <code>ordering="request_order"</code> it returns a list ordered by <code>request_feature_order</code> (falling back to <code>selected_feature_names</code>). Any other <code>ordering</code> value raises a <code>ValueError</code>.</p>
 <h2 id="best-practices">Best Practices</h2>
 <ol>
 <li><strong>Use Automatic Discovery</strong>: Prefer <code>resolve_multi_column_feature()</code> over manual column enumeration when you need all columns</li>
@@ -378,7 +429,7 @@ temperature~std
 </tr>
 </tbody>
 </table>
-<p><strong>Note</strong>: When declaring dependencies with <code>Feature("base_feature~N")</code>, the framework automatically resolves to the parent FeatureGroup that produces <code>base_feature</code> and extracts only the specified sub-column. Only a numeric suffix is recognized this way: <code>get_column_base_feature</code> does not strip a non-digit suffix such as <code>~mean</code> or <code>~dim1</code> back to its base, so a feature name like <code>Feature("base_feature~mean")</code> will NOT resolve to the producing FeatureGroup as a formal sub-column dependency.</p>
+<p><strong>Note</strong>: When declaring dependencies with <code>Feature("base_feature~N")</code> or <code>Feature("base_feature~part")</code>, the framework resolves to the FeatureGroup that produces <code>base_feature</code> and extracts only the specified sub-column. A numeric suffix works for any group that supports the base feature; a non-digit suffix such as <code>~mean</code> needs a group that declares it as an output part. <code>get_column_base_feature</code> still strips only a trailing numeric suffix.</p>
               
             </div>
           </div><footer>

@@ -124,8 +124,6 @@
     <li class="toctree-l3"><a class="reference internal" href="#the-spec-type">The spec type</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#the-lifecycle-which-invariant-fires-when">The lifecycle: which invariant fires when</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#one-spec-type-two-surfaces">One spec type, two surfaces</a>
         <ul>
     <li class="toctree-l4"><a class="reference internal" href="#a-plain-feature-group">A plain feature group</a>
     </li>
@@ -173,8 +171,12 @@
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#where-each-invariant-is-pinned">Where each invariant is pinned</a>
     </li>
+    <li class="toctree-l3"><a class="reference internal" href="#runtime-parameters">Runtime parameters</a>
+    </li>
     <li class="toctree-l3"><a class="reference internal" href="#context-propagation">Context propagation</a>
         <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#previewing-the-forwarded-options">Previewing the forwarded options</a>
+    </li>
     <li class="toctree-l4"><a class="reference internal" href="#group-and-context-are-independent-namespaces">group and context are independent namespaces</a>
     </li>
         </ul>
@@ -198,6 +200,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -350,15 +356,33 @@ PROPERTY_MAPPING = {
 <td><code>False</code></td>
 <td>Exempts a required key from the string-named path presence check only; its value is bound outside match-time name capture. Not optionality: the key stays required on the config path. See <a href="#required-presence-on-the-string-named-path">Required presence on the string-named path</a>.</td>
 </tr>
+<tr>
+<td><code>name_converter</code></td>
+<td><code>Callable[[str], Any] \| None</code></td>
+<td><code>None</code></td>
+<td>Converts the captured text of a named capture bound to this key (e.g. <code>int</code>), before validation. Never applied to explicit options or the legacy positional fallback.</td>
+</tr>
+<tr>
+<td><code>caller_settable</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td><code>False</code>: an MCP caller may never set the key, even when <code>[mcp] allow_options</code> lists it. See <a href="../mcp-server/#what-stays-on-the-server">MCP Server and CLI</a>.</td>
+</tr>
+<tr>
+<td><code>forward_to_inputs</code></td>
+<td><code>bool</code></td>
+<td><code>True</code></td>
+<td><code>False</code>: input features do not inherit the key unless an explicit <code>forward_group</code> allowlist names it. Context is unaffected.</td>
+</tr>
 </tbody>
 </table>
+<p>A key declared with <code>credential_handle_spec(...)</code> names a credential handle and may not be moved to context. See <a href="../named-data-access-handles/#declaring-a-credential-handle">Declaring a credential handle</a>. A <code>Credential</code>, <code>RegisteredCredential</code> or <code>ResolvedCredential</code> value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.</p>
 <p><strong><code>property_spec(...)</code> is the authoring path to reach for.</strong> It is a thin builder over the
 same fields, its keyword is <code>strict=</code> (which sets <code>strict_validation</code>), and it keeps the
 declaration readable. <code>PropertySpec</code> is the lower-level form: it is the type the builder
 returns and the type the schema is validated against, so reach for it directly when you need
 the class itself (subclassing, <code>isinstance</code> checks, or constructing a spec programmatically).
-The builder does not accept <code>framework_set</code> or <code>scalar_only</code>; a spec needing those must be
-constructed as <code>PropertySpec(...)</code> directly. Both are exported from <code>mloda.provider</code>.</p>
+Both are exported from <code>mloda.provider</code>.</p>
 <pre><code class="language-python">from mloda.provider import property_spec
 
 PROPERTY_MAPPING = {
@@ -396,16 +420,16 @@ does not understand can be absorbed silently.</p>
 <tr>
 <td>Construction (<code>PropertySpec(...)</code>)</td>
 <td><code>__post_init__</code></td>
-<td><code>allowed_values</code> is not a str/bytes and is a Mapping or an iterable; <code>strict_validation</code>, <code>framework_set</code> and <code>scalar_only</code> are real bools; the validators are callable; <code>element_validator</code> and <code>scalar_only</code> each imply strict; strict has a non-empty value space or an <code>element_validator</code>; a strict, non-<code>None</code> <code>default</code> is accepted by the key's own rules; <code>expected</code> is a non-empty str and needs a <code>match_guard</code></td>
+<td><code>allowed_values</code> is not a str/bytes and is a Mapping or an iterable; <code>strict_validation</code> is a real bool; the validators and <code>name_converter</code> are callable; <code>element_validator</code> implies strict; strict has a non-empty value space or an <code>element_validator</code>; a strict, non-<code>None</code> <code>default</code> is accepted by the key's own rules; <code>expected</code> is a non-empty str and needs a <code>match_guard</code></td>
 <td>The spec being built</td>
 <td><code>ValueError</code> at import, prefixed <code>PropertySpec('&lt;explanation&gt;')</code></td>
 </tr>
 <tr>
 <td>Class definition (<code>FeatureGroup.__init_subclass__</code>)</td>
-<td>Spec type</td>
-<td>Every spec IS a <code>PropertySpec</code></td>
-<td>Every value in the mapping</td>
-<td><code>ValueError</code> naming the class and the key</td>
+<td>Mapping and spec type</td>
+<td>The mapping is <code>None</code> or a Mapping (a source group's must be a Mapping, mixins included); every spec IS a <code>PropertySpec</code></td>
+<td>The mapping, then every value in it</td>
+<td><code>TypeError</code> naming the class for a non-mapping; <code>ValueError</code> naming the class and the key for a bad spec</td>
 </tr>
 <tr>
 <td>Match time (parser)</td>
@@ -433,7 +457,7 @@ does not understand can be absorbed silently.</p>
 <td>Required presence (string-named path)</td>
 <td>Same, after declared defaults and name bindings resolve; <code>deferred_binding=True</code> and the source (<code>in_features</code>) key are exempt</td>
 <td>The name-bound options</td>
-<td>Non-match (<code>False</code>), with a warning naming the missing key(s); for a <code>context=True</code> key the reason also names the remedy (<code>Options(context=...)</code>, and for an input feature the consumer's <code>propagate_context_keys</code>)</td>
+<td>Non-match (<code>False</code>), with a warning naming the missing key(s); for a <code>context=True</code> key the reason also names the remedy (<code>Options(context=...)</code>; for a direct input feature the consumer's <code>propagate_context_keys</code>, for an input further down a chained name the requested feature's <code>cascade_context_keys</code>, or a group option)</td>
 </tr>
 <tr>
 <td>Match time (plain group)</td>
@@ -473,42 +497,14 @@ does not understand can be absorbed silently.</p>
 <tr>
 <td>Class definition (mixin)</td>
 <td>Missing-<code>in_features</code> diagnostic</td>
-<td>A dict <code>PROPERTY_MAPPING</code> declares no <code>in_features</code> key while <code>MIN_IN_FEATURES &gt;= 1</code>, and the group inherits <code>input_features</code> and the matcher</td>
+<td>A <code>PROPERTY_MAPPING</code> declares no <code>in_features</code> key while <code>MIN_IN_FEATURES &gt;= 1</code>, and the group inherits <code>input_features</code> and the matcher</td>
 <td>The class</td>
 <td><code>logger.warning</code>, silenced by <code>MIN_IN_FEATURES = 0</code> or an <code>in_features</code> key</td>
-</tr>
-<tr>
-<td>Author time (reader surface)</td>
-<td><code>mypy --strict</code></td>
-<td><code>READER_OPTIONS</code> holds <code>PropertySpec</code> values</td>
-<td>The constructor call</td>
-<td>mypy error at the declaration</td>
-</tr>
-<tr>
-<td>Class definition (<code>BaseInputData.__init_subclass__</code>)</td>
-<td>Spec type + surface guard</td>
-<td>Every value IS a <code>PropertySpec</code> and declares nothing inert on a reader (<code>match_guard</code>, <code>deferred_binding</code>, <code>context=False</code>, enforcement fields on a <code>framework_set</code> key); the reserved key's <strong>winning</strong> declaration across the MRO keeps <code>framework_set=True</code></td>
-<td>Every value in that class's declaration, plus the reserved key as the MRO merge resolves it</td>
-<td><code>ValueError</code> naming class, key and field</td>
-</tr>
-<tr>
-<td>Match time (reader selection)</td>
-<td>Presence + strict validation</td>
-<td>Required keys are present and present strict values pass, element-wise unless <code>scalar_only</code> rejects a collection outright; <code>framework_set</code> keys exempt</td>
-<td>The candidate's merged specs and the options</td>
-<td>Reader non-match. Addressed-reader and supplied-value failures record a <code>stage="input_data"</code> rejection; unaddressed absence and an unjudgeable predicate decline silently</td>
-</tr>
-<tr>
-<td>Match time (reader code)</td>
-<td><code>reader_option(key, options)</code></td>
-<td>Supplied value, else the declared <code>default</code></td>
-<td>The key name and the options</td>
-<td><code>ValueError</code> for an undeclared key or an absent <code>NO_DEFAULT</code> one</td>
 </tr>
 </tbody>
 </table>
 <p>A spec is constructed inside the class body, so its own rules fire before the class exists.
-Class definition is left with exactly one rule: the type itself. Within <code>__post_init__</code> the
+Class definition is left with the type rules alone. Within <code>__post_init__</code> the
 declared-default check runs last, after the shape rules, because it calls the validators the
 shape rules just certified: a non-callable <code>element_validator</code> would otherwise be blamed on
 the default.</p>
@@ -529,105 +525,6 @@ rejected either way.</p>
 declares it gets its resolved <code>match_feature_group_criteria</code> wrapped at class definition,
 and the wrapper runs the predicates after that matcher returns <code>True</code>. Overriding the
 matcher therefore keeps the contract, whether the override delegates or not.</p>
-<p>The last four rows are the whole reader surface, and the match-time ones sit outside the ordered
-sequence above: a user-facing <code>READER_OPTIONS</code> key is consumed during reader selection, and no other
-moment fires for it. The reserved <code>"BaseInputData"</code> key is the exception, written transiently while matching and
-moved onto <code>Feature.input_data_match</code>; <code>BaseInputData.load</code> and <code>SQLITEReader.get_table</code> read <code>FeatureSet.input_data_match</code> at load time.
-See <a href="#one-spec-type-two-surfaces">One spec type, two surfaces</a>.</p>
-<h2 id="one-spec-type-two-surfaces">One spec type, two surfaces</h2>
-<p>Option keys are declared in two places, with one spec type, and the two surfaces enforce it
-differently because they consume values at different moments.</p>
-<table>
-<thead>
-<tr>
-<th>Surface</th>
-<th>Declared on</th>
-<th>What the framework does with it</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>PROPERTY_MAPPING</code></td>
-<td>a <code>FeatureGroup</code></td>
-<td>Enforces it and applies it: value validation (<code>allowed_values</code>, <code>element_validator</code>), presence and <code>required_when</code>, and materialization of declared defaults into <code>Options</code>.</td>
-</tr>
-<tr>
-<td><code>READER_OPTIONS</code></td>
-<td>a <code>BaseInputData</code> reader</td>
-<td>Enforces it at reader selection: presence, <code>required_when</code> and strict values are checked before a candidate probes, and a failure vetoes that reader, recording per the ownership rule above. An absent-required reason also names the remedy (<code>Options(context=...)</code>, and for an input feature the consumer's <code>propagate_context_keys</code>). Defaults are never materialized; only the reader's own code applies them.</td>
-</tr>
-</tbody>
-</table>
-<p>Both surfaces run the same per-key validator, and the reader's MRO merge goes through the shared
-helper module (<code>mloda/core/abstract_plugins/components/declaration_surface.py</code>).</p>
-<p>A reader consumes its option keys during reader <strong>selection</strong> (<code>match_subclass_data_access</code>, reached
-through <code>BaseInputData.matches</code> from the matcher), before the framework materializes anything. Two
-consequences keep the shared type honest on this surface:</p>
-<ul>
-<li><strong><code>default</code> stays a runtime fallback.</strong> A <code>FeatureGroup</code> default enters <code>Options</code> (hashing, twin
-  canonicalization, downstream visibility); a reader default is only returned by
-  <code>reader_option(key, options)</code> and never enters <code>Options</code>. Presence follows the
-  <a href="#applying-declared-defaults">#768 matrix</a>; a <code>NO_DEFAULT</code> key is required at selection, and
-  <code>reader_option</code> raises for it. The declaration is load-bearing: <code>ReadFile</code> and <code>ReadDocument</code>
-  resolve <code>document_suffixes</code> this way (for <code>ReadDocument</code> only in its <code>DataAccessCollection</code>
-  branch; the bare str/Path branch passes no <code>document_suffixes</code>).</li>
-<li><strong>Fields with no reader meaning are rejected where they are written.</strong> <code>match_guard</code>,
-  <code>deferred_binding=True</code> and <code>context=False</code> describe name matching and value placement, which a
-  reader does not have, so <code>BaseInputData.__init_subclass__</code> rejects them instead of leaving them
-  silently inert (#865). <code>framework_set=True</code> marks the one framework-written key, the reserved
-  <code>"BaseInputData"</code> pair, written transiently while matching and never kept in the options.
-  Such keys are exempt from enforcement, so enforcement fields on them are rejected too, as is
-  <code>allow_explicit_none</code>, which the admit path never reads on a framework-written key; on
-  <code>PROPERTY_MAPPING</code> the field is rejected outright. The reserved key is checked as the MRO merge
-  resolves it: its <strong>winning</strong> declaration must keep <code>framework_set=True</code>, so neither a subclass nor a
-  plain mixin can turn the framework-written key into a user-enforced one.</li>
-<li><strong>The reverse also holds: a reader-only field has no <code>PROPERTY_MAPPING</code> meaning.</strong> <code>scalar_only</code> (#1154)
-  rejects a collection value outright instead of unpacking it element-wise, so <code>FeatureChainParser</code> rejects
-  it on <code>PROPERTY_MAPPING</code> at class definition, the same way <code>match_guard</code>/<code>deferred_binding</code>/<code>context=False</code>
-  are rejected on the reader surface.</li>
-</ul>
-<p><code>READER_OPTIONS</code> merges across the MRO (<code>reader_option_specs()</code>, most-derived declaration winning),
-so a concrete reader inherits its family's keys and redeclares nothing, and
-<code>declared_reader_option_keys()</code> is the merged key set. Both <code>reader_option()</code> and
-<code>reader_option_default()</code> raise for a key no declaration carries, so a typo in <em>reader</em> code is loud
-instead of a silent <code>None</code>.</p>
-<p>What a plugin author may rely on:</p>
-<table>
-<thead>
-<tr>
-<th>Guarantee</th>
-<th>on a <code>FeatureGroup</code></th>
-<th>on a reader</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td>The declared value space is enforced against user values</td>
-<td>yes, under <code>strict_validation</code></td>
-<td>yes, under <code>strict_validation</code>, at reader selection</td>
-</tr>
-<tr>
-<td>The declared default is applied by the framework</td>
-<td>yes (see <a href="#applying-declared-defaults">Applying declared defaults</a>)</td>
-<td>no, only the reader's own code applies it, via <code>reader_option</code></td>
-</tr>
-<tr>
-<td>Presence and <code>required_when</code> are checked</td>
-<td>yes</td>
-<td>yes, at selection; addressing the reader makes a failure attributable, a global probe declines silently on absence</td>
-</tr>
-<tr>
-<td>A user's mistyped key surfaces</td>
-<td>for a required key, yes: absence is a non-match, with a warning on the string-named path</td>
-<td>for a required key, yes: absence is an attributable non-match; an optional key's typo still falls back to the declared default</td>
-</tr>
-</tbody>
-</table>
-<p>The surfaces used to be two types: reader selection had no rejection channel, so enforcement
-fields on a reader would have been silently inert (#865). The shared channel (#727) made declines
-attributable and collapsed the types back into one (#949). Migration edge: a bare
-<code>PropertySpec("...")</code> is required at selection; the old bare <code>ReaderOptionSpec("...")</code> is
-<code>PropertySpec("...", default=None)</code>.</p>
 <h3 id="a-plain-feature-group">A plain feature group</h3>
 <p>A <code>FeatureGroup</code> without <code>FeatureChainParserMixin</code> (the <code>DefaultMatcherFeatureGroup</code> probe in
 <code>tests/.../feature_chainer/test_required_when_enforced_on_override.py</code> is the in-repo example)
@@ -657,11 +554,12 @@ credentials dict, against a <code>PropertySpec</code> mapping. It raises <code>P
 and <code>reason</code>) on the first failure.</p>
 <ul>
 <li>It checks required presence, <code>required_when</code>, and strict values.</li>
-<li><code>required_when</code> runs only when the key is absent (the reader rule).</li>
-<li>Ignored: <code>framework_set</code> keys, <code>match_guard</code>, <code>deferred_binding</code>, and <code>context</code>.</li>
+<li><code>required_when</code> runs only when the key is absent.</li>
+<li>Ignored: <code>match_guard</code>, <code>deferred_binding</code>, and <code>context</code>. A caller that must reject a collection checks the value's shape itself.</li>
 <li><code>closed_world=True</code> rejects undeclared keys; <code>False</code> ignores them.</li>
 <li>Defaults are never applied: <code>required_when</code> receives an <code>Options</code> of the raw values, unlike on a feature group.</li>
 <li>Errors and logs never contain a value.</li>
+<li>A raise marked with <code>escalate_match_abort</code> (from an <code>element_validator</code>, a <code>required_when</code> predicate or a value's <code>__eq__</code>) propagates unchanged instead of becoming a <code>PropertyValidationError</code>.</li>
 </ul>
 <h2 id="choosing-a-mechanism">Choosing a mechanism</h2>
 <table>
@@ -722,6 +620,7 @@ allows an extra sentinel, compose rather than fork it, as clustering does for <c
   the user instead of failing silently. Declaring <code>expected</code> reports the rejection too, even on a
   non-strict spec, with a message naming what the guard accepts instead of the generic strict text.</li>
 </ul>
+<p>A key that must reject a collection outright uses a <code>match_guard</code> on the raw value (as <code>HANDLE_SPEC</code> does).</p>
 <p>Both run on both match paths, so declaring both on one spec is about <strong>what</strong> is judged, not
 about where: <code>element_validator</code> judges each element and produces the message, while
 <code>match_guard</code> judges the raw container that element-wise unpacking would otherwise hide.</p>
@@ -850,24 +749,29 @@ and the flag only defers its string-named path presence check (see
 with a concrete declared default is filled from its spec (into context or group per the spec).
 A present value is never overridden, even a falsy <code>0</code>/<code>False</code>/<code>""</code>. <code>NO_DEFAULT</code> and
 <code>default=None</code> fill nothing. A strict default is already validated at construction, so the
-materialized value is not re-checked.</p>
+materialized value is not re-checked. A key the feature name binds never receives a declared default;
+<code>FeatureGroup.name_bindings(name)</code> returns those bound values (the captured text, or its <code>name_converter</code> output).</p>
 <p>The framework applies this at two sites. At feature <strong>intake</strong>
 (<code>Engine.add_feature_to_collection</code>) a feature's options are rebound through
-<code>options_with_defaults</code> as it enters the collection. At the <strong>compute boundary</strong>
-<code>run_calculate_feature</code> materializes the declared defaults into the <code>FeatureSet</code> before
-<code>calculate_feature</code> and any calculate-feature extender run, so a plugin reads <code>feature.options</code>
-directly. <code>options_with_defaults</code> remains for pre-materialization contexts (e.g. <code>resolve_subtype</code>
-internals) and for read sites the framework hands pre-default options, <code>input_features</code> above all.</p>
-<p>For an engine-driven request intake has already run, so the compute-boundary call is an idempotent
-no-op. It carries the work only for direct <code>FeatureSet</code> use that bypasses the engine, and there the
-collapsing twins raise instead of merging.</p>
-<p>A materialized default is never a declared option, so it never conflicts with a name-bound value:
-the name-agreement check reads the caller's own keys only.</p>
+<code>options_with_defaults</code> as it enters the collection, which fills declared defaults together with the
+name-bound value for keys still absent (bound values go into context, or into group only when the key
+already sits there as <code>None</code>). At the <strong>compute boundary</strong> <code>run_calculate_feature</code> repeats the step on
+the <code>FeatureSet</code> before <code>calculate_feature</code> and any calculate-feature extender run, so a plugin reads
+<code>feature.options</code> directly. Bound fills go to context because the <code>Options</code> hash is group-only: a name-only
+request and the same name with an agreeing explicit context option merge into one feature at intake,
+while an explicit group option stays its own feature. <code>options_with_defaults</code> remains for
+pre-materialization contexts (e.g. <code>resolve_subtype</code> internals) and for read sites the framework hands
+pre-default options, <code>input_features</code> above all.</p>
+<p>For an engine-driven request, intake has already filled everything and the plan is frozen, so
+<code>run_calculate_feature</code> skips the compute-boundary call for a prepared FeatureSet. Direct <code>FeatureSet</code> use
+that bypasses the engine gets the fill there, and collapsing twins raise instead of merging.</p>
+<p>A materialized default or bound value is never a declared option, so it never conflicts with a
+name-bound value: the name-agreement check reads the caller's own keys only.</p>
 <p>Both sites run <em>after</em> resolution, so materialization never changes <strong>resolution matching</strong> (filter
 matching runs after intake and does observe materialized values, see below). It does change
 how features <strong>group</strong>: intake materialization deliberately canonicalizes default-equivalent twins,
 so a feature that passes a declared default explicitly and one that omits it become equal and merge
-into a single feature (with a warning naming the duplicated request) instead of computing twice.</p>
+into a single feature (with a warning naming the duplicated request; twins differing only in a name-bound value merge the same way) instead of computing twice.</p>
 <p>One consequence for authors: <code>input_features</code> is called with the DECLARED, pre-default options (the
 engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a
 declared default does NOT reach an <code>input_features</code> read site. A group that wants it there calls
@@ -891,27 +795,28 @@ declared default does NOT reach an <code>input_features</code> read site. A grou
 <td>declared (pre-default)</td>
 </tr>
 <tr>
-<td>Splitting, planning, filter matching, <code>validate_input_features</code>, compute</td>
-<td>effective (post-default)</td>
+<td>Splitting, planning, filter matching, <code>validate_input_features</code>, compute (<code>calculate_feature</code> and its extenders)</td>
+<td>effective (post-default, name-bound values filled)</td>
 </tr>
 </tbody>
 </table>
-<p>The last row assumes intake has run, which is every engine-driven request. On the direct <code>FeatureSet</code>
+<p>The splitting row assumes intake has run, which is every engine-driven request. On the direct <code>FeatureSet</code>
 path the safety net materializes inside <code>run_calculate_feature</code>, which is after
 <code>validate_input_features</code>, not before it.</p>
 <p>Filter matching is the one place the same classmethod sees both views: <code>GlobalFilter</code> calls
 <code>match_feature_group_criteria</code> again after intake, passing the filter feature's own options
 enriched from the resolved feature's effective ones (<code>unify_options</code>), so a key the filter feature
-omits arrives materialized where feature resolution saw it declared.</p>
+omits arrives materialized where feature resolution saw it declared. A key the host's name binds is not
+copied into the filter feature: that value belongs to the host's name, not to a shared configuration.</p>
 <pre><code class="language-py">graph_type = feature.options.get(&quot;graph_type&quot;)  # the declared default when the caller omitted it
 </code></pre>
 <p><code>Options.get(key, default)</code> reads dict-style: a present key returns its stored value (even a falsy
 <code>0</code>/<code>False</code>/<code>""</code>), and the call-site <code>default</code> is returned only when the key is absent from both
 group and context. Because the framework has already materialized any declared default before
-<code>calculate_feature</code> runs, reading it back gives a three-level precedence, an explicit caller value
-first, then the declared spec default, then the call-site <code>default</code>. (Subtlety: materialization fills
-any key whose value <code>is None</code>, so an explicit <code>None</code> is replaced by a concrete spec default, while the
-other falsy values <code>0</code>/<code>False</code>/<code>""</code> are kept. That "None means absent" rule is the default; a spec
+<code>calculate_feature</code> runs, reading it back gives a four-level precedence: the caller's explicit value
+(which must agree with the name), then the name-bound value, then the declared spec default, then the
+call-site <code>default</code>. (Subtlety: materialization fills any key whose value <code>is None</code>, so an explicit
+<code>None</code> is replaced by a concrete spec default, while the other falsy values <code>0</code>/<code>False</code>/<code>""</code> are kept. That "None means absent" rule is the default; a spec
 opts a single key out with <code>allow_explicit_none=True</code>, after which an explicit <code>None</code> overrides even a
 concrete default and is honored across the match-time value mechanisms: it counts as present for the
 required-presence and <code>required_when</code> checks and is seen by membership, <code>element_validator</code>, and
@@ -919,6 +824,7 @@ required-presence and <code>required_when</code> checks and is seen by membershi
 <code>is not None</code> presence tests keep working.)</p>
 <pre><code class="language-py">graph_type = feature.options.get(&quot;graph_type&quot;, &quot;spring&quot;)  # explicit value; else the spec default; else &quot;spring&quot;
 </code></pre>
+<p>Plugin code can read a declared key with <code>cls.read_option(key, options, feature_name)</code>, which raises for an undeclared key and fills the declared default or name-bound value; engine keys such as <code>in_features</code> still go through <code>options.get</code>.</p>
 <h2 id="parameter-classification">Parameter classification</h2>
 <p>There is no <code>group</code> field: a group parameter is <code>context=False</code>.</p>
 <pre><code class="language-python">PROPERTY_MAPPING = {
@@ -940,11 +846,27 @@ required-presence and <code>required_when</code> checks and is seen by membershi
 <p>A caller who places the key explicitly in <code>Options(group=...)</code> or <code>Options(context=...)</code>
 overrides the spec's classification.</p>
 <h2 id="how-a-name-parsed-value-binds-to-a-key">How a name-parsed value binds to a key</h2>
-<p>A name owns the feature for a group when its <code>PREFIX_PATTERN</code> identifies the group, and an owned
+<p>A name owns the feature for a group when one of its effective name patterns identifies the group, and an owned
 name is authoritative for every value it encodes. Every named capture group <code>(?P&lt;key&gt;...)</code> of an
 owned name that is a PROPERTY_MAPPING key binds to that key and is validated like an option, even
 when the option is also present; an unsupported value is a recorded match-time rejection. This
-covers a secondary capture and an <code>element_validator</code>-only spec (one with no <code>allowed_values</code>).</p>
+covers a secondary capture and an <code>element_validator</code>-only spec (one with no <code>allowed_values</code>).
+A key declared with <code>credential_handle_spec</code> may not be a named capture; the class definition raises.</p>
+<p>By default, <code>_get_prefix_patterns()</code> collects <code>PREFIX_PATTERN</code> and <code>SUFFIX_PATTERN</code>. A custom or
+inherited override supplies the effective patterns used by matching, <code>name_bindings</code>, <code>resolve_subtype</code>,
+the required-presence and <code>required_when</code> guards, and the checks at class definition. If that hook
+raises, the guards treat it as returning no patterns, as <code>name_bindings</code> does; they do not fall back to
+the original pattern attributes.</p>
+<p>A key may declare <code>name_converter</code> (e.g. <code>int</code>): the captured text is converted, then validated
+(<code>allowed_values</code>, <code>element_validator</code>), seen by <code>match_guard</code> / <code>required_when</code>, and filled into
+<code>feature.options</code> as the converted value. A name agrees with a declared or forwarded value when it is
+numerically equal, equal as text, or equal to the raw captured text. Agreement means no contradiction,
+not the same type: an explicit option is never rewritten, so a declared <code>5.0</code> stays <code>5.0</code>. A name-only
+request and an agreeing explicit option merge only for context keys. A raising converter, or one returning
+<code>None</code>, is a rejected value (a recorded non-match). The converter must be pure, deterministic and cheap
+(it runs on every resolution). The positional fallback, <code>NameResolution.value_for</code> and
+<code>_resolve_operation</code> stay text. <code>element_validator</code> / <code>allowed_values</code> are not reused because a validator
+returns a verdict, not a value.</p>
 <p>A pattern with only positional groups falls back to the legacy rule: the first capture binds only
 to the single key whose <code>allowed_values</code> already contain it. A positional pattern whose keys share
 a reachable value is rejected at class-definition time, so migrate it to named capture groups.</p>
@@ -966,8 +888,11 @@ default matcher's verdict. Migration: a bare <code>property_spec("...")</code> o
 <code>default=None</code> for an optional key.</p>
 <p>A flagged missing key makes the match a <strong>non-match</strong>: a warning names the group, the feature,
 and the missing key(s), and the resolution-failure report names the missing key(s) too. For missing
-keys declared <code>context=True</code> the reason also names the remedy (<code>Options(context=...)</code>, and for an input
-feature the consumer's <code>propagate_context_keys</code>), naming those keys when several are missing.</p>
+keys declared <code>context=True</code> the reason also names the remedy (<code>Options(context=...)</code>; for a direct input
+feature the consumer's <code>propagate_context_keys</code>, for an input further down a chained name the requested
+feature's <code>cascade_context_keys</code>, or a group option),
+naming those keys when several are missing. A group option is part of feature identity; see
+<a href="#context-propagation">Context propagation</a>.</p>
 <p>Two migrations remove the warning for a flagged key. Give the pattern a named capture
 <code>(?P&lt;key&gt;...)</code> so the framework binds the key from the name (as <code>ClusteringFeatureGroup</code> does for
 <code>algorithm</code> and <code>k_value</code>); or, for a key bound outside match-time name capture (parsed by the
@@ -992,7 +917,7 @@ non-match as on a configuration-based one.</p>
 <p>If every candidate rejects the feature, the final "No feature groups found" error names each
 discarded candidate and why it dropped:</p>
 <pre><code>Feature group(s) eliminated while matching 'window_size_windowed':
-  - WindowedFeatureGroup (option value): Property value int 14 failed validation for 'window_size'
+  - WindowedFeatureGroup (option value): Property value int 14 failed validation for 'window_size' [code: option_value_rejected]
 </code></pre>
 <p>This is diagnostic only. It does not change the <code>True</code>/<code>False</code> contract, so a value rejected by
 one feature group can still match another, and multi-group fallback resolution keeps working.
@@ -1013,12 +938,11 @@ PROPERTY_MAPPING = {
     ),
 }
 </code></pre>
-<pre><code class="language-text">  - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4'
+<pre><code class="language-text">  - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4' [code: match_guard_rejected]
 </code></pre>
 <p>The <code>expected</code> reason above, the strict match_guard reason (<code>Property value &lt;text&gt; rejected by
 match_guard for '&lt;key&gt;'</code>), <code>strict_validation</code>'s <code>failed validation</code> and <code>not found in mapping</code>
-messages, and the reader-option rejection (<code>reader option '&lt;key&gt;' value &lt;text&gt; is rejected by the
-declaration of &lt;reader&gt;</code>, from <code>strict_validation</code> enforced on <code>READER_OPTIONS</code> keys) all follow
+messages all follow
 the same echo rule: they echo the rejected value only when its type is exactly <code>str</code>, <code>int</code>,
 <code>float</code> or <code>bool</code>, with its text cut to about 30 characters, or when it is <code>None</code>. Any other value,
 a <code>str</code> subclass, a numpy scalar, or an int too large to safely print, is named by its type only.
@@ -1053,9 +977,9 @@ PROPERTY_MAPPING = {
 a rejection reason naming the owning class and the missing key, so the resolution-failure report
 carries a near-miss line for it; entries with <code>required_when</code> are otherwise optional. For a key
 declared with <code>context=True</code> (the default), the reason also names the remedy
-(<code>Options(context=...)</code>, and for an input feature the consumer's <code>propagate_context_keys</code>). The
-predicate must be pure and must not raise. It is callable by construction, and a non-bool truthy
-return counts as <code>True</code>.</p>
+(<code>Options(context=...)</code>; for a direct input feature the consumer's <code>propagate_context_keys</code>, for an
+input further down a chained name the requested feature's <code>cascade_context_keys</code>, or a group option). The predicate must be pure and must not raise. It
+is callable by construction, and a non-bool truthy return counts as <code>True</code>.</p>
 <p>The enforcement is installed on the class, not on one matcher, so overriding
 <code>match_feature_group_criteria</code> does not lose it: the predicates still run after the override
 returns <code>True</code>. Nested guards (an override that delegates into an already guarded parent) do
@@ -1082,13 +1006,14 @@ discriminating <code>match_feature_group_criteria</code> is not warned, while a 
 delegates to the base still is.</p>
 <p>Set <code>ALLOW_UNIVERSAL_MATCHER = True</code> on the class to declare the universal match intentional and
 silence the warning. Otherwise give one key no <code>default</code> (making it unconditionally required), or a
-<code>required_when</code> predicate that fires when the option is absent.</p>
+<code>required_when</code> predicate that fires when the option is absent. A group with no discriminator option
+can instead set <code>NAME_ONLY_MATCH = True</code> to claim only names its patterns own.</p>
 <h2 id="declaring-the-source-contract">Declaring the source contract</h2>
 <p>A mixin group whose <code>PROPERTY_MAPPING</code> has no <code>in_features</code> key and whose <code>MIN_IN_FEATURES</code> is 1 or more
 counts an absent <code>in_features</code> as zero sources, so it matches by options only when the caller passes
 <code>in_features</code>. At class definition the mixin warns, naming the class, unless the group overrides
 <code>input_features</code> or <code>match_feature_group_criteria</code> (a pass-through matcher override that delegates to the
-mixin is exempt too), or has a <code>PREFIX_PATTERN</code>/<code>SUFFIX_PATTERN</code> (the source can come from the name). It warns
+mixin is exempt too), or <code>_get_prefix_patterns()</code> supplies a name pattern (the source can come from the name). It warns
 once per hierarchy: a subclass of a class that already warned stays silent. The option path records no rejection reason for this case,
 so the resolution failure report does not name it; the warning is the diagnostic.</p>
 <p>Fix it with <code>MIN_IN_FEATURES = 0</code> if the group is source-less, or declare an <code>in_features</code> key in
@@ -1148,6 +1073,10 @@ if it really is a whole-value check.</p>
 <td><code>tests/.../feature_chainer/test_property_spec_type.py</code></td>
 </tr>
 <tr>
+<td><code>name_converter</code> applies to named captures, runs before validation, and a raising one is a rejected value</td>
+<td><code>tests/.../feature_chainer/test_parsed_name_bindings.py</code></td>
+</tr>
+<tr>
 <td>Unknown or mistyped field caught by mypy at author time</td>
 <td><code>tests/.../feature_chainer/test_property_spec_author_time.py</code></td>
 </tr>
@@ -1172,6 +1101,18 @@ if it really is a whole-value check.</p>
 <td><code>tests/test_core/test_abstract_plugins/test_options_with_defaults.py</code></td>
 </tr>
 <tr>
+<td>A declared handle stays on the declaring feature (a non-declaring consumer forwards it like any group option) and is never a named capture</td>
+<td><code>tests/test_core/test_abstract_plugins/test_components/test_credential_handle_spec.py</code></td>
+</tr>
+<tr>
+<td>A credential value in a non-pointer option is refused at plan time</td>
+<td><code>tests/test_core/test_abstract_plugins/test_components/test_credential_handle_spec.py</code></td>
+</tr>
+<tr>
+<td><code>consumer_local_keys</code> and the explicit-allowlist override in <code>Options.inherit_from</code></td>
+<td><code>tests/test_core/test_abstract_plugins/test_components/test_options_inherit_from.py</code></td>
+</tr>
+<tr>
 <td>Declared defaults materialized at the compute boundary</td>
 <td><code>tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py</code></td>
 </tr>
@@ -1184,20 +1125,8 @@ if it really is a whole-value check.</p>
 <td><code>tests/test_core/test_filter/test_filter_criteria_effective_options.py</code></td>
 </tr>
 <tr>
-<td>The shared declaration mechanics: the per-key validator on both surfaces, the reader merge and its per-class cache, the plain-mixin walk</td>
+<td>The shared declaration mechanics: the per-key validator</td>
 <td><code>tests/.../test_components/test_declaration_surface.py</code></td>
-</tr>
-<tr>
-<td>The reader surface: the single spec type and its surface guards, the reserved framework key, the MRO merge, the loud undeclared key, the presence rule of <code>reader_option()</code></td>
-<td><code>tests/.../test_components/test_reader_option_declarations.py</code></td>
-</tr>
-<tr>
-<td>Reader selection enforcement: strict values, requiredness, the <code>framework_set</code> exemption, the attributable <code>input_data</code> rejection</td>
-<td><code>tests/.../test_components/test_reader_option_enforcement.py</code></td>
-</tr>
-<tr>
-<td>Per-reader declarations, the declared <code>default</code> that is load-bearing at selection, and the bare-path branch it does not reach</td>
-<td><code>tests/.../input_data/test_reader_option_declarations.py</code></td>
 </tr>
 <tr>
 <td>A pattern-less group: enforced <code>required_when</code>, and defaults it applies itself</td>
@@ -1260,6 +1189,10 @@ if it really is a whole-value check.</p>
 <td><code>tests/.../feature_chainer/test_universal_optional_matcher.py</code></td>
 </tr>
 <tr>
+<td><code>NAME_ONLY_MATCH</code> (name-owned match only, no configuration path)</td>
+<td><code>tests/.../feature_chainer/test_feature_chain_parser_mixin.py</code> (<code>TestNameOnlyMatch</code>)</td>
+</tr>
+<tr>
 <td>The missing-<code>in_features</code> definition-time diagnostic and its zero-source rejection</td>
 <td><code>tests/.../feature_chainer/test_missing_in_features_declaration.py</code> (the diagnostic), <code>tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py</code> (the option-path zero-source non-match records no rejection)</td>
 </tr>
@@ -1269,6 +1202,17 @@ if it really is a whole-value check.</p>
 </tr>
 </tbody>
 </table>
+<h2 id="runtime-parameters">Runtime parameters</h2>
+<p><code>property_spec(..., runtime=True)</code> declares a context option whose value a run may replace for that run only, with
+<code>session.run(parameters={key: value})</code>. It needs <code>context=True</code> and cannot combine with <code>match_guard</code>, <code>name_converter</code>
+or <code>required_when</code>. A runtime key is never a group key: placing it in <code>Options.group</code> raises a <code>ValueError</code>.</p>
+<ul>
+<li>A strict spec validates each run's value; an unknown key is refused before any step runs.</li>
+<li>The baseline is the prepare-time context value, else the declared default. <code>NO_DEFAULT</code> keeps the key required at prepare.</li>
+<li>Read it with <code>features.runtime_parameter(key, feature)</code> (run value, else baseline); <code>options.get(key)</code> returns the baseline only.</li>
+<li><code>session.run_surface.parameters</code> lists the declared keys.</li>
+<li>When several groups declare the key, the value must pass every declaring spec; <code>None</code> is refused unless <code>allow_explicit_none</code>.</li>
+</ul>
 <h2 id="context-propagation">Context propagation</h2>
 <p>By default context parameters are local: they do not flow through dependency chains,
 which is correct for feature-specific config. For cross-cutting metadata (session
@@ -1278,15 +1222,53 @@ IDs, environment flags), use <code>propagate_context_keys</code>:</p>
     propagate_context_keys=frozenset({&quot;session_id&quot;}),  # only session_id flows on
 )
 </code></pre>
-<p>Only listed keys propagate; the rest stay local. Group options differ: they forward
-to input features by default. A feature group keeps consumer-local keys off its
+<p>Only listed keys propagate; the rest stay local. The push is one hop: listed keys land
+in the context of the feature's direct input features, and an input feature does not
+push them on to its own inputs. For a name-chained feature such as <code>a__b__c</code>, a key
+pushed from the requested feature reaches <code>a__b</code>, not the root <code>a</code>. To continue the
+push down the chain, opt in with <code>cascade_context_keys</code>:</p>
+<pre><code class="language-python">Options(
+    context={&quot;session_id&quot;: &quot;abc&quot;},
+    cascade_context_keys=frozenset({&quot;session_id&quot;}),  # session_id reaches every level
+)
+</code></pre>
+<ul>
+<li>Every input that receives a cascade key pushes it on to its own inputs, down to the
+  root, also through name-chained inputs such as <code>a__b__c</code>. The key must exist in
+  <code>context</code>; it need not be in <code>propagate_context_keys</code>.</li>
+<li>The key splits FeatureSets by value at every level: each distinct value computes
+  every input again, including one root read per value. Equal values share one.</li>
+<li>An input holding a different value, the key as a group option, or a name-bound
+  value that differs raises a <code>ValueError</code> naming the input and <code>cascade_context_keys</code>.</li>
+<li><code>forward_group=False</code> on an input stops the cascade there and cuts group forwarding
+  to it; there is no per-key stop. A pull (<code>inherit_context_keys</code>) on it still
+  delivers the value at that level only.</li>
+<li>An input with inputs of its own raises a <code>ValueError</code> when it is reached with different
+  <code>cascade_context_keys</code> than it had when its inputs were resolved, for example when one
+  consumer cascades a key and another delivers it with a one-hop push or a pull, or when
+  a shared <code>Feature</code> object gains the cascade after an earlier request resolved it. Its
+  inputs are resolved once. Declare the same <code>cascade_context_keys</code> on every request
+  reaching it, and list the cascading request first when <code>Feature</code> objects are shared.
+  A shared root feature is exempt.</li>
+<li>Two requests of one input that differ in compute framework resolve their inputs separately.
+  When only one of them cascades a key, the plan fails with an error that the input is read
+  from two steps whose options differ. Declare the same <code>cascade_context_keys</code> on both.</li>
+<li>The value sits in the options of every input down the chain, so every feature group
+  there sees it, and it is pickled to MULTIPROCESSING workers.</li>
+<li>The pull <code>inherit_context_keys</code> stays one hop.</li>
+</ul>
+<p>Group options remain the choice when the value should be part of feature identity and
+resolution at every level, and a feature group author can pull a key level by level
+with <code>inherit_context_keys</code>.</p>
+<p>Group options forward to input features by default. A feature group keeps consumer-local keys off its
 upstreams with <code>forward_group_exclude</code>, an allowlist, or <code>forward_group=False</code> on the
-child <code>Feature</code>. <code>propagate_context_keys</code> is the caller-side <strong>push</strong>; its
-counterpart is the child-side <strong>pull</strong> <code>inherit_context_keys</code>. For both author-side
+child <code>Feature</code>. <code>propagate_context_keys</code> (or <code>cascade_context_keys</code>) is the caller-side
+<strong>push</strong>; its counterpart is the child-side <strong>pull</strong> <code>inherit_context_keys</code>. For both author-side
 flows see
 <a href="../feature-chain-parser/#forwarding-options-to-input-features">Forwarding Options to Input Features</a>.</p>
 <p>A forwarded key also splits FeatureSets by value. A context key delivered via the
-push (<code>propagate_context_keys</code>) or the pull (<code>inherit_context_keys</code>) enters the
+push (<code>propagate_context_keys</code> or <code>cascade_context_keys</code>) or the pull
+(<code>inherit_context_keys</code>) enters the
 child's <code>inherited_context_keys</code>, and features whose value for that key differs (e.g.
 <code>env=prod</code> vs <code>env=staging</code>) then compute in separate FeatureSets, one per value;
 equal values still share one computation. The split is per-FeatureGroup and by value,
@@ -1294,7 +1276,32 @@ not by provenance: once any feature in that scope forwards the key, every featur
 scope splits on it, including a sibling that set the same key directly in plain
 context. A key that no feature in scope ever forwards stays metadata and does not
 split. This isolates per-value results that previously collapsed into one computation
-where a single value silently won.</p>
+where a single value silently won. Same-named copies that differ in undeclared context keys
+but read the same inputs on one framework are rejected; use the same values,
+<code>cascade_context_keys</code>, or a forwarded group option. This also covers root features requested directly more than once
+and declared option keys that the feature name does not bind; context a consumer pushes onto a root input is not checked.</p>
+<h3 id="previewing-the-forwarded-options">Previewing the forwarded options</h3>
+<p>A feature group can ask what an input feature will receive from its own options:</p>
+<pre><code class="language-py">def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
+    input_feature = Feature(&quot;price&quot;)
+    forwarded = input_feature.options_forwarded_from(options, type(self))
+    if forwarded.get(&quot;window&quot;) is None:
+        return {Feature(&quot;price_daily&quot;)}
+    return {input_feature}
+</code></pre>
+<ul>
+<li>Pass the consumer's own class, <code>type(self)</code>. It returns a copy and mutates nothing; treat
+  the result as read-only.</li>
+<li>It covers group forwarding, the <code>propagate_context_keys</code> / <code>cascade_context_keys</code> push
+  and the <code>inherit_context_keys</code> pull.</li>
+<li>Under default forwarding a <code>forward_to_inputs=False</code> key of the consumer group stays off
+  the input; an explicit <code>forward_group</code> allowlist that names it still forwards it.</li>
+<li>A conflict raises the same <code>ValueError</code> as planning.</li>
+<li>It reflects <code>options</code> at call time, so call it after any change you make to them.</li>
+<li>For a string input, wrap it: <code>Feature(name).options_forwarded_from(...)</code>.</li>
+<li>Later planning steps (name binding, declared defaults, a second consumer of the same
+  input) can still change the input's final options.</li>
+</ul>
 <h3 id="group-and-context-are-independent-namespaces"><code>group</code> and <code>context</code> are independent namespaces</h3>
 <p><code>group</code> (which drives resolution and splitting) and <code>context</code> (metadata) are
 separate namespaces. Within one <code>Options</code> a key may not live in both. Across a
@@ -1308,7 +1315,8 @@ child.inherit_from(consumer)          # resolves silently, no ValueError
 assert child.group[&quot;algo&quot;] == &quot;mean&quot;  # child keeps its own group value
 </code></pre>
 <p>This holds for both differing and equal values, but only on that default path. Once
-a context key is explicitly forwarded (pushed via <code>propagate_context_keys</code> or pulled
+a context key is explicitly forwarded (pushed via <code>propagate_context_keys</code> or
+<code>cascade_context_keys</code>, or pulled
 via <code>inherit_context_keys</code>) it enters the child's context, and a same-named child
 <code>group</code> key then raises a cross-category conflict. The reverse of the default path (a
 consumer <strong>group</strong> key forwarded onto a child holding it in <strong>context</strong>) also raises.

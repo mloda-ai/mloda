@@ -155,6 +155,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -239,7 +243,7 @@ example_feature_list = [f&quot;Example_{f}&quot; for f in feature_list]
         return multiplied_table
 </code></pre>
 <h4 id="3-execute-the-request-using-the-new-feature-group">3. Execute the Request Using the New Feature Group</h4>
-<p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>CsvReader</strong> and the <strong>Example</strong> feature group.</p>
+<p>To use the newly defined feature group, simply add the <strong>"Example_"</strong> prefix to each feature name. mloda will automatically resolve the dependency between the <strong>CsvFG</strong> and the <strong>Example</strong> feature group.</p>
 <pre><code class="language-python">from mloda.user import mloda
 
 result = mloda.run_all(
@@ -266,6 +270,12 @@ is a valid result; zero columns is not, and raises <code>EmptyResultError</code>
 PythonDict framework this means a row-oriented <code>[]</code> is <em>not</em> a valid empty
 result: return <code>{"my_feature": []}</code> instead, keeping the column and dropping the
 rows. See <a href="../../in_depth/compute-framework-integration/#empty-results">Empty Result Handling</a>.</p>
+<p>Every feature in the FeatureSet must come back as a column, otherwise the step
+raises a <code>ValueError</code> naming the group and the missing features.</p>
+<p>A dict returned by a non-root feature group is appended to the frame when its columns are all new and its length matches; otherwise it replaces the frame. Appended columns are aligned by position, so a feature group that reorders or drops rows should return the full frame. On DuckDB, Spark and lazy Polars a dict is only appended onto a frame mloda built itself; there, return the frame with the column added instead. A single returned column (list or Series) follows the same rule and raises otherwise.</p>
+<p>A group whose result has other rows than its input (an aggregation, a resample) opts in by overriding <code>replaces_rows()</code> to return True. Each of its steps with an input frame then writes a frame of its own, while sibling steps keep reading the unchanged input. Such a group must return a new frame and never mutate its input in place. A consumer reading two such frames, or one and the unchanged input, needs a <code>Link</code> between them; <code>mloda.prepare</code> raises otherwise.</p>
+<p>A group that could not compute a value for some rows can say so with <code>report_failed_rows(column, rows, reason)</code> (import from <code>mloda.provider</code>) inside <code>calculate_feature</code>. <code>reason</code> is a short code, never row data; <code>rows</code> are positions in the group's own output. Entries reach <code>RunResult.failed_rows</code> of <code>run()</code> and <code>run_all()</code>; <code>stream_run</code> and <code>stream_all</code> expose them on <code>stream.failed_rows</code> once the stream is exhausted or closed.</p>
+<p>Options are read-only inside <code>calculate_feature</code>: <code>mloda.prepare</code> freezes the compiled plan, so writing an option raises <code>FrozenPlanError</code>. Set the option before <code>prepare</code>, or pass per-run values with <code>run(api_data=...)</code> or <code>run(artifacts=...)</code>. Values nested inside an option (a list, a dict) are not frozen, so do not mutate them either. A <code>Feature</code> object returned from <code>input_features</code> is copied into the plan, so planning never renames or rewrites the group's own object; read planned names from the <code>FeatureSet</code> in <code>calculate_feature</code>.</p>
 <h4 id="6-advanced-feature-group-topics">6. Advanced Feature Group Topics</h4>
 <p>For more in-depth information about feature groups, check out these advanced topics:</p>
 <ul>

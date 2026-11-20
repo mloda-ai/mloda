@@ -141,6 +141,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -194,6 +198,67 @@
 <p>You can install mloda using either pip or by cloning the repository from Git.</p>
 <pre><code class="language-bash">pip install mloda
 </code></pre>
+<p>The core package has no mandatory third-party dependencies. Choose extras for the backends or integrations you need,
+for example <code>pip install "mloda[pyarrow]"</code>.</p>
+<table>
+<thead>
+<tr>
+<th>Extra</th>
+<th>Enables</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>pyarrow</code></td>
+<td>PyArrow tables and file readers</td>
+</tr>
+<tr>
+<td><code>pandas</code></td>
+<td>Pandas DataFrames</td>
+</tr>
+<tr>
+<td><code>polars</code></td>
+<td>Polars DataFrames</td>
+</tr>
+<tr>
+<td><code>numpy</code></td>
+<td>NumPy for PyArrow multi-column aggregations and time windows</td>
+</tr>
+<tr>
+<td><code>yaml</code></td>
+<td>YAML file input</td>
+</tr>
+<tr>
+<td><code>duckdb</code></td>
+<td>DuckDB SQL backend</td>
+</tr>
+<tr>
+<td><code>sqlite</code></td>
+<td>SQLite SQL backend</td>
+</tr>
+<tr>
+<td><code>iceberg</code></td>
+<td>Apache Iceberg tables</td>
+</tr>
+<tr>
+<td><code>spark</code></td>
+<td>PySpark DataFrames</td>
+</tr>
+<tr>
+<td><code>sklearn</code></td>
+<td>scikit-learn transformations and pipelines</td>
+</tr>
+<tr>
+<td><code>text_cleaning</code></td>
+<td>NLTK text cleaning</td>
+</tr>
+<tr>
+<td><code>mcp</code></td>
+<td>Model Context Protocol (MCP) server</td>
+</tr>
+</tbody>
+</table>
+<p>Extras that install pyarrow require <code>pyarrow&gt;=14.0.1</code> (CVE-2023-47248); use that version or newer if you supply your own.</p>
 <h2 id="2-install-mloda-via-git">2. Install mloda via Git</h2>
 <p>Alternatively, you can clone the repository and install from source:</p>
 <pre><code class="language-bash">git clone https://github.com/mloda-ai/mloda.git
@@ -206,7 +271,27 @@ pip install .
 print(metadata.version(&quot;mloda&quot;))
 </code></pre>
 <h2 id="4-quick-start">4. Quick Start</h2>
-<p>Try this 30-second example:</p>
+<p>A plain <code>pip install mloda</code> is enough to run this with the built-in Python dict backend:</p>
+<pre><code class="language-python">from mloda.user import PluginLoader, mloda
+PluginLoader.all()
+
+result = mloda.run_all(
+    features=[&quot;customer_id&quot;, &quot;income&quot;, &quot;income__sum_aggr&quot;, &quot;age__avg_aggr&quot;],
+    compute_frameworks=[&quot;PythonDictFramework&quot;],
+    api_data={&quot;SampleData&quot;: {
+        &quot;customer_id&quot;: [&quot;C001&quot;, &quot;C002&quot;, &quot;C003&quot;, &quot;C004&quot;, &quot;C005&quot;],
+        &quot;age&quot;: [25, None, 45, 30, 50],
+        &quot;income&quot;: [50000, 75000, None, 60000, 85000],
+    }},
+)
+print(result)
+</code></pre>
+<pre><code class="language-text">[{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {'age__avg_aggr': [37.5, 37.5, 37.5, 37.5, 37.5], 'income__sum_aggr': [270000, 270000, 270000, 270000, 270000]}]
+</code></pre>
+<p>Prefer DataFrames? Install a backend extra:</p>
+<pre><code class="language-bash">pip install &quot;mloda[pandas]&quot;
+# or mloda[polars], mloda[pyarrow], mloda[duckdb], mloda[spark]
+</code></pre>
 <pre><code class="language-python">from mloda.user import mloda, PluginLoader
 PluginLoader.all()
 
@@ -218,6 +303,7 @@ result = mloda.run_all(
         &quot;income&quot;: [50000, 75000, 90000]
     }}
 )
+print(result)
 </code></pre>
 <p><code>api_data</code> passes inline data to mloda. Each top-level key (e.g. <code>"SampleData"</code>)
 is a label grouping related columns. Features are matched to columns by name.</p>

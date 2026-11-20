@@ -177,6 +177,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -248,25 +252,18 @@ data_access_collection = DataAccessCollection(files={file_path})
 
 feature_list = [&quot;id&quot;,&quot;V1&quot;,&quot;V2&quot;,&quot;V3&quot;]
 </code></pre>
-<p>Expected Error when running.</p>
-<pre><code class="language-text">mloda.run_all(
-    feature_list,
-    data_access_collection=data_access_collection
-)
-
-ValueError: Multiple feature groups
-{&lt;class 'CsvReader'&gt;: {&lt;class 'PyArrowTable'&gt;, &lt;class 'PandasDataFrame'&gt;}
-.... found for feature name: id.
+<p>Running this without <code>compute_frameworks</code> does not fail: several compute frameworks (like <strong>PyArrowTable</strong> and <strong>PandasDataFrame</strong>) can handle the same file through the <strong>CsvFG</strong> feature group, and mloda picks one (Pandas in this example). Specify the compute framework to control which one runs.</p>
+<p>The only error here is when no compute framework plugin is loaded at all:</p>
+<pre><code class="language-text">ValueError: No compute framework plugin is loaded; import one or call PluginLoader.all().
 </code></pre>
-<p>In this case, the framework finds multiple compute frameworks (like <strong>PyArrowTable</strong> and <strong>PandasDataFrame</strong>) that can handle the same file through the <strong>CsvReader</strong> feature group. Without explicitly specifying a compute framework, mloda doesn't know which one to use, leading to ambiguity.</p>
-<p>This might seem counterintuitive, but it’s actually a <strong>feature</strong>, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:</p>
+<p>Choosing the compute framework per run is a <strong>feature</strong>, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:</p>
 <ul>
 <li><strong>Migrations</strong>: Moving from one environment to another.</li>
 <li><strong>Scaling Projects</strong>: Upleveling a project from MVP to production.</li>
 <li><strong>ML Lifecycle</strong>: Using the same KPIs (feature groups) across training, real-time inference, and model evaluation.</li>
 </ul>
 <h4 id="4-design-options">4. Design options</h4>
-<p>There are several ways to resolve this ambiguity by explicitly defining the compute framework:</p>
+<p>There are several ways to choose the compute framework explicitly:</p>
 <ul>
 <li><strong>Using specific feature configuration</strong> to define compute frameworks for individual features.</li>
 <li><strong>Within the feature group definition</strong>, by enforcing a specific compute framework rule.</li>
@@ -395,7 +392,7 @@ result[0]
 <td>Apache Spark DataFrames</td>
 <td>Distributed processing, scalability, fault tolerance</td>
 <td>Big data, distributed computing, production clusters</td>
-<td>pyspark, Java 17+</td>
+<td>pyspark 4.0+, Java 17+</td>
 </tr>
 <tr>
 <td><strong>PythonDictFramework</strong></td>
@@ -425,6 +422,7 @@ from mloda.user.spark import SparkFramework
 <li>A framework that is importable but unavailable stays visible in the plugin catalogue, where <code>is_available()</code> reports it as unavailable, instead of vanishing entirely from discovery. The table above says which libraries an extra installs.</li>
 </ul>
 <p>For example, without <code>polars</code> installed, <code>from mloda.user.polars import PolarsDataFrame</code> still works, <code>PolarsDataFrame.is_available()</code> returns <code>False</code>, and mloda plans with the remaining frameworks.</p>
+<p>If <code>compute_frameworks</code> names only unavailable frameworks, a requested feature or an input feature pins an unavailable framework, or a group's frameworks are all unavailable, mloda raises an error. When the framework declares an install command (<code>INSTALL_HINT</code>), the error names it.</p>
 <h5 id="framework-examples">Framework Examples</h5>
 <p>Example using PythonDictFramework:</p>
 <pre><code class="language-python">from mloda.user import mloda
@@ -484,7 +482,7 @@ result = mloda.run_all(
     [feature],
     data_access_collection=data_access_collection
 )
-result[0]  # Returns duckdb.DuckDBPyRelation
+result[0]  # Returns pyarrow.Table
 </code></pre>
 <p><strong>Note</strong>: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.</p>
 <p>Example using Iceberg framework:</p>
@@ -538,7 +536,7 @@ result = mloda.run_all(
 )
 result[0]  # Returns pyspark.sql.DataFrame
 </code></pre>
-<p><strong>Note</strong>: Spark framework requires PySpark installation and Java 17+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).</p>
+<p><strong>Note</strong>: Spark framework requires PySpark 4.0+ and Java 17+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).</p>
 <h4 id="6-summary">6. Summary</h4>
 <p>mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.</p>
 <p>That said, <strong>you can configure mloda to use just one compute framework</strong> for a more familiar workflow, similar to traditional feature stores, data pipelines, or ETL systems. Whether you prefer flexibility or simplicity, mloda adapts to your needs while ensuring consistent feature processing.</p>

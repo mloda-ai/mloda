@@ -139,6 +139,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../data-type-enforcement/">Data Type Enforcement</a>
@@ -171,6 +175,22 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#solutions">Solutions</a>
     </li>
+    <li class="toctree-l4"><a class="reference internal" href="#a-loaded-subclass-replaces-its-parent">A loaded subclass replaces its parent</a>
+    </li>
+        </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#source-feature-group-errors">Source feature group errors</a>
+        <ul>
+    <li class="toctree-l4"><a class="reference internal" href="#several-sources-in-one-group">Several sources in one group</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#column-missing-from-every-source">Column missing from every source</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#query_text-on-a-group-without-a-query-route">query_text on a group without a query route</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#pointers-on-derived-features">Pointers on derived features</a>
+    </li>
+    <li class="toctree-l4"><a class="reference internal" href="#global-filters-on-a-pointed-only-group">Global filters on a pointed-only group</a>
+    </li>
         </ul>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#featuregroup-redefinition-errors">FeatureGroup Redefinition Errors</a>
@@ -190,6 +210,8 @@
     <li class="toctree-l4"><a class="reference internal" href="#intermediates-are-exempt">Intermediates are exempt</a>
     </li>
         </ul>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#missinginputfeatureerror">MissingInputFeatureError</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#related-documentation">Related Documentation</a>
     </li>
@@ -276,6 +298,8 @@ except FeatureResolutionError as err:
         print(record.feature_name, record.requested)  # features resolved before the failure
     # err.result carries the per-candidate elimination facts (an EvaluationResult)
 </code></pre>
+<p>When an INPUT_DATA_MATCH extender refused the candidate source groups, <code>err.refusals</code> holds its exceptions, so an access refusal can be told apart from a missing plugin (see <a href="../../../chapter1/extender/">Extender</a>).</p>
+<p>This also covers refused dependencies of competing candidates: if every input chain fails, the error lists each chain and <code>err.refusals</code> holds the original refusal exceptions.</p>
 <p>To inspect a request without catching an exception, use the non-raising
 surfaces: <code>resolve_feature</code> for a single name (above), or <code>mlodaAPI.diagnose(...)</code>,
 which returns a <code>ResolutionDiagnosis</code> for the whole request. See
@@ -291,7 +315,7 @@ Did you mean one of: ['sales_revenue']?
 Use resolve_feature(name, options=...) to debug feature resolution.
 For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 </code></pre>
-<p>No enabled feature group both declared the requested name and survived every matching gate. It is raised as <code>FeatureResolutionError</code> during planning; see <a href="#catching-resolution-failures">Catching resolution failures</a> to inspect it, or follow the message's closing pointer and rerun the request through <code>resolve_feature</code>. Pass the same <code>Feature</code> and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome. When the failing feature is an input of the one you requested, the headline names the chain that needed it, e.g. <code>No feature groups found for feature name: 'invoice_date' (needed by net_spend_30d -&gt; line_value).</code></p>
+<p>No enabled feature group both declared the requested name and survived every matching gate. It is raised as <code>FeatureResolutionError</code> during planning; see <a href="#catching-resolution-failures">Catching resolution failures</a> to inspect it, or follow the message's closing pointer and rerun the request through <code>resolve_feature</code>. Pass the same <code>Feature</code> and run arguments, as the top of this page describes; the bare name alone would drop the domain and default to all frameworks, changing the outcome. When the failing feature is an input of the one you requested, the headline names the chain that needed it, e.g. <code>No feature groups found for feature name: 'invoice_date' (needed by net_spend_30d -&gt; line_value).</code> When no accessible group matches a <code>feature_group=</code> scope and the run excluded the group it names, the message adds a line naming why, e.g. <code>MyGroup is not accessible in this run: disabled by the PluginCollector.</code></p>
 <h3 id="the-eliminated-candidates-block">The eliminated candidates block</h3>
 <p>Each line names a candidate the matcher considered and dropped: the first gate that eliminated it (the parenthesized label) and that gate's reason. A line does not prove the candidate declared the requested name; a candidate whose match hook raised, whose input-data gate declined, or that refused the name itself is recorded regardless.</p>
 <table>
@@ -315,7 +339,7 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 </tr>
 <tr>
 <td><code>input data</code></td>
-<td>The input-data gate declined the request.</td>
+<td>An INPUT_DATA_MATCH extender or a source group declined the request.</td>
 <td>Point the request at data the group can read (<a href="../../data-access-patterns/">Data Access Patterns</a>).</td>
 </tr>
 <tr>
@@ -335,13 +359,18 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 </tr>
 <tr>
 <td><code>compute framework</code></td>
-<td>None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run.</td>
-<td>Enable a framework the group supports.</td>
+<td>None of the group's compute frameworks are usable: its capability hook rejected every enabled framework, or none of its frameworks is enabled for the run, or its <code>compute_framework_rule()</code> names a framework that never reached <code>ComputeFramework.__init_subclass__</code> (an <code>__init_subclass__</code> override must call <code>super().__init_subclass__()</code>), or an operation group has no loaded Implementation (import its implementation modules or call <code>PluginLoader.all()</code>) or all its implementations are disabled or denied, or no compute framework plugin is loaded at all (a run reports that case as a <code>SetupConfigurationError</code> instead; only <code>resolve_feature</code> shows it here).</td>
+<td>Enable a framework the group supports; make an <code>__init_subclass__</code> override call <code>super().__init_subclass__()</code>; if none is loaded, import a compute framework plugin or call <code>PluginLoader.all()</code>; re-enable its implementations in the PluginCollector or plugin policy; install an unavailable framework when the reason names its install command.</td>
 </tr>
 <tr>
 <td><code>compute framework pin</code></td>
 <td>The <code>Feature</code> pins <code>compute_frameworks</code> to one that is not among the group's supported set for this run.</td>
-<td>Change or drop the pin.</td>
+<td>Change or drop the pin, or install the framework when the reason says it is unavailable.</td>
+</tr>
+<tr>
+<td><code>rule variant</code></td>
+<td>Every framework that fits the feature (after any framework or implementation pin) is served by an Implementation that follows a rule variant the feature does not allow.</td>
+<td>Add the <code>allow_variants</code> option the reason prints to the feature's options, or pin an implementation that follows the default behavior.</td>
 </tr>
 <tr>
 <td><code>links</code></td>
@@ -350,11 +379,17 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 </tr>
 <tr>
 <td><code>declarations</code></td>
-<td>A consumer's input or a requested feature requires a declared attribute that the candidate or its reader does not declare, or declares with another value.</td>
-<td>Provide a candidate or reader that declares the attribute the reason names.</td>
+<td>A consumer's input or a requested feature requires a declared attribute that the candidate does not declare, or declares with another value.</td>
+<td>Provide a candidate that declares the attribute the reason names.</td>
+</tr>
+<tr>
+<td><code>inputs</code></td>
+<td>A competing candidate matched, but one of its dependencies or a deeper input could not resolve in this run. The reason names the input chain and its failure.</td>
+<td>Enable or supply the missing input, correct its options or scope, or address the recorded source refusal.</td>
 </tr>
 </tbody>
 </table>
+<p>A group with a viable input chain can win where an unavailable competitor previously caused an ambiguity. <code>mloda.diagnose(...)</code> exposes the same <code>inputs</code> eliminations.</p>
 <p>A chained group that keeps the default <code>MIN_IN_FEATURES</code> but declares no <code>in_features</code> matches by options only when <code>in_features</code> is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set <code>MIN_IN_FEATURES = 0</code> or declare <code>in_features</code> in <code>PROPERTY_MAPPING</code>.</p>
 <h3 id="the-did-you-mean-hint">The Did you mean hint</h3>
 <p>Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). The hint is also dropped for an input feature whose reader declined at the input-data gate, because the reason line, not a name, is the fix. Otherwise a missing hint means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.</p>
@@ -381,10 +416,12 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 <pre><code>FeatureResolutionError: Multiple feature groups found for feature '&lt;feature_name&gt;':
   - FeatureGroupA (...) [domain: ...]
   - FeatureGroupB (...) [domain: ...]
+A steward can keep one with PluginCollector or a PluginPolicy.
+For troubleshooting guide, see: ...
 </code></pre>
 <p>This error occurs when multiple distinct feature groups claim they can handle the same feature. Each feature must resolve to exactly one feature group to prevent conflicts. It is raised as <code>FeatureResolutionError</code> (a <code>ValueError</code> subclass) during planning; see <a href="#catching-resolution-failures">Catching resolution failures</a> to inspect it.</p>
-<p>When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent.</p>
-<p>If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines <code>class MyFG(FeatureGroup): ...</code>), that case is now auto-deduplicated. If this error still appears, it points to a real conflict between two distinct classes (different <code>(module, qualname)</code>).</p>
+<p>When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent. See <a href="#a-loaded-subclass-replaces-its-parent">A loaded subclass replaces its parent</a> for what else does and does not keep a subclass out.</p>
+<p>If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines <code>class MyFG(FeatureGroup): ...</code>), that case is now auto-deduplicated. If this error still appears, two distinct classes (different <code>(module, qualname)</code>) both claim the name. For source-backed features this usually means two source groups found the column, for example <code>CsvFG</code> in a file and <code>SqliteFG</code> in a database. Fix it with <code>feature_group=</code> (see below), a pointer such as <code>options={"CsvFG": path}</code>, or a <code>data_access_handle</code> that names one source.</p>
 <h3 id="solutions">Solutions</h3>
 <h4 id="1-use-plugincollector-to-enable-or-disable-feature-groups">1. Use PluginCollector to enable or disable feature groups</h4>
 <p>Control which feature groups are loaded to prevent conflicts:</p>
@@ -427,17 +464,70 @@ Feature(&quot;subject_token&quot;, feature_group=&quot;ClaimsReader&quot;)
 <p>The config form takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.</p>
 <p>Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass, so a config can scope to the family without naming a compute-framework-specific class:</p>
 <pre><code class="language-json">[
-    {&quot;name&quot;: &quot;age__mean_aggr&quot;, &quot;feature_group&quot;: &quot;AggregatedFeatureGroup&quot;}
+    {&quot;name&quot;: &quot;age__mean_aggr&quot;, &quot;feature_group&quot;: &quot;AggregatedFeatureGroup&quot;, &quot;implementation&quot;: &quot;PandasAggregation&quot;}
 ]
 </code></pre>
 <p>Caveats:</p>
 <ul>
 <li>The scope narrows candidates; it does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does. Enable one framework for the run, or pin <code>compute_frameworks</code> on the <code>Feature</code> (Python only).</li>
 <li>The class object is collision-proof; the string form is not. Two classes with the same name in different modules both match the string, so the request stays ambiguous and raises.</li>
-<li>Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific implementation, name that implementation.</li>
+<li>Neither form pins one exact class: a subclass of the named class is preferred over it. To resolve to a specific class, name that class. For an operation group such as <code>AggregatedFeatureGroup</code>, name the implementation instead with <code>implementation="PandasAggregation"</code>; a bad pin raises <code>ImplementationPinError</code>. An implementation pin does not exclude a subclass that inherits that implementation: a loaded <code>class MyAggr(AggregatedFeatureGroup)</code> still wins. See <a href="#a-loaded-subclass-replaces-its-parent">A loaded subclass replaces its parent</a>.</li>
 <li>The root <code>FeatureGroup</code> base is rejected in either form: it names no family.</li>
 <li>The scope is read by feature resolution and by filter matching, and stays excluded from Feature identity, so two requests for the same column name scoped to different sources compare equal. Requesting both in one features list raises <code>ValueError: Duplicate feature setup: &lt;name&gt;</code> rather than silently dropping one, so you are told, not surprised. Inside a single <code>input_features()</code> returning a set literal, a second same-name feature with a different scope is silently deduplicated by the Python set itself before the engine ever sees it, so never scope the same name twice within one feature group. To read the same column from two sources side by side, give them distinct derived feature names.</li>
 </ul>
+<h3 id="a-loaded-subclass-replaces-its-parent">A loaded subclass replaces its parent</h3>
+<p>Discovery walks the live subclasses of <code>FeatureGroup</code>, so a subclass defined in any imported module serves without registration or an entry point (a function-local subclass that nothing references drops out once it is garbage collected). When the subclass and its parent both match a feature, the subclass replaces the parent for that request. This is intended, and it holds for every way of naming the parent:</p>
+<ul>
+<li><code>feature_group=AggregatedFeatureGroup</code> (class or string) resolves to the subclass.</li>
+<li><code>implementation="PyArrowAggregation"</code> resolves to the subclass, which inherits that implementation.</li>
+<li><code>PluginCollector.disabled_feature_groups({AggregatedFeatureGroup})</code> checks exact classes, so it removes the parent and leaves the subclass serving.</li>
+<li>Source groups behave the same: a <code>class MyCsv(CsvFG)</code> serves <code>options={"CsvFG": path}</code>.</li>
+<li>Two sibling subclasses of one parent make the parent unreachable and the request raises <code>Multiple feature groups found</code>.</li>
+</ul>
+<p>What keeps a subclass out:</p>
+<ul>
+<li><code>PluginCollector.disabled_feature_groups({MySubclass})</code>, or an allow-list with <code>enabled_feature_groups</code> that omits it.</li>
+<li><a href="../../plugin_registry/#strict-mode">Strict registry mode</a>, when the subclass is not registered.</li>
+<li>A compute-framework pin the subclass cannot serve.</li>
+<li>A <a href="../../plan-lock/">plan lock</a>: a takeover changes the recorded class and fails <code>check_plan_lock</code> with <code>PlanLockMismatchError</code>.</li>
+</ul>
+<p>To test that a subclass takes over only for its own option, call <code>check_subclass_scope(Sub, Parent, selecting)</code> (or <code>assert_subclass_scope</code>) from <code>mloda.testing.subclass_scope</code>. A pattern-matching parent needs <code>requests=</code>. Pass <code>input_data=</code> (a <code>TypedTestData</code>, optional <code>adapter=</code>) to also compare the subclass's output columns with the parent's; a changed column, or a requested column only the subclass writes, passes only when a divergence record the subclass declares itself (on the group or its own Implementation, any kind but GAP) covers it; a column the subclass drops always fails, even with a record; on run-time named parts, a part only the subclass writes is an added column too; a VARIANT record counts only when the selecting options allow that variant through <code>allow_variants</code>; a request the planner would not route on the adapter's framework, a rule exclusion, a missing Implementation and an input fixture with no rows leave the comparison skipped: a <code>values:</code> note from <code>check_subclass_scope</code>, a failure from <code>assert_subclass_scope</code> unless <code>require_run=False</code>. It reports a subclass that steals plain requests or misses its own; it also probes each selecting key with another value, so a subclass gated on the key's presence fails as a steal. A key the subclass does not need to match belongs out of <code>selecting</code>; one it needs but whose value does not select it goes in <code>free=</code>, which keeps it set, skips its other-value probe, and checks that the free keys alone do not select the subclass.</p>
+<p>For a name-path group, pass <code>requests=</code> to <code>check_feature_group_shape</code> to probe and run the names you request; a <code>base_options</code> value that contradicts them is reported as a failure with the abort text.</p>
+<p>For an operation group, <code>check_operation_group_shape</code> (or <code>assert_operation_group_shape</code>) from <code>mloda.testing.operation_group_shape</code> checks that the group declares a <code>CONTRACT_VERSION</code> and that each Implementation declares valid <code>supported</code> subtypes and <code>divergences</code> records and declines the rest; pass <code>alias_pairs=</code> for aliased subtypes, <code>implementations=</code> to check only the listed Implementations (one that serves no compute framework of the group is reported), and <code>probe=</code> for resolver-based groups whose Implementation restricts <code>supported</code>. Every divergence record needs a reason.</p>
+<p>For a source group, inherit <code>SourceFeatureGroupTestMixin</code> from <code>mloda.testing.source.source_suite</code> (pytest required) to run the shared claim, decline and abort contract (switching off an inherited contract test, by a skip mark or an override, needs a declared <code>switched_off</code> cause); <code>NO_POINTER</code> marks a group that takes no pointer, and a pointed-only group (no searched route) runs the suite unchanged, claiming through <code>own_pointer()</code>; the handle tests run only when the group declares <code>data_access_handle</code> (<code>HANDLE_SPEC</code>) in <code>PROPERTY_MAPPING</code>. File, database and document groups use <code>read_file_suite</code>, <code>read_db_suite</code> and <code>read_document_suite</code> in the same package.</p>
+<p><code>PlanStep.specialized_from</code> names the parents a step's feature group replaced, so <code>explain()</code> shows a takeover before anything runs. It stays empty when the parent was disabled, because the parent was never a candidate.</p>
+<h2 id="source-feature-group-errors">Source feature group errors</h2>
+<p>A source group (<code>CsvFG</code>, <code>SqliteFG</code>, <code>TextFG</code>, ...) claims a feature when one of its sources has the column. Two errors come from inside one group, before any feature-group ambiguity.</p>
+<h3 id="several-sources-in-one-group">Several sources in one group</h3>
+<p>The group found the column in more than one source and will not guess:</p>
+<pre><code class="language-text">ValueError: CsvFG found feature 'id' in several sources: /data/application_train.csv, /data/bureau.csv; pin one source with a column_to_file entry, point CsvFG at one file with options={'CsvFG': &lt;path&gt;}, or select one with data_access_handle (file handles: 'application', 'bureau').
+</code></pre>
+<p>Fix it with one of:</p>
+<ul>
+<li><code>column_to_file</code> in the <code>DataAccessCollection</code>, pinning the column to one file handle.</li>
+<li>A pointer: <code>options={"CsvFG": "/data/bureau.csv"}</code>.</li>
+<li><code>data_access_handle</code> naming one file or credential handle.</li>
+<li>For a database group, a credential <code>table_name</code> (for example <code>Credential(sqlite="/x.db", table_name="bureau")</code>) or a handle that names one database. The message names the credential key of the group, and lists the sources (only the credential-handle hint is capped, summarizing the rest as "and N more"). Unpointed and without a <code>data_access_handle</code>, a database source is named by its identity only (several tables of one database appear as "(N sources)"), and the table fix uses a <code>&lt;table&gt;</code> placeholder.</li>
+</ul>
+<h3 id="column-missing-from-every-source">Column missing from every source</h3>
+<p>The group owns sources but none has the column. Unpointed, this is a decline recorded in the near-miss block; once the feature is pointed at the group (by a pointer or <code>feature_group=</code>), it aborts (a <code>feature_group=</code> scope naming only a concrete ancestor of the group does not make it abort; it declines). Every pointed decline (a missing column, a source refused at <code>INPUT_DATA_MATCH</code>, a pointed <code>query_text</code> without a query route) raises <code>FeatureResolutionError</code> with the group's reason, its <code>result.eliminations</code> holding the group under stage <code>input_data</code>:</p>
+<pre><code class="language-text">FeatureResolutionError: column 'idd' is in none of the sources of CsvFG: /data/application_train.csv has columns [id, name]; /data/bureau.csv has columns [bureau_id, id]; did you mean 'id'?; request a column a source has or point at another source.
+</code></pre>
+<p>Check the spelling, request a column a source has, or point at the source that has it. Columns and a close-match suggestion appear only when the group was pointed or a <code>data_access_handle</code> narrows the search; otherwise only the sources are named, and a database is named by its identity only, once, without its table names. At most five sources are described, then "and N more". A source whose columns cannot be read shows <code>&lt;source&gt;: &lt;reason&gt;</code>. If no source can list its columns, the message says so. A folder entry that links outside its folder is skipped; add it as a files handle or point at it.</p>
+<h3 id="query_text-on-a-group-without-a-query-route">query_text on a group without a query route</h3>
+<p><code>query_text is set, but &lt;Group&gt; lists no query route</code>: <code>query_text</code> is reserved for groups that list <code>ReadDBFG.QUERY_ROUTE</code>; any other source group declines when unpointed and aborts when pointed (a <code>feature_group=</code> scope naming only a concrete ancestor of the group does not make it abort; it declines). Point the feature at a group that lists the route, or keep <code>query_text</code> off the feature with <code>forward_group_exclude</code>.</p>
+<h3 id="pointers-on-derived-features">Pointers on derived features</h3>
+<p>A class-name pointer on a derived feature reaches its inputs, because group options forward to input features. A pointer in the context options counts wherever it is visible, including when pushed with <code>propagate_context_keys</code> or <code>cascade_context_keys</code>, so a pushed pointer at another group also makes the source groups there skip their search. A consumer whose inputs come from several sources must put each pointer on its input feature (or use the <code>DataAccessCollection</code>): a forwarded pointer to a source without the column aborts with the missing-column error above.</p>
+<pre><code class="language-py"># in the consumer's input_features: each input carries its own pointer, the consumer's own options carry none
+return {
+    Feature(&quot;amount&quot;, options={&quot;CsvFG&quot;: &quot;/data/orders.csv&quot;}),
+    Feature(&quot;rate&quot;, options={&quot;SqliteFG&quot;: Credential(sqlite=&quot;/data/rates.db&quot;)}),
+}
+</code></pre>
+<p>A pointer (or <code>query_text</code>) on a derived name such as <code>price__sum_aggr</code> does not make an open-route group claim it: the group that computes the feature wins, and the open group is eliminated at stage <code>input_data</code> with a reason naming the computing group. The open group steps aside even when the computing group is filtered out later (for example by a framework pin or links). To read the derived name straight from the source, pass <code>feature_group=&lt;OpenGroup&gt;</code>, which reads the name from the source.</p>
+<p>An unpointed searched route steps aside the same way, but only for a computing group that survives its own filters; point the request at the group to read the name from the source.</p>
+<h3 id="global-filters-on-a-pointed-only-group">Global filters on a pointed-only group</h3>
+<p>A group with an open, pointed-only route claims a leaf name once it is pointed at (a derived name goes to the group that computes it, see above). A global filter on such a group is dropped when the feature was pointed only by <code>feature_group=</code>: filter probes run unscoped, so the group does not see itself pointed. Point the group with a class-name pointer in the feature's options as well.</p>
 <h2 id="featuregroup-redefinition-errors">FeatureGroup Redefinition Errors</h2>
 <h3 id="the-problem_2">The Problem</h3>
 <pre><code>ValueError: FeatureGroup redefined with different source code:
@@ -515,9 +605,17 @@ directly. When calling <code>mloda.run_all</code>, worker errors are wrapped in 
 <h3 id="intermediates-are-exempt">Intermediates are exempt</h3>
 <p>The check applies only to features that were explicitly requested by the caller.
 Intermediate feature groups, meaning those whose output feeds another feature
-group rather than the final result, are never subject to <code>EmptyResultError</code>.</p>
+group rather than the final result, are never subject to <code>EmptyResultError</code>.
+An intermediate step must still return a column for every feature it computes.</p>
 <p>For full details on how the guard works and the schema-presence gate, see
 <a href="../../compute-framework-integration/#empty-results">Empty Results</a>.</p>
+<h2 id="missinginputfeatureerror">MissingInputFeatureError</h2>
+<p>A feature group declared an input (<code>input_features</code>) that is not a column of the data handed to
+<code>calculate_feature</code>. Core raises it before <code>validate_input_features</code> and any extender, so an
+extender cannot skip it. The error carries <code>feature_group</code>, <code>feature</code>, <code>missing_inputs</code> and
+<code>available_columns</code>, and is importable from <code>mloda.user</code>, <code>mloda.provider</code> and <code>mloda.steward</code>.
+A missing <code>x</code> next to columns <code>x_x</code> and <code>x_y</code> usually means a join between two inputs that both
+carry <code>x</code> renamed it.</p>
 <h2 id="related-documentation">Related Documentation</h2>
 <ul>
 <li><a href="../../feature-group-matching/">Feature Group Matching</a></li>

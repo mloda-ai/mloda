@@ -141,6 +141,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -201,7 +205,7 @@ for result in mloda.stream_all(
 ):
     print(result)
 </code></pre>
-<p><code>stream_all</code> returns a <code>ResultStream</code>: it iterates exactly like the old generator and additionally exposes a <code>.plan</code> property with the resolved execution plan. Planning happens eagerly, so an unresolvable request raises at the <code>stream_all</code> call, not at first iteration. <code>ResultStream.frames()</code> yields <code>(PlanStep, frame)</code> pairs from the same stream instead, pairing each frame with the compute step that produced it.</p>
+<p><code>stream_all</code> returns a <code>ResultStream</code>: it iterates exactly like the old generator and additionally exposes a <code>.plan</code> property with the resolved execution plan, plus the run's <code>run_id</code> and <code>plan_id</code>. Planning happens eagerly, so an unresolvable request raises at the <code>stream_all</code> call, not at first iteration; so does a MULTIPROCESSING preflight refusal (such as a missing <code>flight_server</code>). <code>ResultStream.frames()</code> yields <code>(PlanStep, frame)</code> pairs from the same stream instead, pairing each frame with the compute step that produced it.</p>
 <h2 id="comparison-with-run_all">Comparison with <code>run_all</code></h2>
 <p><code>run_all</code> returns all results at once after every feature group has finished:</p>
 <pre><code class="language-python">from mloda.user import mloda
@@ -297,7 +301,7 @@ for batch in sensor_source():
         # Each panel updates as its feature group completes
         process(result)
 </code></pre>
-<p><code>stream_run()</code> has the same parameters as <code>run()</code>. <code>list(session.stream_run(...))</code> produces the same results as <code>session.run(...)</code>.</p>
+<p><code>stream_run()</code> has the same parameters as <code>run()</code> and returns a <code>ResultStream</code>. <code>list(session.stream_run(...))</code> produces the same results as <code>session.run(...)</code>, except that <code>run()</code> returns plan order and the stream yields in completion order.</p>
 <h2 id="pattern-3-one-shot-streaming-with-stream_all">Pattern 3: One-shot streaming with <code>stream_all()</code></h2>
 <p>When you don't need plan reuse and want a single-call streaming API, use <code>mloda.stream_all()</code>. It internally calls <code>prepare()</code> + <code>stream_run()</code>.</p>
 <pre><code class="language-python">from mloda.user import mloda

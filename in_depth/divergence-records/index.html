@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>Divergence Records - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "Divergence Records";
+        var mkdocs_page_input_path = "in_depth/divergence-records.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Plugin System</a>
+    <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">Divergence Records</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#what-a-record-holds">What a record holds</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#where-it-shows">Where it shows</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#rule-variants">Rule variants</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#upgrading">Upgrading</a>
+    </li>
+    </ul>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Plugin System</li>
+      <li class="breadcrumb-item active">Divergence Records</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="divergence-records-and-rule-variants">Divergence Records and Rule Variants</h1>
+<p>A divergence record says where a feature group or one of its Implementations differs from the group's reference contract. How a provider declares records and <code>VARIANTS</code> is in <a href="../compute-framework-integration/#operation-groups-one-group-one-implementation-per-framework">Operation Groups</a>, and how records rank implementations is in <a href="../compute-framework-integration/#choosing-among-implementations">Choosing among implementations</a>.</p>
+<h2 id="what-a-record-holds">What a record holds</h2>
+<table>
+<thead>
+<tr>
+<th>Field</th>
+<th>Meaning</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>source</code></td>
+<td><code>feature_group</code> or <code>implementation</code>, stamped by mloda.</td>
+</tr>
+<tr>
+<td><code>framework</code></td>
+<td>The compute framework an Implementation record applies on, stamped by mloda; <code>None</code> for a group record.</td>
+</tr>
+<tr>
+<td><code>kind</code></td>
+<td><code>value</code>, <code>type</code>, <code>variant</code> (follows a named rule variant) or <code>gap</code> (a known shortfall that is shown but never ranks).</td>
+</tr>
+<tr>
+<td><code>cause</code></td>
+<td><code>not_implemented</code>, <code>backend</code>, <code>environment</code> or <code>other</code>.</td>
+</tr>
+<tr>
+<td><code>reason</code></td>
+<td>One printable line; <code>describe()</code> returns <code>not implemented</code> for a reasonless <code>not_implemented</code> record, while the surfaces carry an empty reason.</td>
+</tr>
+<tr>
+<td><code>subtypes</code> / <code>outputs</code></td>
+<td>The subtypes or output parts it covers; both empty means the whole plugin.</td>
+</tr>
+<tr>
+<td><code>variant</code></td>
+<td>The rule variant name, on <code>variant</code> records only.</td>
+</tr>
+<tr>
+<td><code>docs</code></td>
+<td>Further explanation, required for cause <code>other</code>.</td>
+</tr>
+</tbody>
+</table>
+<p>Text fields are credential-scrubbed when stamped. A group may also declare <code>CONTRACT_VERSION</code>, an int of at least 1 naming the version of the reference contract it follows.</p>
+<h2 id="where-it-shows">Where it shows</h2>
+<table>
+<thead>
+<tr>
+<th>Surface</th>
+<th>Fields</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>PlanStep</code>, and so <code>explain()</code></td>
+<td><code>divergences</code>, <code>contract_version</code>, <code>allowed_variants</code> (<a href="../mloda-api/#explain-and-resolved_plan">explain and resolved_plan</a>)</td>
+</tr>
+<tr>
+<td>Plan lock</td>
+<td>the same keys on compute records (<a href="../plan-lock/#what-the-file-holds">What the file holds</a>)</td>
+</tr>
+<tr>
+<td><code>HookContext</code></td>
+<td><code>divergences</code>, <code>contract_version</code>, <code>allowed_variants</code> (<a href="../../chapter1/extender/#5-reading-call-facts-via-hookcontext">Reading call facts via HookContext</a>)</td>
+</tr>
+<tr>
+<td><code>FeatureGroupInfo</code></td>
+<td><code>contract_version</code>, <code>divergences</code>, <code>variants</code> (<a href="../discover-plugins/#inspecting-feature-groups">Inspecting Feature Groups</a>)</td>
+</tr>
+<tr>
+<td>Service, MCP and CLI explain step record</td>
+<td><code>contract_version</code>, <code>divergences</code>, <code>allowed_variants</code> (<a href="../mcp-server/#tools">MCP Server and CLI</a>)</td>
+</tr>
+<tr>
+<td>OpenLineage</td>
+<td>the registry's <code>mlodaStep</code> facet</td>
+</tr>
+</tbody>
+</table>
+<p>A step lists the records of its group and its serving Implementation that apply, <code>gap</code> records included; <code>gap</code> records never rank an Implementation.</p>
+<h2 id="rule-variants">Rule variants</h2>
+<p>A group lists the rule variants its contract allows in <code>VARIANTS</code>. An Implementation that follows one serves a feature only when the feature allows it with the group option <code>allow_variants</code>: a non-empty single-line string or a collection of them, read from the group options, never the context. Without it, when every fitting framework follows a variant the feature does not allow, resolution fails with a <code>FeatureResolutionError</code> whose eliminated candidates block reads:</p>
+<pre><code class="language-text">  - MyOperationFG (rule variant): MyOperationPandas on PandasDataFrame follows variant 'skip_nan', which this feature does not allow; to allow it add {&quot;allow_variants&quot;: (&quot;skip_nan&quot;,)} to the feature's options
+</code></pre>
+<p>When the group does not list the variant, the line ends <code>which MyOperationFG.VARIANTS does not list, so it cannot be allowed</code> and offers no option. The stage is the <code>rule variant</code> row of <a href="../troubleshooting/feature-group-resolution-errors/#the-eliminated-candidates-block">the eliminated candidates block</a>; <code>Elimination.variants</code> and <code>Elimination.allow_variants</code> carry the names (<a href="../feature-group-matching/">Feature Group Matching</a>). What gets blocked, and when a pin raises, is in <a href="../compute-framework-integration/#operation-groups-one-group-one-implementation-per-framework">Operation Groups</a>. The service reports a <code>variant_not_allowed</code> detail with a <code>fix</code> of <code>{"allow_variants": [...]}</code> only when the group lists every blocking variant and the caller may set the option (<a href="../mcp-server/#tools">Tools</a>).</p>
+<h2 id="upgrading">Upgrading</h2>
+<p>A plugin release that marks a backend behavior as a rule variant can turn a run that worked into this error; add <code>allow_variants</code> or use a framework without the variant.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../plan-lock/" class="btn btn-neutral float-left" title="Plan Lock"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../mcp-server/" class="btn btn-neutral float-right" title="MCP Server and CLI">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../plan-lock/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../mcp-server/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

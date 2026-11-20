@@ -139,6 +139,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1 current"><a class="reference internal current" href="#">Data Type Enforcement</a>
@@ -163,11 +167,17 @@
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#per-framework-precision-support">Per-Framework Precision Support</a>
     </li>
+    <li class="toctree-l2"><a class="reference internal" href="#list-columns">List Columns</a>
+    </li>
     <li class="toctree-l2"><a class="reference internal" href="#decimal-columns">Decimal Columns</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#execution-plan-grouping">Execution Plan Grouping</a>
+        <ul>
+    <li class="toctree-l3"><a class="reference internal" href="#reusing-a-typed-request-as-an-input">Reusing a typed request as an input</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#database-reader-type-awareness">Database Reader Type Awareness</a>
+        </ul>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#database-type-awareness">Database Type Awareness</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#error-handling">Error Handling</a>
     </li>
@@ -240,6 +250,7 @@ feature_any = Feature.not_typed(&quot;legacy_column&quot;)
 - <code>boolean_of()</code>: Boolean type
 - <code>date_of()</code>, <code>timestamp_millis_of()</code>, <code>timestamp_micros_of()</code>: Date/time types
 - <code>decimal_of()</code>, <code>binary_of()</code>: Other types</p>
+<p>Members without a typed constructor are declared with <code>Feature(name, data_type=DataType.UINT8)</code>.</p>
 <h2 id="declaring-a-feature-groups-output-type">Declaring a Feature Group's Output Type</h2>
 <p>The section above is the <em>data user</em> declaring a type on a <code>Feature</code>. A <em>feature group</em> can also
 declare the type it produces, via <code>return_data_type_rule</code>, the provider-side counterpart. mloda
@@ -273,7 +284,16 @@ catch it, the exception propagates and fails planning. If your rule does work th
 fail to determine a type, return <code>None</code> for that case rather than letting it raise.</p>
 <h2 id="validation-behavior">Validation Behavior</h2>
 <h3 id="default-lenient-mode">Default (Lenient) Mode</h3>
-<p>By default, validation allows compatible type conversions within categories:</p>
+<p>By default, validation applies a family rule: any declared integer or float type accepts any integer or float type (DECIMAL is excluded), and any declared timestamp type accepts any timestamp type, naive or tz-aware. Everything else must match exactly.</p>
+<p>Cross-category mismatches (e.g., STRING declared but INT64 returned) raise <code>DataTypeMismatchError</code>.</p>
+<h3 id="strict-mode">Strict Mode</h3>
+<p>Enable strict validation per-feature via options:</p>
+<pre><code class="language-python">feature = Feature.int32_of(
+    &quot;exact_count&quot;,
+    options={&quot;strict_type_enforcement&quot;: True}
+)
+</code></pre>
+<p>In strict mode, only exact type matches or widening conversions are allowed:</p>
 <table>
 <thead>
 <tr>
@@ -283,28 +303,28 @@ fail to determine a type, return <code>None</code> for that case rather than let
 </thead>
 <tbody>
 <tr>
+<td>INT32</td>
+<td>INT8, UINT8</td>
+</tr>
+<tr>
 <td>INT64</td>
-<td>INT32, INT64</td>
+<td>INT8, INT32, UINT8</td>
+</tr>
+<tr>
+<td>UINT64</td>
+<td>UINT8</td>
 </tr>
 <tr>
 <td>DOUBLE</td>
-<td>INT32, INT64, FLOAT, DOUBLE</td>
+<td>FLOAT, INT8, INT32, INT64, UINT8, UINT64</td>
 </tr>
 <tr>
 <td>TIMESTAMP_MICROS</td>
-<td>TIMESTAMP_MILLIS, TIMESTAMP_MICROS</td>
+<td>TIMESTAMP_MILLIS</td>
 </tr>
 </tbody>
 </table>
-<p>Cross-category mismatches (e.g., STRING declared but INT64 returned) raise <code>DataTypeMismatchError</code>.</p>
-<h3 id="strict-mode">Strict Mode</h3>
-<p>Enable strict validation per-feature via options:</p>
-<pre><code class="language-python">feature = Feature.int32_of(
-    &quot;exact_count&quot;,
-    options={&quot;strict_type_enforcement&quot;: True}
-)
-</code></pre>
-<p>In strict mode, only exact type matches or standard widening conversions are allowed.</p>
+<p>Naive and tz-aware timestamps never widen into each other.</p>
 <h2 id="implementing-the-hook-in-a-custom-compute-framework">Implementing the Hook in a Custom Compute Framework</h2>
 <p>Enforcement is driven by a single override point on <code>ComputeFramework</code>:</p>
 <pre><code class="language-python">def _extract_column_data_type(self, data: Any, column_name: str) -&gt; DataType | None:
@@ -342,15 +362,21 @@ class MyFramework(ComputeFramework):
 the table below for how each bundled framework handles precisions its backend cannot
 distinguish (it returns the widest type in the family rather than <code>None</code>, so lenient-mode
 validation still applies).</p>
+<p>A framework can also implement <code>_exact_column_data_type</code>, which returns the <code>DataType</code> the column's native type is exactly, or <code>None</code> otherwise. The mloda testing kit's type checks read it; without it they judge by value.</p>
 <h2 id="per-framework-precision-support">Per-Framework Precision Support</h2>
 <p>Not every backend's native type system can distinguish every precision mloda declares. The table below shows which precisions each bundled framework can extract from data. For the rest, the framework's <code>_extract_column_data_type</code> returns the widest type in the family (still correct under lenient mode), and strict-mode tests for the affected precision are skipped with a clear reason.</p>
+<p>Integer widths without a member resolve to the next lossless one: int16 and uint16 to INT32, uint32 to INT64.</p>
+<p>Naive Arrow <code>s</code> and <code>ns</code> timestamps resolve to TIMESTAMP_MICROS. Polars has no second precision, so a naive <code>s</code> column reads back as TIMESTAMP_MILLIS.</p>
 <table>
 <thead>
 <tr>
 <th>Framework</th>
 <th>INT32 / INT64</th>
+<th>INT8 / UINT8 / UINT64</th>
 <th>FLOAT / DOUBLE</th>
 <th>TIMESTAMP_MILLIS / MICROS</th>
+<th>TIMESTAMP_MICROS_TZ</th>
+<th>LIST</th>
 </tr>
 </thead>
 <tbody>
@@ -359,9 +385,15 @@ validation still applies).</p>
 <td>yes</td>
 <td>yes</td>
 <td>yes</td>
+<td>yes</td>
+<td>yes (numpy tz and Arrow-backed)</td>
+<td>only Arrow-backed columns</td>
 </tr>
 <tr>
 <td>Polars (eager / lazy)</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
 <td>yes</td>
 <td>yes</td>
 <td>yes</td>
@@ -371,9 +403,15 @@ validation still applies).</p>
 <td>yes</td>
 <td>yes</td>
 <td>yes</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
 </tr>
 <tr>
 <td>DuckDB</td>
+<td>yes</td>
+<td>yes</td>
+<td>yes</td>
 <td>yes</td>
 <td>yes</td>
 <td>yes</td>
@@ -381,31 +419,46 @@ validation still applies).</p>
 <tr>
 <td>Spark</td>
 <td>yes</td>
+<td>INT8 only (no unsigned)</td>
 <td>yes</td>
-<td>no (only <code>TimestampType</code> exists)</td>
+<td>no (<code>TimestampType</code> and <code>TimestampNTZType</code> resolve to TIMESTAMP_MICROS)</td>
+<td>no (strict mode cannot pass it on Spark data; lenient mode passes)</td>
+<td>yes</td>
 </tr>
 <tr>
 <td>Iceberg</td>
 <td>yes</td>
+<td>no (no narrow or unsigned ints)</td>
 <td>yes</td>
 <td>no (only <code>TimestampType</code> exists)</td>
+<td>yes</td>
+<td>yes</td>
 </tr>
 <tr>
 <td>SQLite</td>
 <td>no (INTEGER affinity)</td>
+<td>yes (through Arrow type hints)</td>
 <td>no (REAL affinity)</td>
 <td>no (stored as TEXT)</td>
+<td>yes (through Arrow type hints, for relations built from Arrow)</td>
+<td>no (no list storage)</td>
 </tr>
 <tr>
 <td>PythonDict</td>
 <td>no (<code>type.__name__</code> is "int")</td>
+<td>no</td>
 <td>no (Python float is 64-bit)</td>
 <td>no (<code>datetime.datetime</code> is microsecond)</td>
+<td>yes (aware <code>datetime</code>)</td>
+<td>yes</td>
 </tr>
 </tbody>
 </table>
+<p>A custom ComputeFramework should map tz-aware timestamp columns to <code>TIMESTAMP_MICROS_TZ</code>.</p>
+<h2 id="list-columns">List Columns</h2>
+<p><code>DataType.LIST</code> matches a list of any element type; elements are not checked, and <code>to_arrow_type</code> raises for it. <code>list_view</code>, <code>large_list_view</code> and <code>date64</code> stay unresolved.</p>
 <h2 id="decimal-columns">Decimal Columns</h2>
-<p><code>DataType.DECIMAL</code> means a decimal of any precision and scale: a <code>Feature</code> cannot declare precision or scale, and validation checks only the family. <code>to_arrow_type</code> maps <code>DECIMAL</code> to <code>decimal128(38, 18)</code> only when mloda must build an Arrow schema without data (the SQLite reader). <code>DECIMAL</code> never coerces to or from the float or integer family, in strict and lenient mode alike: exactness is the reason to declare it.</p>
+<p><code>DataType.DECIMAL</code> means a decimal of any precision and scale: a <code>Feature</code> cannot declare precision or scale, and validation checks only the family. <code>to_arrow_type</code> maps <code>DECIMAL</code> to <code>decimal128(38, 18)</code> only when mloda must build an Arrow schema without data (the SQLite source group). <code>DECIMAL</code> never coerces to or from the float or integer family, in strict and lenient mode alike: exactness is the reason to declare it.</p>
 <table>
 <thead>
 <tr>
@@ -418,7 +471,7 @@ validation still applies).</p>
 <tbody>
 <tr>
 <td>Pandas</td>
-<td><code>DECIMAL</code> for an Arrow-backed decimal dtype; <code>object</code> columns are not validated (indistinguishable from object strings)</td>
+<td><code>DECIMAL</code> for an Arrow-backed decimal dtype; an <code>object</code> column holding only strings is validated as <code>STRING</code>, other <code>object</code> columns (including <code>Decimal</code>) are not validated</td>
 <td>exact</td>
 <td>Arrow-backed decimals are kept in both directions; an <code>object</code> column of <code>Decimal</code> has its precision inferred from the values on the way out, and comes back Arrow-backed after a round trip through Arrow</td>
 </tr>
@@ -476,7 +529,26 @@ Feature.int64_of(&quot;amount&quot;)
 # This can join ANY group (lenient)
 Feature.not_typed(&quot;id&quot;)
 </code></pre>
-<h2 id="database-reader-type-awareness">Database Reader Type Awareness</h2>
+<h3 id="reusing-a-typed-request-as-an-input">Reusing a typed request as an input</h3>
+<p>When a feature is requested with a type and also needed without a type as another feature's input,
+mloda can reuse the typed request. For example, a direct <code>Feature.int64_of("amount")</code> can satisfy an
+input declared as <code>Feature("amount")</code>. Otherwise-identical requests produce the column once, retain
+the declared type for runtime validation, and keep the consumer connected regardless of request order.
+Previously, this pair produced two planned features and could fail with duplicate columns in append-style groups.
+Reuse requires completed input resolution: a column injected for a filter or index does not suppress
+the dependency resolution of a later typed request.
+When several typed requests are already present when the untyped input is resolved, mloda reuses the one
+whose data type name sorts first (for example <code>INT32</code> before <code>INT64</code>), so the choice does not depend on set order.</p>
+<p>The other identity constraints still apply, including options, context, domain, compute frameworks,
+implementation and data source. Two different explicit types remain separate, as does a typed input
+paired with an untyped direct request. A typed request on a strictly narrower compute framework set,
+such as one pinned to a single framework, also serves an untyped input copy of the same feature on a
+wider set when it is the only narrowest such request, so the feature is computed once.
+Likewise, an untyped input copy on a strictly narrower set serves a typed request on a wider set and takes its
+type when it is the only narrowest such copy. When typed requests of different types compete for one input copy,
+the type whose name sorts first takes it and the other request stays separate.
+Ordinary <code>Feature</code> equality and hashing remain type-sensitive.</p>
+<h2 id="database-type-awareness">Database Type Awareness</h2>
 <p>When reading from databases (e.g., SQLite), declared types are used to build the PyArrow schema:</p>
 <pre><code class="language-python"># Declared type is used for schema, not inferred from data
 feature = Feature.int64_of(
@@ -504,7 +576,7 @@ except DataTypeMismatchError as e:
             </div>
           </div><footer>
     <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
-        <a href="../plan-lock/" class="btn btn-neutral float-left" title="Plan Lock"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../mcp-server/" class="btn btn-neutral float-left" title="MCP Server and CLI"><span class="icon icon-circle-arrow-left"></span> Previous</a>
         <a href="../comparison-contract/" class="btn btn-neutral float-right" title="Comparison Contract">Next <span class="icon icon-circle-arrow-right"></span></a>
     </div>
 
@@ -528,7 +600,7 @@ except DataTypeMismatchError as e:
   <span class="rst-current-version" data-toggle="rst-current-version">
     
     
-      <span><a href="../plan-lock/" style="color: #fcfcfc">&laquo; Previous</a></span>
+      <span><a href="../mcp-server/" style="color: #fcfcfc">&laquo; Previous</a></span>
     
     
       <span><a href="../comparison-contract/" style="color: #fcfcfc">Next &raquo;</a></span>

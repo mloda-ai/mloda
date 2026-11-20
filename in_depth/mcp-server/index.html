@@ -1,0 +1,472 @@
+<!DOCTYPE html>
+<html class="writer-html5" lang="en" >
+<head>
+    <meta charset="utf-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+      <link rel="shortcut icon" href="../../img/favicon.ico" />
+    <title>MCP Server and CLI - mloda docs</title>
+    <link rel="stylesheet" href="../../css/theme.css" />
+    <link rel="stylesheet" href="../../css/theme_extra.css" />
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/styles/github.min.css" />
+    
+      <script>
+        // Current page data
+        var mkdocs_page_name = "MCP Server and CLI";
+        var mkdocs_page_input_path = "in_depth/mcp-server.md";
+        var mkdocs_page_url = null;
+      </script>
+    
+    <!--[if lt IE 9]>
+      <script src="../../js/html5shiv.min.js"></script>
+    <![endif]-->
+      <script src="https://cdnjs.cloudflare.com/ajax/libs/highlight.js/11.8.0/highlight.min.js"></script>
+      <script>hljs.highlightAll();</script> 
+</head>
+
+<body class="wy-body-for-nav" role="document">
+
+  <div class="wy-grid-for-nav">
+    <nav data-toggle="wy-nav-shift" class="wy-nav-side stickynav">
+    <div class="wy-side-scroll">
+      <div class="wy-side-nav-search">
+          <a href="../.." class="icon icon-home"> mloda docs
+        </a><div role="search">
+  <form id ="rtd-search-form" class="wy-form" action="../../search.html" method="get">
+      <input type="text" name="q" placeholder="Search docs" aria-label="Search docs" title="Type search term here" />
+  </form>
+</div>
+      </div>
+
+      <div class="wy-menu wy-menu-vertical" data-spy="affix" role="navigation" aria-label="Navigation menu">
+              <p class="caption"><span class="caption-text">Home</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../..">mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">mloda Concepts</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/0_table_of_content/">Table of Content</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/1_ml_mloda_intro/">Intro to the core interfaces of mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/2_ml_advantage_process_focus/">What makes mloda unique?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/3_ml_data_feature_feature_groups/">Data, Feature, FeatureSets and FeatureGroups in mloda</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/mloda_basics/4_ml_data_providers_user_steward/">Provider, User, Steward in mloda</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Getting Started</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/installation/">Installation</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/api-request/">API Request</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/feature-groups/">Feature Groups</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../chapter1/extender/">Extender</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/base_usage/">mloda demo: How can we make feature engineering shareable?</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../examples/sklearn_integration_basic/">mloda + scikit-learn Integration: Basic Example</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Basics</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../mloda-api/">mloda API</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../streaming/">Streaming</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../access-feature-data/">(Feature) data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../join_data/">Join data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../filter_data/">Filter data</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../mask_engine/">Mask Engine</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../artifacts/">Artifacts</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">In Depth - Advanced</span></p>
+              <ul class="current">
+                  <li class="toctree-l1"><a class="reference internal" href="../data-quality/">Data quality</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../domain/">Domain concept</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-access-patterns/">Data Access Patterns</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../named-data-access-handles/">Named Data Access Handles</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Compute Frameworks</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-transformers/">Framework Transformers</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../compute-framework-integration/">Compute Framework Integration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../framework-connection-object/">Framework Connection Object</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Feature Groups</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-config/">Feature Configuration</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-chain-parser/">Feature Chain Parser</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-matching/">Feature Group Matching</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../property-mapping/">PROPERTY_MAPPING</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-testing/">Feature Group Testing</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../feature-group-version/">Feature Group Versioning</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../multiple_result_columns/">Multiple Result Columns</a>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1 current"><a class="reference internal current" >Plugin System</a>
+    <ul class="current">
+                <li class="toctree-l2"><a class="reference internal" href="../discover-plugins/">Discover Plugins</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin-loader/">Plugin Loader</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2 current"><a class="reference internal current" href="#">MCP Server and CLI</a>
+    <ul class="current">
+    <li class="toctree-l3"><a class="reference internal" href="#install">Install</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#configure">Configure</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#tools">Tools</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#what-stays-on-the-server">What stays on the server</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#local-http">Local HTTP</a>
+    </li>
+    <li class="toctree-l3"><a class="reference internal" href="#command-line">Command line</a>
+    </li>
+    </ul>
+                </li>
+    </ul>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../comparison-contract/">Comparison Contract</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" >Troubleshooting</a>
+    <ul>
+                <li class="toctree-l2"><a class="reference internal" href="../troubleshooting/feature-group-resolution-errors/">Feature Group Resolution Errors</a>
+                </li>
+    </ul>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Development</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../development/">Contributors</a>
+                  </li>
+                  <li class="toctree-l1"><a class="reference internal" href="../../license/">License - Apache 2.0</a>
+                  </li>
+              </ul>
+              <p class="caption"><span class="caption-text">Need Help?</span></p>
+              <ul>
+                  <li class="toctree-l1"><a class="reference internal" href="../../faq/">FAQ</a>
+                  </li>
+              </ul>
+      </div>
+    </div>
+    </nav>
+
+    <section data-toggle="wy-nav-shift" class="wy-nav-content-wrap">
+      <nav class="wy-nav-top" role="navigation" aria-label="Mobile navigation menu">
+          <i data-toggle="wy-nav-top" class="fa fa-bars"></i>
+          <a href="../..">mloda docs</a>
+        
+      </nav>
+      <div class="wy-nav-content">
+        <div class="rst-content"><div role="navigation" aria-label="breadcrumbs navigation">
+  <ul class="wy-breadcrumbs">
+    <li><a href="../.." class="icon icon-home" aria-label="Docs"></a></li>
+          <li class="breadcrumb-item">In Depth - Advanced</li>
+          <li class="breadcrumb-item">Plugin System</li>
+      <li class="breadcrumb-item active">MCP Server and CLI</li>
+    <li class="wy-breadcrumbs-aside">
+    </li>
+  </ul>
+  <hr/>
+</div>
+          <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
+            <div class="section" itemprop="articleBody">
+              
+                <h1 id="mcp-server-and-cli">MCP Server and CLI</h1>
+<p>mloda ships an <a href="https://modelcontextprotocol.io">MCP</a> server, <code>mloda-mcp</code>, so agents can discover features, plan
+requests and, when you allow it, run them. The <code>mloda</code> command line calls the same functions, so whatever an agent
+sees you can reproduce locally.</p>
+<h2 id="install">Install</h2>
+<p>The server needs the <code>mcp</code> extra; the <code>mloda</code> command needs nothing beyond mloda itself.</p>
+<pre><code class="language-bash">pip install &quot;mloda[mcp]&quot;
+</code></pre>
+<p>Add it to Claude Code, or to any client that starts MCP servers over stdio:</p>
+<pre><code class="language-bash">claude mcp add mloda -- mloda-mcp --config /abs/path/mloda.toml
+</code></pre>
+<pre><code class="language-json">{ &quot;mcpServers&quot;: { &quot;mloda&quot;: { &quot;command&quot;: &quot;mloda-mcp&quot;, &quot;args&quot;: [&quot;--config&quot;, &quot;/abs/path/mloda.toml&quot;] } } }
+</code></pre>
+<p><code>mloda mcp serve</code> is the same server. Plugins are whatever is installed in the server's environment when it starts;
+agents cannot install or load plugins.</p>
+<h2 id="configure">Configure</h2>
+<p>Settings live in the <code>[mcp]</code> table of <code>mloda.toml</code>. Without <code>--config</code>, <code>./mloda.toml</code> is used if it exists;
+<code>--no-config</code> ignores it. Relative paths resolve against the file.</p>
+<pre><code class="language-toml">[mcp]
+mode = &quot;plan&quot;                          # &quot;plan&quot; (default) or &quot;execute&quot;
+compute_frameworks = [&quot;PythonDictFramework&quot;]
+max_rows = 100000                      # refuse requests that may read or return more rows (see below)
+deny_feature_groups = [&quot;CustomerEmailFeatureGroup&quot;]
+alternatives = { customer_email = [&quot;customer_id&quot;] }
+preview_allows = [&quot;public&quot;, &quot;internal&quot;]
+max_preview_rows = 20
+inline_data = false                    # allow inline request data (trusted callers only)
+# result_paging = false                # let callers page through truncated previews
+# max_inline_values = 1000             # refuse inline data with more values (default: no limit)
+# max_inline_chars = 10000             # refuse inline data with more string characters (default: no limit)
+plan_ttl = &quot;24h&quot;
+# default_classification = &quot;internal&quot;  # label for unlisted leaf columns (default: unclassified)
+# allow_options = [&quot;window&quot;]           # option keys a request may set (default: none)
+
+[mcp.sources.sales]
+files = [&quot;data/sales.csv&quot;]
+
+[mcp.classification]
+customer_id = &quot;personal&quot;
+income = &quot;internal&quot;
+segment = &quot;public&quot;
+
+[mcp.credentials.db]                   # a credential handle: field = env var name, or { file = path }
+token = &quot;DB_TOKEN&quot;
+sqlite = { file = &quot;secrets/wh_path&quot; }
+
+[mcp.options]                          # default group options for every requested feature
+model = &quot;small&quot;
+
+[mcp.context_options]                  # default context options for every requested feature
+timeout = 30
+</code></pre>
+<p><code>MLODA_MCP_MODE</code>, <code>MLODA_MCP_MAX_ROWS</code>, <code>MLODA_MCP_MAX_INLINE_VALUES</code>, <code>MLODA_MCP_MAX_INLINE_CHARS</code> and
+<code>MLODA_MCP_COMPUTE_FRAMEWORKS</code> override the file. <code>MLODA_MCP_SIGNING_KEY</code>
+signs plan ids; without it every process uses a random key, so a plan id is valid only in the process that issued it.</p>
+<p><code>[mcp.options]</code> and <code>[mcp.context_options]</code> are operator defaults merged under each requested feature; a feature's own
+value wins. They are not subject to <code>allow_options</code> and their values never appear in results. Values are strings,
+numbers, booleans, lists or tables (no TOML dates or times), and <code>in_features</code> is not allowed.</p>
+<p><code>[mcp.credentials.&lt;handle&gt;]</code> registers a credential for groups that read it with <code>read_credential</code> and for database
+sources. The table holds environment variable names and file paths, never values. Startup fails, naming the handle and
+the field, if a variable is unset, empty or blank or a file is missing, empty or blank. A field value must be an
+environment variable name (letters, digits and <code>_</code>, not starting with a digit); a name with <code>.</code> or <code>-</code> fails
+startup, while an underscore-only token such as <code>sk_live_abc</code> still passes the rule. An empty field name is refused.
+Handle names are free-form (for example <code>pii-hmac-key</code>), non-empty, without control characters, and may not start with
+<code>_auto_</code> or equal a source alias. The unset or blank error names the handle and field, not the variable. Secret files
+are read again for every request, so a rotated file takes effect without a restart; an environment variable needs a
+restart. A group declares its handle option with <code>credential_handle_spec</code>; set it in
+<code>[mcp.options]</code>.</p>
+<p>A credential that cannot be read is left out. Requests whose plan has a source that binds a credential (even one named
+by <code>data_access_handle</code>), and explains and describes that do not resolve, fail until it is back; other requests keep
+working, including a group that reads only its declared, readable handles. The log names the handle when it becomes
+unreadable and again when it is back. A column that a file and a credential source both serve may resolve to the file
+meanwhile, also for a request that reads declared credentials. The short-value warning appears at startup, when a value
+changes, and when a handle is readable again. <code>restrict_sources</code> does not narrow credentials. A database source binds
+the only registered credential; with several, set <code>data_access_handle</code> in <code>[mcp.options]</code>.</p>
+<h2 id="tools">Tools</h2>
+<table>
+<thead>
+<tr>
+<th>Tool</th>
+<th>What it does</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>mloda_search_features</code></td>
+<td>Lists FeatureGroups and source aliases matching a query, one page at a time</td>
+</tr>
+<tr>
+<td><code>mloda_describe_feature</code></td>
+<td>Resolves one feature name and lists the options of its FeatureGroup</td>
+</tr>
+<tr>
+<td><code>mloda_explain_request</code></td>
+<td>Validates and plans a request without reading data; returns the plan and a <code>plan_id</code></td>
+</tr>
+<tr>
+<td><code>mloda_run_request</code></td>
+<td>Runs a <code>plan_id</code>; only offered when <code>mode = "execute"</code></td>
+</tr>
+<tr>
+<td><code>mloda_fetch_rows</code></td>
+<td>Pages through a run result by <code>result_id</code>; only offered when <code>mode = "execute"</code> and <code>result_paging = true</code></td>
+</tr>
+</tbody>
+</table>
+<p>A run whose preview is truncated returns a <code>result_id</code>, and each truncated table's preview a <code>next_cursor</code>.
+<code>mloda_fetch_rows</code> returns pages of the preview-allowed columns only (<code>limit</code> up to <code>max_preview_rows</code>) and never
+re-runs the plan. Results expire after 15 minutes and share a total size cap (oldest evicted
+first; a result over the cap gets no <code>result_id</code>). Anyone holding a <code>result_id</code> can fetch its rows, like a plan id
+within the same server. An unknown or expired id is <code>plan_invalid</code>. Paging lets a caller
+read every row of the previewable columns, so it is off by default.</p>
+<p>The resource <code>mloda://schema/feature-request</code> is the JSON Schema of a request. A request is the
+<a href="../feature-config/">feature configuration</a> JSON plus optional filters, source restrictions and inline data:</p>
+<pre><code class="language-json">{
+  &quot;features&quot;: [&quot;customer_id&quot;, {&quot;name&quot;: &quot;income&quot;, &quot;options&quot;: {}}],
+  &quot;filters&quot;: [{&quot;feature&quot;: &quot;segment&quot;, &quot;op&quot;: &quot;eq&quot;, &quot;value&quot;: &quot;a&quot;}],
+  &quot;restrict_sources&quot;: [&quot;sales&quot;],
+  &quot;data&quot;: {&quot;Inline&quot;: {&quot;token&quot;: [&quot;007&quot;, &quot;&quot;, &quot;12&quot;]}}
+}
+</code></pre>
+<p><code>data</code> is optional inline data, <code>{"&lt;set&gt;": {"&lt;column&gt;": [values]}}</code>. It needs <code>inline_data = true</code> under <code>[mcp]</code>
+(default off) and a set name that is not a source alias. Values travel in the signed, unencrypted plan id and are echoed in the <code>normalized_request</code> of explain. Inline
+columns are unclassified, so the preview is empty unless you classify them in <code>[mcp.classification]</code>. Use it for trusted
+callers only, since row counts over caller-chosen values can reveal plugin data;
+<code>deny_feature_groups = ["ApiDataFG"]</code> turns it off entirely.
+<code>max_inline_values</code> and <code>max_inline_chars</code> (integers, at least 1) refuse oversized inline data as <code>limit_exceeded</code>
+before planning and again on run. Inline data is also capped by the plan id size (16384 JSON characters).</p>
+<p>Every result is a one-line summary followed by the result as JSON, which is also the structured content. A failed
+call has <code>isError</code> set and one error shape: <code>{"error": {"code", "message", "details", "audit_id"}}</code> with the codes
+<code>validation_failed</code>, <code>policy_denied</code>, <code>limit_exceeded</code>, <code>plan_invalid</code>, <code>plan_stale</code>, <code>missing_input_feature</code> and
+<code>internal</code>. Details point at the request by JSON pointer, with a suggestion when a close name exists. A
+<code>missing_input_feature</code> detail holds <code>feature_group</code>, <code>feature</code> and <code>missing_inputs</code> (never the available columns). A <code>variant_not_allowed</code> detail holds <code>feature_group</code> and <code>variants</code>, plus a <code>fix</code> of <code>{"allow_variants": [...]}</code> only when the group lists every variant blocking some framework and the caller may set <code>allow_variants</code>. It is reported at the requested feature when an input is variant-blocked or a chained implementation pin hits a blocked implementation. Competing consumers over a variant-blocked input give one <code>variant_not_allowed</code> detail per competing consumer whose input is variant-blocked, whose <code>feature_group</code> names the consumer. An input the request never names (neither as a feature nor in <code>in_features</code>) that cannot be resolved is reported as <code>unresolved</code> at the requested feature, without the input's name or a suggestion.</p>
+<p>Each step record of an explain result carries <code>contract_version</code>, <code>divergences</code> and <code>allowed_variants</code> (see <a href="../divergence-records/">Divergence Records</a>).</p>
+<h2 id="what-stays-on-the-server">What stays on the server</h2>
+<p>Credentials a group reads at run time with <code>read_credential</code> stay here too (see <a href="../named-data-access-handles/#runtime-access-versus-match-time-binding">Runtime access versus match-time binding</a>).</p>
+<ul>
+<li>Credentials are registered by the operator, never listed by search or describe, and never settable by a request: a
+  declared handle option is refused even when listed in <code>allow_options</code>.</li>
+<li>Sources are named by alias only. Paths, connection details, data-access objects and option values never appear in a
+  result, and a request cannot set data-access options (such as <code>data_access_handle</code> or <code>connection_handle</code>).</li>
+<li>A request may set only the option keys listed in <code>allow_options</code> (default: none). Any other key in <code>options</code>,
+  <code>group_options</code> or <code>context_options</code>, nested <code>in_features</code> configs included, is refused as <code>policy_denied</code> by
+  JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature
+  name are not covered. <code>mloda explain</code> and <code>mloda run</code> are local and not restricted. <code>mloda_describe_feature</code> shows
+  <code>caller_settable</code> for each option and refuses option keys not in <code>allow_options</code>.</li>
+<li>A plugin marks a key it never wants from a caller (a base URL, an API key) with
+  <code>PropertySpec(..., caller_settable=False)</code>. MCP requests and <code>mloda_describe_feature</code> refuse that key as
+  <code>policy_denied</code> even when <code>allow_options</code> lists it, and describe shows <code>caller_settable: false</code>. The match is by key
+  name across all installed plugins. A declared credential handle option is always refused this way. A planned
+  feature name that binds the key through the plugin's name pattern is refused too, even when <code>[mcp.options]</code> sets
+  it, at <code>/features/&lt;i&gt;</code> for a requested name and <code>/features</code> for a planned one. <code>[mcp.options]</code> defaults and the
+  local CLI may still set it.</li>
+<li>Denied FeatureGroups are disabled before matching, so their code does not run; the agent sees <code>policy_denied</code> and
+  the alternatives you configured. Requested names, <code>index</code> columns, <code>in_features</code> source names and filter columns are
+  checked before planning. Any planned feature name the deny list matches, such as a chained name over a denied
+  column, is refused after planning; a request whose planning stops on a denied name, or after resolving one, is
+  refused the same way. Configured source groups that probe through the <code>INPUT_DATA_MATCH</code> hook (all of core's) never
+  serve a denied name, so planning, running and describe answer the same whether or not a source has the column.</li>
+<li><code>run</code> re-plans the request: validation, policy, filters and row limits are checked again, and a plan that resolves
+  differently is refused as <code>plan_stale</code>.</li>
+<li>With <code>max_rows</code> set, a request is refused as <code>limit_exceeded</code> when a configured source has more rows or cannot be
+  counted (a CSV is counted exactly only when read on <code>PythonDictFramework</code>), when it reads data that a FeatureGroup
+  loads itself (never countable), and, after <code>run</code>, when a result table has more rows.</li>
+<li>The preview holds only columns whose classification is in <code>preview_allows</code>. A derived feature takes the strictest
+  classification of its inputs unless you classify it yourself. Unclassified columns are withheld.</li>
+<li><code>keep_index: true</code> in a request requires <code>index</code>. Index columns are classified like any column.</li>
+<li>A filter on a column the preview withholds is refused as <code>policy_denied</code>: row counts would reveal its values.</li>
+<li>Descriptions and previewed values come from plugins and data: the server marks them untrusted.</li>
+<li>Each call writes one audit record to the <code>mloda.interfaces.mcp</code> logger, without argument values. The principal is the
+  local OS user. Unexpected failures log a traceback without exception messages.</li>
+</ul>
+<p><code>default_classification</code> replaces <code>unclassified</code> for every leaf column without its own entry, including columns a
+FeatureGroup loads itself; derived features still take the strictest input. A permissive label such as <code>public</code> exposes
+all of them in the preview, so prefer listing columns in <code>[mcp.classification]</code>.</p>
+<p>Upgrade note: MCP callers that set options are refused until you list the keys in <code>allow_options</code>.</p>
+<h2 id="local-http">Local HTTP</h2>
+<pre><code class="language-bash">mloda-mcp --transport http --host 127.0.0.1 --port 8000
+</code></pre>
+<p>The server is at <code>/mcp</code>. Bound to loopback, it accepts only loopback <code>Host</code> and <code>Origin</code> headers.</p>
+<p>There is no authentication: a non-loopback host exposes the server to the network (the CLI warns). All clients share one
+principal (the OS user) and one set of plan ids.</p>
+<p>To embed it, call <code>mloda.interfaces.mcp.server.create_app(settings, env=env, host=...)</code>, which returns a
+Starlette app; call <code>enable_process_wide_log_masking()</code> yourself first, as <code>mloda mcp serve</code> does.
+Pass <code>data_access_collection=</code> to add connections and credentials built in code; a handle that duplicates one of the
+<code>[mcp.credentials]</code> table is refused. A mounted sub-app's lifespan does not run, so run the returned app's lifespan or
+serve it directly.</p>
+<p>Not yet: approvals, cancellation, and remote HTTP with OAuth.</p>
+<h2 id="command-line">Command line</h2>
+<pre><code class="language-bash">mloda demo                                # a bundled example, its result and plan
+mloda explain request.json                # the same JSON as mloda_explain_request
+mloda explain request.json --format text  # one line per step; errors stay JSON
+mloda run request.json --max-rows 100000 --format jsonl
+cat request.json | mloda explain -
+mloda run request.json --full --format csv
+mloda run income segment -o model=small -c timeout:=30
+</code></pre>
+<p><code>mloda --version</code> prints the installed mloda version.</p>
+<p><code>mloda run FEATURE ... -o KEY=VALUE -c KEY=VALUE</code> builds the request from feature names: <code>-o</code> sets group options and
+<code>-c</code> context options on every feature, and both repeat. A value is <code>KEY=VALUE</code> (string), <code>KEY:=JSON</code> (parsed JSON) or
+<code>KEY=@FILE</code> (file text). A single target that is <code>-</code>, an existing file or ends in <code>.json</code> is a request file instead,
+and <code>-o</code> or <code>-c</code> with it is an error.</p>
+<p><code>--full</code> returns every row and all columns, withheld ones included. <code>max_rows</code> still applies. The server never offers
+it. <code>mloda explain</code> and <code>mloda run</code> do not refuse filters on withheld columns (the caller is local); <code>mloda mcp serve</code>
+does.</p>
+<p><code>mloda run</code> executes regardless of <code>mode</code>, since you started it yourself, but applies the same limits and preview
+rules. Exit codes: <code>0</code> success, <code>2</code> an error result or nothing could run (bad config, bad request, policy, limit, or a
+FeatureGroup that failed while planning or running, reported as <code>internal</code>), <code>3</code> a completed run whose result
+carries <code>failed_rows</code>, <code>1</code> any other failure. Every error result is also written to stderr as <code>mloda: error: &lt;message&gt;</code>.
+A credential handle refusal (a misspelled or unset handle) shows its text, naming handles and keys only, in that message
+and on stderr. The MCP server reports it as <code>internal</code> and logs the text with the audit id; <code>describe</code> does the same, and also reports a plugin raise that escaped resolution as <code>internal</code>, naming only its class.</p>
+<p>A completed run result has a <code>failed_rows</code> list only when feature groups reported rows that got no value. Each entry has
+<code>column</code>, <code>reason</code> (a short code), <code>row_count</code>, <code>rows</code> and <code>truncated</code>; <code>rows</code> holds at most 1000 positions unless
+<code>--full</code> is used, and at most 100 entries are listed. The positions are rows of the feature group's own output. With
+<code>--format jsonl</code> or <code>csv</code> the entries go to stderr as a short summary and stdout is unchanged.</p>
+              
+            </div>
+          </div><footer>
+    <div class="rst-footer-buttons" role="navigation" aria-label="Footer Navigation">
+        <a href="../divergence-records/" class="btn btn-neutral float-left" title="Divergence Records"><span class="icon icon-circle-arrow-left"></span> Previous</a>
+        <a href="../data-type-enforcement/" class="btn btn-neutral float-right" title="Data Type Enforcement">Next <span class="icon icon-circle-arrow-right"></span></a>
+    </div>
+
+  <hr/>
+
+  <div role="contentinfo">
+    <!-- Copyright etc -->
+  </div>
+
+  Built with <a href="https://www.mkdocs.org/">MkDocs</a> using a <a href="https://github.com/readthedocs/sphinx_rtd_theme">theme</a> provided by <a href="https://readthedocs.org">Read the Docs</a>.
+</footer>
+          
+        </div>
+      </div>
+
+    </section>
+
+  </div>
+
+  <div class="rst-versions" role="note" aria-label="Versions">
+  <span class="rst-current-version" data-toggle="rst-current-version">
+    
+    
+      <span><a href="../divergence-records/" style="color: #fcfcfc">&laquo; Previous</a></span>
+    
+    
+      <span><a href="../data-type-enforcement/" style="color: #fcfcfc">Next &raquo;</a></span>
+    
+  </span>
+</div>
+    <script src="../../js/jquery-3.6.0.min.js"></script>
+    <script>var base_url = "../..";</script>
+    <script src="../../js/theme_extra.js"></script>
+    <script src="../../js/theme.js"></script>
+      <script src="../../search/main.js"></script>
+    <script>
+        jQuery(function () {
+            SphinxRtdTheme.Navigation.enable(true);
+        });
+    </script>
+
+</body>
+</html>

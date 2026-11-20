@@ -143,7 +143,7 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#load_groupgroup_name-str">load_group(group_name: str)</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#load_matchinggroup_name-str-pattern-str">load_matching(group_name: str, pattern: str)</a>
+    <li class="toctree-l4"><a class="reference internal" href="#load_matchinggroup_name-str-pattern-str-skip_dirs">load_matching(group_name: str, pattern: str, skip_dirs=())</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#load_all_plugins">load_all_plugins()</a>
     </li>
@@ -174,6 +174,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -241,9 +245,9 @@ loader.load_group(&quot;feature_group&quot;)
 <h3 id="pluginloaderall"><code>PluginLoader.all()</code></h3>
 <p>Creates a loader, loads all bundled plugins, then folds in installed <a href="#entry-points">entry points</a>.</p>
 <h3 id="load_groupgroup_name-str"><code>load_group(group_name: str)</code></h3>
-<p>Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. <code>"feature_group/input_data/read_files"</code>).</p>
-<h3 id="load_matchinggroup_name-str-pattern-str"><code>load_matching(group_name: str, pattern: str)</code></h3>
-<p>Loads only files within a group whose filename matches a glob pattern (e.g. <code>"*transformer*"</code>). Useful when only a subset of files in a group is needed.</p>
+<p>Loads all plugins from a specific group folder, including nested subdirectories. Supports slash-separated paths for subdirectories (e.g. <code>"feature_group/input_data/document_formats"</code>).</p>
+<h3 id="load_matchinggroup_name-str-pattern-str-skip_dirs"><code>load_matching(group_name: str, pattern: str, skip_dirs=())</code></h3>
+<p>Loads only files within a group whose filename matches a glob pattern (e.g. <code>"*transformer*"</code>), skipping files whose parent directory name is in <code>skip_dirs</code>. Useful when only a subset of files in a group is needed.</p>
 <h3 id="load_all_plugins"><code>load_all_plugins()</code></h3>
 <p>Loads all plugin groups.</p>
 <h3 id="load_entry_pointsgroup-str-none-none"><code>load_entry_points(group: str | None = None)</code></h3>
@@ -280,6 +284,7 @@ my-pkg = &quot;my_pkg.manifest:FEATURE_GROUPS&quot;
 [project.entry-points.&quot;mloda.compute_frameworks&quot;]
 my-pkg = &quot;my_pkg.manifest:COMPUTE_FRAMEWORKS&quot;
 </code></pre>
+<p>A manifest of an existing group may also list <code>Implementation</code> classes.</p>
 <p>The manifest module lists the concrete classes explicitly:</p>
 <pre><code class="language-py"># my_pkg/manifest.py
 from mloda.provider import FeatureGroup
@@ -302,6 +307,7 @@ my-pkg = &quot;my_pkg.optional_deps:OPTIONAL_DEPENDENCIES&quot;
 OPTIONAL_DEPENDENCIES = (&quot;some_optional_lib&quot;,)
 </code></pre>
 <p>The declaration is scoped to the distribution that published it (matched by the installed package, not the entry-point name), so two unrelated packages reusing the same entry-point label never collide.</p>
+<p>A root may name a namespace subpackage: <code>mloda.enterprise</code> covers itself and every module under it, but not <code>mloda.enterprisex</code> or the rest of <code>mloda</code>. Declare the shallowest package that can be absent, since Python reports the shallowest missing package: <code>mloda.enterprise</code>, not <code>mloda.enterprise.bar</code>, unless another installed package always provides <code>mloda.enterprise</code>.</p>
 <h3 id="loading">Loading</h3>
 <p>Discovery is lazy: installing a package does nothing by itself. Manifests are imported and registered only when <code>load_entry_points()</code> runs, either directly or as the final step of <code>PluginLoader.all()</code>. Discovered classes register into the default registry with provenance <code>source="entry_point"</code> (see <a href="../plugin_registry/">Plugin Registry</a>).</p>
 <pre><code class="language-python">from mloda.user import PluginLoader
@@ -321,10 +327,12 @@ fg_keys = loader.load_entry_points(group=&quot;mloda.feature_groups&quot;)
 <li><strong>Abstract classes are skipped</strong> silently; manifests may list a shared abstract base alongside its concrete subclasses.</li>
 <li><strong>Collisions raise.</strong> If a different class already holds a manifest class's <code>module:qualname</code> key, loading raises <code>PluginRegistryCollisionError</code>. Loading the same manifests twice is idempotent.</li>
 <li><strong>Missing optional dependencies skip.</strong> <code>ImportError</code> (covers <code>ModuleNotFoundError</code> too) around an entry point's <code>.load()</code> is caught. It is attributed to a declared (or global <code>OPTIONAL_PLUGIN_DEPENDENCIES</code>) optional root either by the error's own module name, or by the innermost (deepest) traceback frame, i.e. where the failure actually happened, belonging to that root's code. A match skips only that entry point and logs at WARNING naming the entry point and the missing module; otherwise the error re-raises.</li>
-<li><strong>Skips are visible.</strong> A skipped in-tree <code>mloda_plugins</code> module or entry point logs one WARNING naming it and the missing dependency, and warns again only when that dependency changes, after a successful load in between, or after <code>reset_cache()</code>. <code>PluginLoader.skipped_plugins()</code> returns every skipped module and entry point with its missing dependency; <code>reset_cache()</code> clears it.</li>
+<li><strong>Skips are visible.</strong> A skipped module under the loader's base package (<code>mloda_plugins</code> by default) logs one DEBUG record (a bare install stays quiet) and a skipped entry point logs one WARNING, each naming the module and the missing dependency, and logging again only when that dependency changes, after a successful load in between, or after <code>reset_cache()</code>. <code>PluginLoader.skipped_plugins()</code> returns every skipped module and entry point with its missing dependency; <code>reset_cache()</code> clears it.</li>
 <li><strong>Reusable directly.</strong> The traceback-frame attribution above is importable directly: <code>traceback_blames_root(exc, root)</code> from <code>mloda.provider</code> or <code>mloda.steward</code>, for downstream packages building their own optional-dependency guards. Callers must exclude their own module's root from the roots they pass in, the same way <code>load_entry_points</code> excludes the entry point's own module, so a namespace collision can't misattribute the caller's own bug to that root.</li>
-<li><strong>Own-package failures always raise.</strong> If the missing root is the entry point's own module root, it re-raises even if declared optional. The entry point's own namespace (and anything under it) is also never eligible for the traceback-based attribution, so a genuine failure in the plugin's own code still always raises even if it happens to share a name with a declared optional root. When the missing module is the entry point's own module or a parent package (files gone, metadata left), the error names the entry point, distribution and module, and suggests <code>pip install --force-reinstall &lt;distribution&gt;</code>.</li>
+<li><strong>Own-package failures raise.</strong> A declared root that contains the entry point's own module (<code>mloda</code> or <code>mloda.community</code> for a <code>mloda.community.foo</code> plugin) is never eligible for name or traceback attribution, so a genuine failure in the plugin's own code still raises even if it shares a name with a declared optional root.</li>
+<li><strong>Same top-level package.</strong> A missing module under the entry point's own top-level package re-raises, unless its name sits under an eligible declared root (a <code>mloda.community</code> plugin declaring <code>mloda.enterprise</code>); traceback attribution alone does not rescue it. When the missing module is the entry point's own module or a parent package (files gone, metadata left), the error names the entry point, distribution and module, and suggests <code>pip install --force-reinstall &lt;distribution&gt;</code>.</li>
 <li><strong>Policies apply, after import.</strong> A registration denied by an installed <a href="../plugin_registry/#governance">plugin policy</a> raises inside <code>register()</code>; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.</li>
+<li><strong>Discovery is cached per process.</strong> An in-place edit of an existing <code>entry_points.txt</code> needs <code>all(force_reload=True)</code> or <code>reset_cache()</code>. The plugin module list is cached too, so a plugin file added to the plugin package at runtime needs the same.</li>
 </ul>
               
             </div>

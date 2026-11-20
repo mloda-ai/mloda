@@ -101,67 +101,35 @@
     <ul class="current">
     <li class="toctree-l2"><a class="reference internal" href="#overview">Overview</a>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#baseinputdata-pattern">BaseInputData Pattern</a>
+    <li class="toctree-l2"><a class="reference internal" href="#data-sources">Data Sources</a>
+    </li>
+    <li class="toctree-l2"><a class="reference internal" href="#writing-a-source-featuregroup">Writing a source FeatureGroup</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#purpose">Purpose</a>
+    <li class="toctree-l3"><a class="reference internal" href="#loaders-and-compute-frameworks">Loaders and compute frameworks</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#key-characteristics">Key Characteristics</a>
+    <li class="toctree-l3"><a class="reference internal" href="#column-discovery-and-row-counts">Column discovery and row counts</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#use-cases">Use Cases</a>
+    <li class="toctree-l3"><a class="reference internal" href="#documents-as-features">Documents as features</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#example-implementation">Example Implementation</a>
+    <li class="toctree-l3"><a class="reference internal" href="#pointing-a-feature-at-a-source">Pointing a feature at a source</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#common-baseinputdata-implementations">Common BaseInputData Implementations</a>
+    <li class="toctree-l3"><a class="reference internal" href="#non-file-sources-such-as-http">Non-file sources such as HTTP</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#writing-an-input-data-reader">Writing an input-data reader</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#column-discovery">Column discovery</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#row-counts">Row counts</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#selecting-among-sibling-readers">Selecting among sibling readers</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#reader-selection-vs-feature-group-resolution">Reader selection vs feature-group resolution</a>
+    <li class="toctree-l3"><a class="reference internal" href="#resolution-of-a-pointed-group-vs-feature-group-resolution">Resolution of a pointed group vs feature-group resolution</a>
     </li>
     <li class="toctree-l3"><a class="reference internal" href="#declining-with-an-attributable-reason">Declining with an attributable reason</a>
     </li>
         </ul>
     </li>
-    <li class="toctree-l2"><a class="reference internal" href="#matchdata-pattern">MatchData Pattern</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#purpose_1">Purpose</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#key-characteristics_1">Key Characteristics</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#when-matchdata-is-used">When MatchData is Used</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#use-cases_1">Use Cases</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#example-implementation_1">Example Implementation</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#connection-forwarding">Connection Forwarding</a>
-    </li>
-        </ul>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#key-differences">Key Differences</a>
-    </li>
-    <li class="toctree-l2"><a class="reference internal" href="#how-they-work-together">How They Work Together</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#baseinputdata-workflow">BaseInputData Workflow</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#matchdata-workflow-connection-specific">MatchData Workflow (Connection-Specific)</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#combined-usage-example">Combined Usage Example</a>
-    </li>
-        </ul>
+    <li class="toctree-l2"><a class="reference internal" href="#connections">Connections</a>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#practical-examples">Practical Examples</a>
         <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#scenario-1-standard-file-processing-baseinputdata-only">Scenario 1: Standard File Processing (BaseInputData Only)</a>
+    <li class="toctree-l3"><a class="reference internal" href="#scenario-1-standard-file-processing-source-featuregroup-only">Scenario 1: Standard File Processing (Source FeatureGroup Only)</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</a>
+    <li class="toctree-l3"><a class="reference internal" href="#scenario-2-datacreatorfeaturegroup-featureconnection">Scenario 2: DataCreatorFeatureGroup + Feature(connection=)</a>
     </li>
-    <li class="toctree-l3"><a class="reference internal" href="#scenario-3-in-memory-processing-baseinputdata-only">Scenario 3: In-Memory Processing (BaseInputData Only)</a>
+    <li class="toctree-l3"><a class="reference internal" href="#scenario-3-in-memory-processing-datacreatorfeaturegroup-only">Scenario 3: In-Memory Processing (DataCreatorFeatureGroup Only)</a>
     </li>
         </ul>
     </li>
@@ -174,14 +142,6 @@
         </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#best-practices">Best Practices</a>
-        <ul>
-    <li class="toctree-l3"><a class="reference internal" href="#when-to-use-baseinputdata-only">When to Use BaseInputData Only</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#when-to-use-baseinputdata-matchdata">When to Use BaseInputData + MatchData</a>
-    </li>
-    <li class="toctree-l3"><a class="reference internal" href="#design-considerations">Design Considerations</a>
-    </li>
-        </ul>
     </li>
     <li class="toctree-l2"><a class="reference internal" href="#related-documentation">Related Documentation</a>
     </li>
@@ -228,6 +188,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -278,59 +242,31 @@
           <div role="main" class="document" itemscope="itemscope" itemtype="http://schema.org/Article">
             <div class="section" itemprop="articleBody">
               
-                <h1 id="data-access-patterns-baseinputdata-vs-matchdata">Data Access Patterns: BaseInputData vs MatchData</h1>
+                <h1 id="data-access-patterns-source-featuregroups">Data Access Patterns: Source FeatureGroups</h1>
 <h2 id="overview">Overview</h2>
-<p>mloda provides two distinct but complementary patterns for data access: <strong>BaseInputData</strong> and <strong>MatchData</strong>. While they may appear similar at first glance, they serve different purposes and are used in different contexts within the framework.</p>
-<p>This document clarifies the differences between these concepts and their respective use cases. For practical examples of data access methods, see <a href="../access-feature-data/">Data Access Overview</a>.</p>
-<h2 id="baseinputdata-pattern">BaseInputData Pattern</h2>
-<h3 id="purpose">Purpose</h3>
-<p>BaseInputData is an <strong>abstract base class</strong> that defines how feature groups <strong>load and access data</strong>. It's the foundation for data loading mechanisms in mloda.</p>
-<h3 id="key-characteristics">Key Characteristics</h3>
+<p>mloda reads data through <strong>source FeatureGroups</strong> (files, documents, databases and custom sources).</p>
+<p>For practical examples of data access methods, see <a href="../access-feature-data/">Data Access Overview</a>.</p>
+<h2 id="data-sources">Data Sources</h2>
 <ul>
-<li><strong>Data Loading Focus</strong>: Primarily concerned with how to load data from various sources</li>
-<li><strong>Feature Group Integration</strong>: Used by feature groups through the <code>input_data()</code> method</li>
-<li><strong>Inheritance-Based</strong>: Concrete implementations inherit from BaseInputData</li>
-<li><strong>Scope Management</strong>: Supports both global and feature-specific data access scopes</li>
-<li><strong>Universal Usage</strong>: Used by all feature groups that need to load data</li>
+<li><strong>Source FeatureGroups</strong>: one FeatureGroup per kind of source, claiming features through <code>CLAIM_ROUTES</code>:<ul>
+<li><code>ReadFileFG</code> with <code>CsvFG</code>, <code>ParquetFG</code>, <code>JsonFG</code>, <code>FeatherFG</code>, <code>OrcFG</code> (see <a href="../access-feature-data/#global-scope-data-access">access-feature-data</a>)</li>
+<li><code>ReadDBFG</code> with <code>SqliteFG</code></li>
+<li><code>DuckdbFG</code>: reads the tables and views of a DuckDB connection in the DataAccessCollection, only when the feature's <code>connection_handle</code> names it (<code>Feature("amount", connection=conn)</code> sets one). On DuckDB it hands over a lazy relation on your connection, so later DuckDB steps run as SQL; elsewhere it loads a <code>pa.Table</code>. It reads the <code>main</code> schema of the connection's current database; a <code>connection_handle</code> forwarded from a consumer counts too. A feature tied to a DuckDB connection whose table has a column of that name is read from the table, so if another group also serves that name, resolution reports both groups (leave <code>DuckdbFG</code> out of the plugin collector, or rename). Off DuckDB it reads through a separate cursor, which sees committed rows only. mloda never closes the connection.</li>
+<li><code>ReadDocumentFG</code> with <code>TextFG</code>, <code>PyFG</code>, <code>MarkdownFG</code>, <code>YamlFG</code>, <code>JsonDocumentFG</code>; documents skip suffixes owned by ReadFileFG groups by default</li>
 </ul>
-<h3 id="use-cases">Use Cases</h3>
-<ul>
-<li>Reading files (CSV, JSON, Parquet, etc.)</li>
-<li>Connecting to databases</li>
-<li>Creating synthetic/test data</li>
-<li>Loading data from APIs</li>
-<li>Managing data dependencies between features</li>
+</li>
+<li><strong>DataCreatorFeatureGroup</strong>: For generating synthetic data (see <a href="../access-feature-data/#datacreatorfeaturegroup">access-feature-data</a>)</li>
+<li><strong>ApiDataFG</strong>: A source FeatureGroup for runtime data injection (see <a href="../access-feature-data/#apidatafg">access-feature-data</a>)</li>
 </ul>
-<p>For detailed examples of these use cases, see the <a href="../access-feature-data/">data access documentation</a>.</p>
-<h3 id="example-implementation">Example Implementation</h3>
-<pre><code class="language-py">from mloda.provider import BaseInputData, FeatureGroup, FeatureSet
-
-class ReadFileFeature(FeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return ReadFile()  # BaseInputData implementation
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
-        reader = cls.input_data()
-        if reader is not None:
-            data = reader.load(features)
-            return data
-        raise ValueError(&quot;Reading file failed.&quot;)
-</code></pre>
-<h3 id="common-baseinputdata-implementations">Common BaseInputData Implementations</h3>
+<h2 id="writing-a-source-featuregroup">Writing a source FeatureGroup</h2>
+<p>Subclass the base that fits your source and write only what it asks for. The base owns the matching: claim routes, source discovery, pointers, <code>data_access_handle</code>, <code>column_to_file</code>, per-run caching, ambiguity and missing-column errors, and the extender hook around the load.</p>
+<p>A source group can also describe its data through <code>declared_attributes</code>, see <a href="../feature-group-matching/#declared-attributes-and-input-requirements">Declared Attributes and Input Requirements</a>.</p>
 <ul>
-<li><strong>ReadFile</strong>: For structured file-based data loading (see <a href="../access-feature-data/#global-scope-data-access">access-feature-data</a>)</li>
-<li><strong>ReadDocument</strong>: For unstructured document loading (Markdown <code>.md</code>, YAML <code>.yaml</code>/<code>.yml</code>, text <code>.text</code>/<code>.txt</code>/<code>.TXT</code>). Skips file types owned by ReadFile by default.</li>
-<li><strong>DataCreator</strong>: For generating synthetic data (see <a href="../access-feature-data/#data-creator">access-feature-data</a>)</li>
-<li><strong>ApiInputData</strong>: For runtime data injection (see <a href="../access-feature-data/#apidata">access-feature-data</a>)</li>
-<li><strong>ReadDB</strong>: For database-backed loading</li>
-</ul>
-<h3 id="writing-an-input-data-reader">Writing an input-data reader</h3>
-<p>Each reader family exposes a recommended hook seam. Overriding <code>load_data</code> wholesale remains supported in every family.</p>
-<ul>
+<li><strong>SourceFeatureGroup</strong> (any source): declare <code>CLAIM_ROUTES</code>, implement <code>find_sources</code> and <code>load_neutral</code>; optionally <code>columns</code>, <code>has_column</code>, <code>ambiguity_fix</code> (the default hint names <code>data_access_handle</code> only if the group declares it in <code>PROPERTY_MAPPING</code>; override it if the group takes no pointer), <code>describe_columns</code>, <code>count_rows</code>, and <code>match_connection</code> when the source is a connection in the DataAccessCollection (the planner then keeps the read on a framework that accepts it), <code>neutral_type</code> when <code>load_neutral</code> returns one type (a run without a <code>compute_frameworks</code> list then prefers a framework that takes it as is). <code>query_text</code> is reserved: a group whose routes do not require it declines, and aborts when pointed. To honor <code>data_access_handle</code> like the stock bases, declare <code>PROPERTY_MAPPING = {HANDLE_OPTION: HANDLE_SPEC}</code> (both from <code>mloda.provider</code>); without it a non-str handle is not rejected. A <code>NamePolicy.DECLARED</code> route claims the names in <code>declared_names()</code> and those starting with a prefix from <code>declared_name_prefixes()</code> or <code>&lt;ClassName&gt;_</code> (not the bare prefix itself); the check also runs when a request points at the group, which then declines before any source probe. A prefix does not claim a name holding <code>__</code> from the prefix's last character on, so a chain such as <code>&lt;prefix&gt;x__sum_aggr</code> goes to the group that computes it (list such a name in <code>declared_names()</code> to claim it).</li>
+<li><strong>ReadFileFG</strong>: implement <code>suffixes()</code> and <code>column_names(path)</code>. It inherits file and folder discovery, the pinned-file rule, and a default <code>load_neutral</code> that hands a <code>FileSource</code> to the compute framework; the stock <code>FileSource</code> transformers read csv, parquet, json, feather and orc.</li>
+<li><strong>ReadDocumentFG</strong>: implement <code>suffixes()</code>; optionally <code>read_text</code> and <code>handover_suffixes</code>. It inherits the three names <code>&lt;Group&gt;</code>, <code>&lt;Group&gt;~source</code> and <code>&lt;Group&gt;~file_type</code>.</li>
 <li>
-<p><strong>ReadDB</strong>: implement <code>produce_rows</code>, <code>connect</code>, and <code>is_valid_credentials</code>; optionally <code>prepare_credentials</code>, <code>build_query</code>, and <code>claims_feature_name</code> (a name-only check that runs before any credential probe). To check credentials against <code>PropertySpec</code>s, use <code>validate_property_values</code>, converting its error, since any raise other than a soft <code>NotImplementedError</code> aborts matching:</p>
+<p><strong>ReadDBFG</strong>: implement <code>is_valid_credentials</code>, <code>database_identity</code>, <code>connect</code>, <code>list_tables</code>, <code>table_columns</code> and <code>produce_rows</code>. <code>is_valid_credentials</code> must never raise. <code>database_identity</code> must not contain credential values. <code>login_key(credentials)</code> returns a credential-free hashable where equal keys mean the same login (default: a keyed digest of the credentials without <code>table_name</code>, with values that are not plain scalars compared by equality); two logins on one source are told apart by <code>data_access_handle</code>. Override <code>login_key</code> when credential fields that do not change grants (timeouts, application names) differ between handles. <code>data_access_identity</code> names the dataset, not the login. The table catalog is cached per run per login (<code>login_key</code>) and preset table; with a preset <code>table_name</code>, only that table's columns are read. <code>rechecked_filters(features)</code> gives the filters a read may push into its query, since the framework applies them again after the load. A subclass whose calculation uses the loaded rows beyond loading them (ranks, totals) overrides <code>rechecked_filters</code> to return <code>[]</code>. <code>SqliteFG</code> pushes exact numeric and text-equality shapes into a parameterized WHERE and leaves everything else to the post-read filter, so a run that succeeds today returns the same rows; it pushes only when each untyped column holds one storage class, and a typed filter column only when its type matches the declared affinity (INT64, DOUBLE, STRING). To check credentials against <code>PropertySpec</code>s, use <code>validate_property_values</code> and convert its error:</p>
 <p>```python
 from typing import Any</p>
 <p>from mloda.provider import PropertySpec, PropertyValidationError, validate_property_values</p>
@@ -346,276 +282,122 @@ assert not is_valid_credentials({"host": "db", "password": "secret"})
 ```</p>
 </li>
 <li>
-<p><strong>ReadDocument</strong>: implement <code>produce_document</code> and <code>suffix</code>; optionally <code>document_file_type</code>.</p>
+<p><strong>ReadDBFG query route</strong>: opt in with <code>CLAIM_ROUTES = (*ReadDBFG.CLAIM_ROUTES, ReadDBFG.QUERY_ROUTE)</code> and implement <code>produce_query_rows(connection, query_text, features)</code>. A query-only group lists just <code>(ReadDBFG.QUERY_ROUTE,)</code> and stubs the table hooks. The source is a hash of the query text, so textually different queries are different sources. Without a pointer the route claims any leaf name for each matching credential in the DataAccessCollection, and it switches off the table route for that feature. A derived name such as <code>price__sum_aggr</code> goes to the group that computes it; <code>feature_group=&lt;Group&gt;</code> overrides that.</p>
 </li>
-<li><strong>ReadFile</strong>: override <code>load_data</code> wholesale to return the table. <code>CsvReader</code> resolves to a <code>FileSource</code> descriptor that the target compute framework materializes into its native type.</li>
 </ul>
-<p>Override <code>data_access_identity</code> to publish a richer identity than the default.</p>
+<p>A source group's <code>PROPERTY_MAPPING</code> is merged over the declarations of every class in its MRO, mixins included, even when the group declares none of its own: own keys win and base keys cannot be dropped, so <code>PROPERTY_MAPPING = None</code> on a source group raises <code>TypeError</code>. Class definition is checked: a <code>ClaimRoute</code> with a wrongly typed field, a file or document route whose <code>source_kind</code> is not <code>"file"</code> or <code>"folder"</code>, and <code>suffixes()</code> that does not return a non-empty tuple of non-empty strings all raise <code>TypeError</code>. A concrete group's <code>suffixes()</code> runs at class definition.</p>
+<p>A source group reports <code>match.source</code> as its <code>data_access_identity</code>; override it to publish a richer identity. Run the reader suites <code>read_file_suite</code>, <code>read_db_suite</code>, <code>read_document_suite</code> and <code>loads_into_framework_suite</code> (it checks the group loads into the host's compute framework, one host per framework) from <code>mloda.testing.source</code> against your group; they pin the behavior every source group shares.</p>
+<p>A family of groups shares an abstract base, which declines; each concrete subclass matches itself through the base's path. Customize discovery through <code>CLAIM_ROUTES</code> and <code>find_sources</code>, which run behind the <code>INPUT_DATA_MATCH</code> gate. An override of <code>match_feature_group_criteria</code> calls <code>super()</code> and runs any extra I/O through <code>gated_probe</code> (see <a href="../../chapter1/extender/">Extender</a>). Another group asks whether a source group has data in reach with <code>has_source(options, data_access_collection, feature_name)</code>, which applies matching's route selection without claiming. True means a selected route's <code>find_sources</code> returned a match, not that the source is readable or holds the named column. Pass the name you are about to claim so gates see it.</p>
+<p>A derived group should declare its dependencies in <code>input_features</code> and match names and options without probing readers itself. Resolution checks competing groups' input chains in the run's environment.</p>
+<p>For example, a derived group and a CSV column may both claim <code>revenue</code>. The CSV route yields when the derived group's input chain resolves; if that chain has a missing or refused input, the CSV column remains available. Use <code>feature_group=CsvFG</code> to scope the request to the CSV source.</p>
 <p>CSV inference semantics are defined by pyarrow's default CSV reader; the stdlib reader behind PythonDict follows it. Types are inferred per column: null tokens (pyarrow's default set, e.g. <code>NA</code>, <code>NaN</code>, <code>null</code>) become <code>None</code> in an int/float/bool column but stay literal text in a string column, a column of only empty cells and/or null tokens is all-<code>None</code>, and an int column with a value outside signed int64 range degrades entirely to float.</p>
+<h4 id="loaders-and-compute-frameworks">Loaders and compute frameworks</h4>
+<p>A database implementation receives <code>data.access</code> as a <code>DBTable</code> (or a <code>DBQuery</code> on the query route), both from <code>mloda.provider</code>. A subclass that changes parsing (for example a semicolon CSV overriding only <code>column_names</code>) must also override <code>load_neutral</code>, otherwise the inherited neutral form and the inherited implementations still parse the parent format.</p>
+<p>A per-framework fast path is an <code>Implementation[YourFG]</code> (from <code>mloda.provider</code>): set <code>feature_group</code> (a <code>SourceFeatureGroup</code> subclass) and <code>compute_framework</code>, and write a classmethod <code>calculate(group, data, features, framework)</code> that returns the data (<code>data</code> is the <code>SourceMatch</code>). At plan build mloda picks one per step over the governed set, walking the group MRO, then the framework MRO, most specific pair first; the serving subclass is passed as <code>group</code>. A class that overrides <code>load_neutral</code> cuts off implementations inherited from above it, and a subclass of an implementation replaces it. Two implementations of one exact pair where neither subclasses the other stop the environment build with <code>EnvironmentPreconditionError</code>. Without an implementation the group loads <code>load_neutral</code> and a transformer converts. An implementation must stay referenced: define it at module level, because an unreferenced class is garbage-collected and no longer found. An <code>__init_subclass__</code> override must call <code>super().__init_subclass__()</code>, or the implementation is not found. Disable one with <code>PluginCollector.add_disabled_implementation_classes</code>. Calls made without an engine (<code>count_rows</code>) see every loaded implementation, not the governed set. <code>Implementation.version()</code> hashes the class like a FeatureGroup's. <code>PlanStep</code>, the plan lock and <code>HookContext.implementation</code> record which implementation ran.</p>
 <p>The stdlib reader does not yet cover pyarrow's full surface. Where they differ, a column pyarrow types stays a string column in PythonDict: dates, timestamps and times, whitespace-padded numbers (<code>" 1 "</code>), <code>inf</code>/<code>infinity</code>, uppercase <code>NAN</code> (the float value, not the <code>NaN</code> null token), hex literals (<code>0x1f</code>), and a <code>true</code>/<code>1</code> mix (pyarrow reads <code>1</code>/<code>0</code> as bools too).</p>
-<p>Readers are classified structurally; no reader code is executed for classification. <code>is_final_reader()</code> is True when a class overrides <code>load_data</code> wholesale, or when it overrides all hooks named by its family's <code>_final_reader_requires()</code> (for example <code>("produce_rows", "connect")</code> for ReadDB). Family bases (ReadDB, ReadDocument, ReadFile) are never discovered as final readers themselves.</p>
-<p><strong>Warning</strong>: classification is structural (declared is overridden), so an intermediate base that re-declares a hook or <code>load_data</code> with a bare <code>raise NotImplementedError</code> body is classified as a final reader and enters discovery. Intermediate bases must not re-declare bare hooks; re-anchor the family by declaring <code>_final_reader_requires</code> instead.</p>
-<p><code>_final_reader_requires</code> is underscore-named but is a stable, documented extension point for third-party reader families.</p>
-<h3 id="column-discovery">Column discovery</h3>
-<p><code>BaseInputData.describe_columns(data_access) -&gt; dict[str, DataType | None]</code> maps column name to <code>DataType</code> (<code>None</code> where unknown). It raises <code>NotImplementedError</code> when a reader can't enumerate columns, and <code>ImportError</code> when a backend it needs is missing; a missing or unreadable source raises <code>OSError</code> or <code>ValueError</code>. <code>ReadFile</code> supplies a family default wrapping <code>get_column_names</code> with unknown types and accepting a <code>str</code> or <code>Path</code> data access (anything else raises <code>ValueError</code>); <code>ParquetReader</code>, <code>FeatherReader</code>, and <code>OrcReader</code> override it to report the types stored in the file's own schema, and <code>JsonReader</code> the types pyarrow infers while parsing. <code>SQLITEReader</code> overrides it too, from SQLite's declared (unenforced) column types; it needs <code>data_access["table_name"]</code> already set, e.g. <code>{"sqlite": path, "table_name": "customers"}</code>; matching sets it on a copy, not on the registered credential.</p>
-<h3 id="row-counts">Row counts</h3>
-<p><code>BaseInputData.count_rows(data_access, compute_framework) -&gt; int | None</code> returns the row count of <code>data_access</code> without loading it, or <code>None</code> when only a read can tell (the default); it raises <code>ImportError</code> when a backend it needs is missing, and <code>OSError</code>/<code>ValueError</code> for a non-path, missing, or unreadable source. <code>ParquetReader</code>, <code>OrcReader</code>, and <code>FeatherReader</code> count from file metadata for every compute framework; <code>CsvReader</code> only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ. A subclass overriding <code>load_data</code> gets <code>None</code> unless it also overrides <code>count_rows</code>. The count is of <code>data_access</code> itself, not of the step's output: filters, extenders, and feature-group logic may change what the step actually reports.</p>
-<h3 id="selecting-among-sibling-readers">Selecting among sibling readers</h3>
-<p>A feature selects a specific reader with an Option whose key equals the reader's <code>BaseInputData.data_access_name()</code>, which defaults to <code>cls.__name__</code> (unique per class, so sibling readers cannot collide) and which a reader that overrides it keeps unique within its family itself:</p>
-<pre><code class="language-py">Feature(&quot;value&quot;, options={UbaAirReader.__name__: url})
+<h3 id="column-discovery-and-row-counts">Column discovery and row counts</h3>
+<p><code>describe_columns(match)</code> maps column name to <code>DataType</code> (<code>None</code> where unknown) and raises <code>NotImplementedError</code> when the group cannot enumerate columns, <code>ImportError</code> when a backend it needs is missing, and <code>OSError</code> or <code>ValueError</code> for an unreadable source. <code>ReadFileFG</code> lists the names from <code>column_names</code>; <code>ParquetFG</code>, <code>FeatherFG</code> and <code>OrcFG</code> report the types stored in the file's schema, <code>JsonFG</code> the types pyarrow infers while parsing, and <code>SqliteFG</code> SQLite's declared (unenforced) column types. A document group reports its three names as strings.</p>
+<p><code>count_rows(match, compute_framework)</code> returns the row count of the source without loading it, or <code>None</code> when only a read can tell (the default). <code>ParquetFG</code>, <code>OrcFG</code> and <code>FeatherFG</code> count from file metadata for every compute framework; <code>CsvFG</code> only under PythonDict, since other frameworks read CSV through pyarrow, whose row split can differ; a document group counts one. With <code>text_lines</code> the plan-time estimate still counts each document as one row; the result-size <code>max_rows</code> check after the run still applies. The count is of the source itself, not of the step's output: filters, extenders and feature-group logic may change what the step reports. Both are called on the group with the <code>SourceMatch</code>; from a prepared session use <code>session.describe_columns(step)</code> and <code>session.count_rows(step)</code> (see the mloda API page).</p>
+<h3 id="documents-as-features">Documents as features</h3>
+<p>A chained feature can read a document group. <code>TextFG</code> returns the whole text in one row; <code>text_lines</code> turns that into one row per non-blank line, with <code>~source</code> and <code>~file_type</code> repeated per row. Chained features such as <code>TextFG__upper</code> pass the option on to <code>TextFG</code>.</p>
+<pre><code class="language-text">Feature(&quot;TextFG__upper&quot;, options=Options(group={&quot;text_lines&quot;: True}))
+Feature(&quot;TextFG~source&quot;, options=Options(group={&quot;text_lines&quot;: True}))
 </code></pre>
-<p>The reader class itself is also accepted as the key, e.g. <code>Feature("value", options={UbaAirReader: url})</code>; it is normalized to the class-name string when the Options object is constructed, so both forms are one identity.</p>
-<p>The matched <code>(ReaderClass, data_access)</code> pair lives on <code>Feature.input_data_match</code>, never in the options, and <code>load</code> hands it to <code>init_reader(reader_data_access)</code> at load time; <code>PlanStep.reader_data_access</code> exposes the same pair on a resolved plan. <code>data_access</code> may hold credentials, so use <code>PlanStep.data_access_identity</code> (or <code>reader.data_access_identity(data_access)</code> outside a plan) for display and logs. If a reader's own error text may carry a credential, scrub it with <code>mloda.provider.scrub_credentials</code> before logging.</p>
-<p>For non-file sources such as HTTP endpoints, subclassing <code>ReadFile</code> and overriding <code>match_subclass_data_access</code> plus <code>load_data</code> is a supported pattern; on that path <code>suffix()</code> is never consulted (it is inert). <code>ApiInputData</code> injects in-memory data passed through the API request and is not an HTTP client.</p>
-<h3 id="reader-selection-vs-feature-group-resolution">Reader selection vs feature-group resolution</h3>
-<p>Reader selection answers "which plugin handles this input" the way <a href="../feature-group-matching/">feature-group resolution</a> answers "which feature group owns this name". It is not a second resolver: it runs nested inside the criteria gate of feature-group resolution, where <code>match_feature_group_criteria</code> calls the reader family's <code>matches()</code>. The two deliberately share no request, environment, or outcome abstractions; they share only the low-level rejection channel described below.</p>
-<table>
-<thead>
-<tr>
-<th>Aspect</th>
-<th>Feature-group resolution</th>
-<th>Reader selection</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Candidate discovery</strong></td>
-<td>Registered accessible plugins</td>
-<td>Structural walk over the family's final readers (<code>is_final_reader()</code>); no reader code executed</td>
-</tr>
-<tr>
-<td><strong>Auto-loading</strong></td>
-<td>Up-front plugin loading</td>
-<td>Lazy per-family <code>_auto_load_group</code>, triggered only when no final readers are found</td>
-</tr>
-<tr>
-<td><strong>Accessibility policy</strong></td>
-<td>Strict mode, collector policy, enabled compute frameworks</td>
-<td>None: every final reader of the family is a candidate</td>
-</tr>
-<tr>
-<td><strong>Matching</strong></td>
-<td>Criteria, domain, scope, capability, framework-pin, and links gates</td>
-<td>Per-reader file, suffix, column-validation, and pinning rules</td>
-</tr>
-<tr>
-<td><strong>Ambiguity</strong></td>
-<td>Multiple winners resolved by subclass preference, then reported</td>
-<td>Two readers accepting the same access raise (a subclass replaces its parent for the same access); pin one by its option key to pick it</td>
-</tr>
-<tr>
-<td><strong>Outcome and diagnostics</strong></td>
-<td>Structured evaluation result rendered into failure messages</td>
-<td>A matched <code>(ReaderClass, data_access)</code> pair written into options; declines surface through the shared rejection channel</td>
-</tr>
-</tbody>
-</table>
+<h3 id="pointing-a-feature-at-a-source">Pointing a feature at a source</h3>
+<ul>
+<li><code>options={"CsvFG": path}</code> points the group at one file (or folder). The class object works as the key too (<code>options={CsvFG: path}</code>), and a <code>data_access_name()</code> override does not add an alias pointer: only class names point. A subclass also answers to its parent's name, so <code>Feature("x", options={"CsvFG": path})</code> reaches a <code>CsvFG</code> subclass. A pointer makes the other source groups skip the collection, and a pointer at a group that is not accessible in the run raises, naming the filter that dropped it.</li>
+<li><code>options={"SqliteFG": Credential(sqlite="/x.db")}</code> points a database group at one database. A plain-dict pointer works too: the matched options hold it as a <code>RegisteredCredential</code>, so <code>str(options)</code> masks its values. Prefer <code>Credential</code> for secrets: a pointer forwarded to a consumer prints raw there.</li>
+<li><code>Feature(name, options={"query_text": ..., "&lt;Group&gt;": Credential(...)})</code> runs a query on a database group that opts into <code>ReadDBFG.QUERY_ROUTE</code>; a group without the route declines when unpointed and aborts when pointed.</li>
+<li><code>Feature(..., feature_group=CsvFG)</code> scopes resolution to that group (and its subclasses) without choosing a source.</li>
+<li><code>data_access_handle</code> only narrows: it picks one of the sources the <code>DataAccessCollection</code> holds and never points a group at a source the collection lacks.</li>
+<li><code>column_to_file</code> pins columns to files in the <code>DataAccessCollection</code>; a pinned file that cannot serve the request aborts instead of falling back (see <a href="../access-feature-data/">access-feature-data</a>).</li>
+</ul>
+<p>The matched pair lives on <code>Feature.input_data_match</code>, never in the options, and is handed to the loader at load time. The source may hold credentials, so use <code>PlanStep.data_access_identity</code> (or <code>Group.data_access_identity(match)</code> outside a plan) for display and logs. If your own error text may carry a credential, scrub it with <code>mloda.provider.scrub_credentials</code> before logging.</p>
+<h3 id="non-file-sources-such-as-http">Non-file sources such as HTTP</h3>
+<p>Write a <code>SourceFeatureGroup</code> subclass with a pointed-only <code>NamePolicy.OPEN</code> claim route: it claims a name only when pointed at (<code>options={"MyApiFG": url}</code> or <code>feature_group=MyApiFG</code>). Implement <code>find_sources</code> and <code>load_neutral</code> to fetch and return the data. A plain <code>FeatureGroup</code> is not a pointer target. A key that differs from a loaded source group's name only by case raises a <code>SourcePointerError</code>; a key naming a group that is not loaded is an unknown option key and is ignored. <code>ApiDataFG</code> injects in-memory data passed through the API request and is not an HTTP client.</p>
+<h3 id="resolution-of-a-pointed-group-vs-feature-group-resolution">Resolution of a pointed group vs feature-group resolution</h3>
+<p>Source selection runs inside <a href="../feature-group-matching/">feature-group resolution</a>: the group's matcher is the criteria gate, so a group is accessible, scoped and framework-checked like any other feature group. Several sources found for one name in one group are an error naming them and the fix; two groups finding the same column is ordinary feature-group ambiguity (fix with <code>feature_group=</code>, a pointer or <code>data_access_handle</code>). See <a href="../troubleshooting/feature-group-resolution-errors/">Resolution errors</a>.</p>
 <h3 id="declining-with-an-attributable-reason">Declining with an attributable reason</h3>
-<p>A reader that owns an input but cannot serve the requested feature can record why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled <code>(input data)</code>. <code>record_match_rejection</code> is exported via <code>mloda.provider</code>. A custom reader owns its own suffix and overrides <code>load_data</code> wholesale; its own decline points sit beyond the automatic column validation, for example a required schema marker in the header:</p>
+<p>A source group that owns a source but cannot serve the requested feature records why it declined; the reason then appears in the near-miss block of the "No feature groups found" error message, labeled <code>(input data)</code>. <code>record_match_rejection</code> is exported via <code>mloda.provider</code>. A custom ReadFileFG group owns its own suffix and lists its columns; a <code>ValueError</code> from <code>column_names</code> declines the file with a recorded reason, for example a required schema marker in the header:</p>
 <pre><code class="language-python">from typing import Any
 
-from mloda.provider import INPUT_DATA_STAGE, FeatureSet, record_match_rejection
-from mloda_plugins.feature_group.input_data.read_file import ReadFile
+from mloda.provider import FeatureSet, ReadFileFG
 
-class SensorCsvReader(ReadFile):
+class SensorCsvFG(ReadFileFG):
     @classmethod
-    def suffix(cls) -&gt; tuple[str, ...]:
+    def suffixes(cls) -&gt; tuple[str, ...]:
         return (&quot;.sensorcsv&quot;,)
 
     @classmethod
-    def load_data(cls, data_access: Any, features: FeatureSet) -&gt; Any: ...
-
-    @classmethod
-    def validate_columns(cls, file_name: str, feature_names: list[str]) -&gt; bool:
-        if super().validate_columns(file_name, feature_names) is False:
-            return False
-        with open(file_name, encoding=&quot;utf-8&quot;) as handle:
+    def column_names(cls, path: str) -&gt; list[str]:
+        with open(path, encoding=&quot;utf-8&quot;) as handle:
             header = handle.readline()
         if &quot;#sensor-schema&quot; not in header:
-            record_match_rejection(
-                cls.get_class_name(),
-                f&quot;{cls.get_class_name()} matched the suffix of {file_name} &quot;
-                f&quot;but its header lacks the #sensor-schema marker&quot;,
-                stage=INPUT_DATA_STAGE,
-            )
-            return False
-        return True
+            raise ValueError(&quot;its header lacks the #sensor-schema marker&quot;)
+        return header.replace(&quot;#sensor-schema&quot;, &quot;&quot;).strip().split(&quot;,&quot;)
+
+    @classmethod
+    def load_neutral(cls, match: Any, features: FeatureSet) -&gt; Any: ...
 </code></pre>
 <p>The recorded decline renders as a near-miss line of the resolution failure:</p>
-<pre><code>  - SensorFeatureGroup (input data): SensorCsvReader matched the suffix of /data/run1.sensorcsv but its header lacks the #sensor-schema marker
+<pre><code>  - SensorCsvFG (input data): SensorCsvFG matched /data/run1.sensorcsv but could not read its columns: its header lacks the #sensor-schema marker [code: source_unreadable]
 </code></pre>
-<p>Rules for reader authors:</p>
+<p>Rules for source group authors:</p>
 <ul>
-<li>Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature.</li>
-<li>Plain non-matches (wrong suffix, invalid credentials) stay silent. An unmarked <code>NotImplementedError</code> from <code>is_valid_credentials</code> is a silent non-match; from <code>check_feature_in_data_access</code> it is an accept for a plain name (the reader matches on credentials alone). A raise marked with <code>escalate_match_abort</code> propagates instead of being read as a non-match.</li>
-<li>Never raise to decline: anything but an unmarked <code>NotImplementedError</code> in the DB match hooks aborts matching for every reader sharing the <code>DataAccessCollection</code>. Record, then return a falsy value.</li>
-<li>Recording outside an engine-opened window is a no-op, so readers stay usable standalone.</li>
-<li>Recorded reasons are discarded at the enclosing candidate level: when the reader ultimately matches, when a sibling reader matches, or, for unowned recordings, when the feature group matches by another rule. An owned veto instead gates the name-based rules (see the paragraph below). Only a decline surfaces them.</li>
-<li>Name the reader and the concrete input in the reason, as the example does. Any label works as the owner name, an overridden <code>data_access_name()</code> included, but it must be distinct among the reader's own decline points: the first recording per owner wins, so a later reason under a name already used in the same window is dropped and never reaches the owned stage.</li>
-<li>A <code>ReadFile</code> subclass that cannot enumerate columns (no <code>get_column_names</code> override, or one raising <code>NotImplementedError</code> or <code>ImportError</code>), and a <code>ReadDB</code> subclass that does not override <code>check_feature_in_data_access</code>, decline a chain- or column-separated feature name while matching. A <code>ReadDocument</code> subclass declines such a name on a <code>DataAccessCollection</code> (not on a <code>str</code> or <code>Path</code> access), since a document reader has no columns to confirm such a name. An explicit <code>column_to_file</code> pin is exempt; for <code>ReadDB</code>, overriding the hook opts out.</li>
-<li>In <code>ReadFile</code> matching, an unpinned file whose columns cannot be read (<code>OSError</code>, <code>ValueError</code>) is declined with a recorded reason, so a shipped file reader needs the file to be readable when features resolve. A pinned file that cannot be read raises instead of falling back to another file. Any other exception from <code>get_column_names</code> ends reader selection for that feature group candidate, so no sibling reader is tried (the engine contains it as a non-match for that candidate); a raise marked with <code>escalate_match_abort</code> propagates out of matching.</li>
+<li>Record only when ownership is established but the content fails: right suffix but a missing column, valid credentials but a declined feature. Plain non-matches (wrong suffix, invalid credentials, a name the group does not declare) stay silent. A group that checks declared names in full, such as <code>ReadDocumentFG</code>, records <code>name_not_declared</code> for a numbered form of a declared name.</li>
+<li>A request that points at no source group, for a name a <code>NamePolicy.DECLARED</code> route declares, records <code>&lt;Group&gt; found no source serving '&lt;name&gt;'</code> (<code>source_not_found</code>; like a pointed group's <code>was pointed at but found no source</code>, it names any unset option keys that left sources unsearched) when no source is found, unless the group recorded a reason first; record in <code>find_sources</code> only for a more specific reason.</li>
+<li>Never raise to decline: a hook that raises anything but <code>OSError</code>, <code>ValueError</code> or <code>ImportError</code> from <code>column_names</code> (or an unmarked <code>NotImplementedError</code> where a base documents it) ends matching for that candidate. A raise marked with <code>escalate_match_abort</code> propagates. Record, then return a falsy value.</li>
+<li>Recording outside an engine-opened window is a no-op, so groups stay usable standalone. In tests, use <code>collect_match_rejections</code> (see <a href="../feature-group-matching/">Feature Group Matching</a>).</li>
+<li>Recorded reasons are discarded at the enclosing candidate level: when the group ultimately matches, or when the feature group matches by another rule. Only a decline surfaces them.</li>
+<li>Name the group and the concrete source in the reason, as the example does. The first recording per owner wins, so a later reason under a name already used in the same window is dropped; only the missing-column summary replaces a reason the same group recorded during its own probe.</li>
+<li>A <code>ReadFileFG</code> subclass whose <code>column_names</code> raises <code>NotImplementedError</code> is eliminated for every feature name. One that raises <code>ImportError</code> declines any name, with a recorded reason. A file pinned with <code>column_to_file</code> aborts with a missing-column message ("column ... is in none of the sources", or "could not list the columns of any of its sources" when none can list). A <code>ReadDocumentFG</code> subclass declines any name other than its three declared names.</li>
+<li>In <code>ReadFileFG</code> matching, an unpinned file whose columns cannot be read (<code>OSError</code>, <code>ValueError</code>) is declined with a recorded reason, so a shipped file group needs the file to be readable when features resolve. A pinned or pointed file that cannot be read aborts with the missing-column error instead of falling back to another file.</li>
 </ul>
-<p><code>ReadFile</code> column validation and the <code>ReadDB</code> feature check (<code>check_feature_in_data_access</code>) already record automatically; a custom reader only needs this for its own decline points.</p>
-<p>A veto recorded while the user explicitly addressed the reader family (an option key equal to the reader's <code>data_access_name()</code>) gates the candidate's name-based match rules: the feature group fails at resolution with that reason instead of resolving by name and crashing at load time in <code>init_reader</code>. A content decline on that path gates the same way: if the addressed reader records a decline and its probe still matches nothing, the recording counts as owned. A decline followed by a match on another input of the same probe stays discarded as usual. A pinned reader is final: when it declines, neither a sibling reader nor the DataAccessCollection serves the feature. When several readers of the probed family are pinned on one feature, pinned readers are probed in name order, a subclass replaces its parent for an equal access, and two remaining acceptors raise, naming both pins. When exactly one pin accepts, the declining pins' vetoes are dropped. Since group options forward to input features, a pin on a derived feature binds its inputs too. A pinned reader that matches nothing without a recorded reason is reported under its own name. An unowned decline on the global probe stays near-miss material only, and the MatchData rule is not gated.</p>
-<h2 id="matchdata-pattern">MatchData Pattern</h2>
-<h3 id="purpose_1">Purpose</h3>
-<p>MatchData is a <strong>specialized matching mechanism</strong> specifically designed for feature groups that require <strong>framework connection objects</strong>. It determines which data access method should be used when stateful connections are needed.</p>
-<h3 id="key-characteristics_1">Key Characteristics</h3>
+<p><code>ReadFileFG</code> column validation and the <code>ReadDBFG</code> catalog check already record automatically, and unpointed declared names get the default above; a custom group only needs this for its own decline points.</p>
+<p>A <code>feature_group=</code> scope is final: only the scoped group and its subclasses are candidates. A class-name pointer is final against other source groups and the DataAccessCollection. A pointed group can end its match in two ways:</p>
 <ul>
-<li><strong>Connection-Specific</strong>: Only used for feature groups that need framework connection objects</li>
-<li><strong>Matching Logic</strong>: Determines which data source matches when connections are involved</li>
-<li><strong>Scope Resolution</strong>: Resolves conflicts between feature-scope and global-scope data access for stateful frameworks</li>
-<li><strong>Limited Usage</strong>: Only applies to specific compute frameworks (like DuckDB) that require persistent connections</li>
+<li>It aborts, for example on a <code>query_text</code> it cannot serve, a refusal at INPUT_DATA_MATCH, or a missing column. These aborts are deferred: they yield to a candidate that computes the feature from input features, or to a subclass of the pointed group that takes it over. A sole consumer's missing input is therefore reported at that input. The several-sources ambiguity abort is not deferred and always raises.</li>
+<li>It declines, for example on a PROPERTY_MAPPING value or required-key failure, a missing <code>required_options</code> key, no source found, or a name the group does not declare. A group pointed only because the scope names a concrete ancestor does not abort on a missing column, a refused source or an unserved <code>query_text</code>; it declines, and records none of the no-source-found, undeclared-name or missing <code>required_options</code> declines, so the family member the request selects records its own reason. A plain FeatureGroup that claims the name by its own rules still serves it.</li>
 </ul>
-<h3 id="when-matchdata-is-used">When MatchData is Used</h3>
-<p>MatchData is <strong>only</strong> used in these specific scenarios:
-- Feature groups that work with <strong>stateful compute frameworks</strong> (e.g., DuckDB)
-- When <strong>framework connection objects</strong> are required
-- For data sources that need <strong>persistent connections</strong> (databases, connection pools)</p>
-<h3 id="use-cases_1">Use Cases</h3>
-<ul>
-<li>Matching DuckDB features to appropriate DuckDB connections</li>
-<li>Routing features to specific database connections based on credentials</li>
-<li>Resolving data access when multiple connection objects are available</li>
-<li>Enabling flexible connection configuration for stateful frameworks</li>
-</ul>
-<h3 id="example-implementation_1">Example Implementation</h3>
-<pre><code class="language-py">from mloda.provider import MatchData, FeatureGroup
-
-class DuckDBFeatureGroup(FeatureGroup, MatchData):
-    @classmethod
-    def match_data_access(
-        cls,
-        feature_name: str,
-        options: Options,
-        data_access_collection: DataAccessCollection | None = None,
-        framework_connection_object: Any | None = None,
-    ) -&gt; Any:
-        # Logic to determine if this matcher handles DuckDB connections
-        if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-        if data_access_collection is not None:
-            return data_access_collection.resolve(
-                &quot;connection&quot;,
-                predicate=lambda c: isinstance(c, duckdb.DuckDBPyConnection),
-                hint=options.get(&quot;data_access_handle&quot;),
-            )
-        return None
-</code></pre>
-<h3 id="connection-forwarding">Connection Forwarding</h3>
-<ul>
-<li>The connection value forwards to input features like any other option, including across a same-class chain (an upstream feature resolved by the same MatchData class as its consumer).</li>
-<li>Both entry points (<code>global_scope_data_access</code> and <code>feature_scope_data_access</code>) mark the class-name key non-forwarded for pickling, without blocking normal option flow.</li>
-<li>Pickling an <code>Options</code> with a marked key (multiprocessing preflight or a worker handoff) drops that key from the snapshot, so MatchData features stay safe in mixed SYNC/MULTIPROCESSING runs even though the connection itself can't be pickled. In-process reads are unaffected.</li>
-</ul>
-<h2 id="key-differences">Key Differences</h2>
-<table>
-<thead>
-<tr>
-<th>Aspect</th>
-<th>BaseInputData</th>
-<th>MatchData</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><strong>Primary Purpose</strong></td>
-<td>Data loading and access</td>
-<td>Connection object matching for stateful frameworks</td>
-</tr>
-<tr>
-<td><strong>When Used</strong></td>
-<td>All feature groups that load data</td>
-<td>Only feature groups requiring framework connection objects</td>
-</tr>
-<tr>
-<td><strong>Scope</strong></td>
-<td>Universal data access pattern</td>
-<td>Specialized for stateful compute frameworks</td>
-</tr>
-<tr>
-<td><strong>Usage Pattern</strong></td>
-<td><code>input_data()</code> method in feature groups</td>
-<td>Multiple inheritance: <code>FeatureGroup, MatchData</code></td>
-</tr>
-<tr>
-<td><strong>Connection Dependency</strong></td>
-<td>Works with or without connections</td>
-<td>Specifically designed for connection objects</td>
-</tr>
-<tr>
-<td><strong>Framework Support</strong></td>
-<td>All compute frameworks</td>
-<td>Only stateful frameworks (DuckDB, database connections)</td>
-</tr>
-</tbody>
-</table>
-<h2 id="how-they-work-together">How They Work Together</h2>
-<p>BaseInputData and MatchData serve <strong>different purposes</strong> and are used in <strong>different scenarios</strong>:</p>
-<h3 id="baseinputdata-workflow">BaseInputData Workflow</h3>
-<ol>
-<li><strong>Feature groups</strong> define their data loading strategy via <code>input_data()</code> method</li>
-<li><strong>BaseInputData implementations</strong> handle the actual data loading</li>
-<li>Works with <strong>all compute frameworks</strong> (stateful and stateless)</li>
-</ol>
-<h3 id="matchdata-workflow-connection-specific">MatchData Workflow (Connection-Specific)</h3>
-<ol>
-<li><strong>Only used</strong> when feature groups need <strong>framework connection objects</strong></li>
-<li><strong>MatchData</strong> determines which connection object to use for stateful frameworks</li>
-<li><strong>Only applies</strong> to specific compute frameworks like DuckDB that require persistent connections</li>
-</ol>
-<h3 id="combined-usage-example">Combined Usage Example</h3>
-<pre><code class="language-py">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        # BaseInputData for general data loading
-        return ReadFile()
-
-    @classmethod
-    def match_data_access(cls, feature_name: str, options: Options,
-                         data_access_collection: DataAccessCollection | None = None,
-                         framework_connection_object: Any | None = None) -&gt; Any:
-        # MatchData for connection object matching
-        if framework_connection_object and isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
-            return framework_connection_object
-        return None
-</code></pre>
+<p>Since group options forward to input features, a pointer on a derived feature binds its inputs too (see <a href="../troubleshooting/feature-group-resolution-errors/#pointers-on-derived-features">Resolution errors</a>). This also holds when the request is scoped to the derived group with <code>feature_group=</code>; a scope on a source group still rejects a pointer at a different source group. A pinned group that matches nothing without a recorded reason is reported under its own name.</p>
+<h2 id="connections">Connections</h2>
+<p>A source binds its credential at match time; any group, a source included, can also read a declared handle at run time with <code>read_credential</code> (see <a href="../named-data-access-handles/#runtime-access-versus-match-time-binding">Runtime access versus match-time binding</a>).</p>
+<p>Credential values are masked in errors and logs except under known connection fields (see <a href="../named-data-access-handles/">named data access handles</a>).</p>
+<p>A connection lives in the DataAccessCollection, and the framework binds the single one it accepts. Pin one with <code>connection_handle</code> or <code>Feature(name, connection=conn)</code> (see <a href="../named-data-access-handles/#selecting-a-connection-connection_handle">Selecting a connection</a> and <a href="../framework-connection-object/">Framework Connection Object</a>). A source group that reads a connection declares <code>ClaimRoute("connection", ...)</code> and <code>match_connection</code> (see <code>DuckdbFG</code>); choosing a connection by its content happens in the source group's <code>find_sources</code> (see <code>DuckdbFG.find_sources</code>), while <code>match_connection</code> reports which connection a match reads.</p>
 <h2 id="practical-examples">Practical Examples</h2>
-<h3 id="scenario-1-standard-file-processing-baseinputdata-only">Scenario 1: Standard File Processing (BaseInputData Only)</h3>
+<h3 id="scenario-1-standard-file-processing-source-featuregroup-only">Scenario 1: Standard File Processing (Source FeatureGroup Only)</h3>
 <p><strong>Use Case</strong>: Reading CSV files with Pandas
-<strong>Pattern</strong>: Only BaseInputData is needed</p>
-<pre><code class="language-py">class CsvProcessingFeature(FeatureGroup):
-    @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return ReadFile()  # BaseInputData handles file reading
+<strong>Pattern</strong>: Only a source FeatureGroup is needed; <code>CsvFG</code> claims the feature when a file has the column</p>
+<pre><code class="language-py">Feature(&quot;id&quot;, options={&quot;CsvFG&quot;: &quot;data/people.csv&quot;})
 </code></pre>
-<h3 id="scenario-2-duckdb-analytics-baseinputdata-matchdata">Scenario 2: DuckDB Analytics (BaseInputData + MatchData)</h3>
-<p><strong>Use Case</strong>: Analytics with DuckDB requiring connection objects
-<strong>Pattern</strong>: Both BaseInputData and MatchData are needed</p>
-<pre><code class="language-py">class DuckDBAnalyticsFeature(FeatureGroup, MatchData):
+<h3 id="scenario-2-datacreatorfeaturegroup-featureconnection">Scenario 2: DataCreatorFeatureGroup + Feature(connection=)</h3>
+<p><strong>Use Case</strong>: Analytics with DuckDB requiring a connection object
+<strong>Pattern</strong>: <code>DataCreatorFeatureGroup</code> supplies the data and the group is restricted to the DuckDB framework, which builds its frame on the connection the feature pins</p>
+<pre><code class="language-py">class DuckDBAnalyticsFeature(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return ReadFile()  # BaseInputData for data loading
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {&quot;analytics_input&quot;}
 
     @classmethod
-    def match_data_access(cls, ...):
-        # MatchData for connection matching
-        return appropriate_duckdb_connection
+    def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]] | None:
+        return {DuckDBFramework}
+
+Feature(&quot;analytics_input&quot;, connection=conn)
 </code></pre>
 <p>For database connection patterns, see <a href="../framework-connection-object/">Framework Connection Object</a>.</p>
-<h3 id="scenario-3-in-memory-processing-baseinputdata-only">Scenario 3: In-Memory Processing (BaseInputData Only)</h3>
+<h3 id="scenario-3-in-memory-processing-datacreatorfeaturegroup-only">Scenario 3: In-Memory Processing (DataCreatorFeatureGroup Only)</h3>
 <p><strong>Use Case</strong>: Creating synthetic data with Pandas
-<strong>Pattern</strong>: Only BaseInputData is needed</p>
-<pre><code class="language-py">class SyntheticDataFeature(FeatureGroup):
+<strong>Pattern</strong>: Only <code>DataCreatorFeatureGroup</code> is needed</p>
+<pre><code class="language-py">class SyntheticDataFeature(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({&quot;synthetic_data&quot;})  # BaseInputData for data creation
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {&quot;synthetic_data&quot;}
 </code></pre>
 <h2 id="integration-with-other-concepts">Integration with Other Concepts</h2>
 <h3 id="compute-frameworks">Compute Frameworks</h3>
 <ul>
-<li><strong>BaseInputData</strong>: Works with all compute frameworks</li>
-<li><strong>MatchData</strong>: Only works with stateful frameworks requiring connection objects</li>
+<li><strong>Source FeatureGroups and <code>DataCreatorFeatureGroup</code></strong>: work with all compute frameworks</li>
+<li><strong>Connections</strong>: only frameworks that take a connection object (like DuckDB) bind one</li>
 </ul>
 <p>For more information, see:
 - <a href="../../chapter1/compute-frameworks/">Compute Frameworks</a>
@@ -626,51 +408,20 @@ class DuckDBFeatureGroup(FeatureGroup, MatchData):
 - <a href="../../chapter1/feature-groups/">Feature Groups</a>
 - <a href="../feature-group-matching/">Feature Group Matching</a></p>
 <h2 id="best-practices">Best Practices</h2>
-<h3 id="when-to-use-baseinputdata-only">When to Use BaseInputData Only</h3>
 <ul>
-<li>Working with stateless compute frameworks (Pandas, PyArrow, Polars)</li>
-<li>File-based data loading</li>
-<li>mloda data injection</li>
-<li>Synthetic data generation</li>
-<li>Most standard data processing scenarios</li>
-</ul>
-<h3 id="when-to-use-baseinputdata-matchdata">When to Use BaseInputData + MatchData</h3>
-<ul>
-<li>Working with stateful compute frameworks (DuckDB)</li>
-<li>Database connections requiring persistent state</li>
-<li>Connection pooling scenarios</li>
-<li>When framework connection objects are required</li>
-</ul>
-<h3 id="design-considerations">Design Considerations</h3>
-<ul>
-<li><strong>BaseInputData</strong>: Focus on robust data loading, error handling, and performance</li>
-<li><strong>MatchData</strong>: Focus on accurate connection matching and state management</li>
-<li><strong>Integration</strong>: Use MatchData only when framework connection objects are actually needed</li>
+<li>Use source FeatureGroups for files, documents and databases, <code>ApiDataFG</code> for runtime data and <code>DataCreatorFeatureGroup</code> for synthetic data.</li>
+<li>In a source group, focus on robust source discovery, error handling and performance.</li>
 </ul>
 <h2 id="related-documentation">Related Documentation</h2>
 <ul>
 <li><strong><a href="../access-feature-data/">(Feature) data</a></strong> - Comprehensive guide to data access in mloda</li>
-<li><strong><a href="../framework-connection-object/">Framework Connection Object</a></strong> - Managing stateful connections (essential for understanding MatchData)</li>
+<li><strong><a href="../framework-connection-object/">Framework Connection Object</a></strong> - Managing stateful connections</li>
 <li><strong><a href="../../chapter1/feature-groups/">Feature Groups</a></strong> - Introduction to feature groups</li>
 <li><strong><a href="../../chapter1/compute-frameworks/">Compute Frameworks</a></strong> - Overview of compute framework system</li>
 <li><strong><a href="../feature-group-matching/">Feature Group Matching</a></strong> - How features are matched to implementations</li>
 </ul>
 <h2 id="summary">Summary</h2>
-<p>BaseInputData and MatchData serve <strong>different and specialized roles</strong> in mloda's data access architecture:</p>
-<ul>
-<li><strong>BaseInputData</strong> is the <strong>universal pattern</strong> for data loading - used by all feature groups that need to load data</li>
-<li><strong>MatchData</strong> is a <strong>specialized pattern</strong> for connection object matching - only used by feature groups that require framework connection objects</li>
-</ul>
-<p><strong>Key Understanding:</strong>
-- <strong>Most feature groups</strong> only use BaseInputData
-- <strong>MatchData is only needed</strong> when working with stateful compute frameworks like DuckDB
-- <strong>They are not alternatives</strong> - they solve different problems in different contexts</p>
-<p>Understanding this distinction is crucial for:
-- Choosing the right pattern for your use case
-- Implementing feature groups correctly
-- Working with stateful vs stateless compute frameworks
-- Leveraging mloda's connection management capabilities</p>
-<p>This separation allows mloda to provide both universal data access (BaseInputData) and specialized connection management (MatchData) while keeping the complexity contained to only those scenarios that actually need it.</p>
+<p><strong>Source FeatureGroups</strong> are the way mloda reads files, documents, databases and custom sources. <code>DataCreatorFeatureGroup</code> and <code>ApiDataFG</code> supply in-memory data.</p>
               
             </div>
           </div><footer>

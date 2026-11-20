@@ -149,6 +149,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../../in_depth/plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../../in_depth/mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../../in_depth/data-type-enforcement/">Data Type Enforcement</a>
@@ -1256,16 +1260,16 @@ Result: 8 columns total
 </div>
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="kn">from</span><span class="w"> </span><span class="nn">typing</span><span class="w"> </span><span class="kn">import</span> <span class="n">Optional</span><span class="p">,</span> <span class="n">Any</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">mloda</span>
-<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">FeatureGroup</span><span class="p">,</span> <span class="n">BaseInputData</span><span class="p">,</span> <span class="n">DataCreator</span><span class="p">,</span> <span class="n">FeatureSet</span>
+<span class="kn">from</span><span class="w"> </span><span class="nn">mloda.provider</span><span class="w"> </span><span class="kn">import</span> <span class="n">DataCreatorFeatureGroup</span><span class="p">,</span> <span class="n">FeatureSet</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginLoader</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user.pandas</span><span class="w"> </span><span class="kn">import</span> <span class="n">PandasDataFrame</span>
 
 <span class="c1"># In mloda, we have the concept of feature groups.</span>
 <span class="c1"># A feature group is an abstraction between a data framework and processes of a data transformation.</span>
 <span class="c1"># In this example, the data framework is clearly pandas.</span>
-<span class="c1"># The processes are typically meta information like names, but lifecyle definition, or dependencies or relations to other data.</span>
-<span class="k">class</span><span class="w"> </span><span class="nc">SklearnDataCreator</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
-    <span class="c1"># On the basis on the given data_dict earlier defined and its names, we use a DataCreator to inject the data_dict into the feature group abstraction.</span>
+<span class="c1"># The processes are typically meta information like names, but lifecycle definition, or dependencies or relations to other data.</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SklearnDataCreator</span><span class="p">(</span><span class="n">DataCreatorFeatureGroup</span><span class="p">):</span>
+    <span class="c1"># Injects the earlier data_dict into the feature group abstraction.</span>
     <span class="c1"># Very simply spoken: we load the data.</span>
 
     <span class="nd">@classmethod</span>
@@ -1276,10 +1280,8 @@ Result: 8 columns total
         <span class="k">return</span> <span class="n">data</span>  <span class="c1"># With this, we have access to the before and after state of a feature.</span>
 
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseInputData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">DataCreator</span><span class="p">(</span>
-            <span class="p">{</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">}</span>
-        <span class="p">)</span>  <span class="c1"># If this feature would not load data, we would use the data given from the parameter "data".</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">feature_names_supported</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">}</span>
 
 <span class="n">features</span> <span class="o">=</span> <span class="p">[</span>
     <span class="s2">"age__mean_imputed__standard_scaled"</span><span class="p">,</span>
@@ -1292,7 +1294,7 @@ Result: 8 columns total
 <span class="n">_result</span><span class="p">,</span> <span class="n">_result2</span> <span class="o">=</span> <span class="p">(</span>
     <span class="n">_result</span><span class="p">[</span><span class="mi">0</span><span class="p">],</span>
     <span class="n">_result</span><span class="p">[</span><span class="mi">1</span><span class="p">],</span>
-<span class="p">)</span>  <span class="c1"># One way to get this data is via defined input_data. But there are many more and we should not go to deep into this topic for now.</span>
+<span class="p">)</span>  <span class="c1"># One way to get this data is via a DataCreatorFeatureGroup.</span>
 <span class="nb">print</span><span class="p">(</span><span class="s2">"✅ Transformed dataset with split fit/transform:"</span><span class="p">)</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">_result</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
 <span class="nb">print</span><span class="p">(</span><span class="n">_result2</span><span class="o">.</span><span class="n">head</span><span class="p">(</span><span class="mi">2</span><span class="p">))</span>
@@ -1308,16 +1310,16 @@ Result: 8 columns total
 </pre></div>
 <div class="clipboard-copy-txt" id="cell-4">from typing import Optional, Any
 from mloda.user import mloda
-from mloda.provider import FeatureGroup, BaseInputData, DataCreator, FeatureSet
+from mloda.provider import DataCreatorFeatureGroup, FeatureSet
 from mloda.user import PluginLoader
 from mloda.user.pandas import PandasDataFrame
 
 # In mloda, we have the concept of feature groups.
 # A feature group is an abstraction between a data framework and processes of a data transformation.
 # In this example, the data framework is clearly pandas.
-# The processes are typically meta information like names, but lifecyle definition, or dependencies or relations to other data.
-class SklearnDataCreator(FeatureGroup):
-    # On the basis on the given data_dict earlier defined and its names, we use a DataCreator to inject the data_dict into the feature group abstraction.
+# The processes are typically meta information like names, but lifecycle definition, or dependencies or relations to other data.
+class SklearnDataCreator(DataCreatorFeatureGroup):
+    # Injects the earlier data_dict into the feature group abstraction.
     # Very simply spoken: we load the data.
 
     @classmethod
@@ -1328,10 +1330,8 @@ class SklearnDataCreator(FeatureGroup):
         return data  # With this, we have access to the before and after state of a feature.
 
     @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator(
-            {"age", "weight", "state", "gender"}
-        )  # If this feature would not load data, we would use the data given from the parameter "data".
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {"age", "weight", "state", "gender"}
 
 features = [
     "age__mean_imputed__standard_scaled",
@@ -1344,7 +1344,7 @@ _result = mloda.run_all(features, compute_frameworks=[PandasDataFrame])
 _result, _result2 = (
     _result[0],
     _result[1],
-)  # One way to get this data is via defined input_data. But there are many more and we should not go to deep into this topic for now.
+)  # One way to get this data is via a DataCreatorFeatureGroup.
 print("✅ Transformed dataset with split fit/transform:")
 print(_result.head(2))
 print(_result2.head(2))
@@ -1369,22 +1369,22 @@ print(
 <div class="jp-OutputPrompt jp-OutputArea-prompt"></div>
 <div class="jp-RenderedText jp-OutputArea-output" data-mime-type="text/plain" tabindex="0">
 <pre>✅ Transformed dataset with split fit/transform:
-   state__onehot_encoded~3  gender__onehot_encoded~0  \
-0                      0.0                       1.0   
-1                      0.0                       0.0   
+   gender__onehot_encoded~0  gender__onehot_encoded~1  \
+0                       1.0                       0.0   
+1                       0.0                       1.0   
 
-   gender__onehot_encoded~1  state__onehot_encoded~2  state__onehot_encoded~1  \
-0                       0.0                      1.0                      0.0   
-1                       1.0                      1.0                      0.0   
+   state__onehot_encoded~0  state__onehot_encoded~1  state__onehot_encoded~2  \
+0                      0.0                      0.0                      1.0   
+1                      0.0                      0.0                      1.0   
 
-   state__onehot_encoded~0  
+   state__onehot_encoded~3  
 0                      0.0  
 1                      0.0  
    age__mean_imputed__standard_scaled  weight__mean_imputed__standard_scaled
 0                            0.339295                               1.243621
 1                            1.057320                              -0.677472
-Result: ['state__onehot_encoded~3', 'gender__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~1', 'state__onehot_encoded~0'] 
- [FeatureName('age__mean_imputed__standard_scaled'), FeatureName('weight__mean_imputed__standard_scaled')] columns total
+Result: ['gender__onehot_encoded~0', 'gender__onehot_encoded~1', 'state__onehot_encoded~0', 'state__onehot_encoded~1', 'state__onehot_encoded~2', 'state__onehot_encoded~3'] 
+ ['age__mean_imputed__standard_scaled', 'weight__mean_imputed__standard_scaled'] columns total
 </pre>
 </div>
 </div>
@@ -1477,10 +1477,10 @@ print(
 <div class="highlight-ipynb hl-python"><pre><span></span><span class="c1"># We can replace feature groups and dataframe plugins in an easy fashion.</span>
 <span class="kn">from</span><span class="w"> </span><span class="nn">mloda.user</span><span class="w"> </span><span class="kn">import</span> <span class="n">PluginCollector</span>
 
-<span class="k">class</span><span class="w"> </span><span class="nc">SecondSklearnDataCreator</span><span class="p">(</span><span class="n">FeatureGroup</span><span class="p">):</span>
+<span class="k">class</span><span class="w"> </span><span class="nc">SecondSklearnDataCreator</span><span class="p">(</span><span class="n">DataCreatorFeatureGroup</span><span class="p">):</span>
     <span class="nd">@classmethod</span>
-    <span class="k">def</span><span class="w"> </span><span class="nf">input_data</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">BaseInputData</span> <span class="o">|</span> <span class="kc">None</span><span class="p">:</span>
-        <span class="k">return</span> <span class="n">DataCreator</span><span class="p">({</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">})</span>
+    <span class="k">def</span><span class="w"> </span><span class="nf">feature_names_supported</span><span class="p">(</span><span class="bp">cls</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="nb">set</span><span class="p">[</span><span class="nb">str</span><span class="p">]:</span>
+        <span class="k">return</span> <span class="p">{</span><span class="s2">"age"</span><span class="p">,</span> <span class="s2">"weight"</span><span class="p">,</span> <span class="s2">"state"</span><span class="p">,</span> <span class="s2">"gender"</span><span class="p">}</span>
 
     <span class="nd">@classmethod</span>
     <span class="k">def</span><span class="w"> </span><span class="nf">calculate_feature</span><span class="p">(</span><span class="bp">cls</span><span class="p">,</span> <span class="n">data</span><span class="p">:</span> <span class="n">Any</span><span class="p">,</span> <span class="n">features</span><span class="p">:</span> <span class="n">FeatureSet</span><span class="p">)</span> <span class="o">-&gt;</span> <span class="n">Any</span><span class="p">:</span>
@@ -1512,10 +1512,10 @@ print(
 <div class="clipboard-copy-txt" id="cell-6"># We can replace feature groups and dataframe plugins in an easy fashion.
 from mloda.user import PluginCollector
 
-class SecondSklearnDataCreator(FeatureGroup):
+class SecondSklearnDataCreator(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({"age", "weight", "state", "gender"})
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {"age", "weight", "state", "gender"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:

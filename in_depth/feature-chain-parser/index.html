@@ -143,7 +143,7 @@
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#mixin-configuration">Mixin Configuration</a>
     </li>
-    <li class="toctree-l4"><a class="reference internal" href="#column-wise-data-hooks">Column-Wise Data Hooks</a>
+    <li class="toctree-l4"><a class="reference internal" href="#groups-that-touch-columns">Groups That Touch Columns</a>
     </li>
     <li class="toctree-l4"><a class="reference internal" href="#captureless-patterns-and-name-binding">Captureless Patterns and Name Binding</a>
     </li>
@@ -214,6 +214,10 @@
                 <li class="toctree-l2"><a class="reference internal" href="../plugin_registry/">Plugin Registry</a>
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
                 </li>
     </ul>
                   </li>
@@ -336,8 +340,8 @@
 <p>One resolution, <code>FeatureChainParserMixin.resolve_feature_name</code>, returns a <code>NameResolution</code> (<code>owned</code>, <code>bindings</code>, <code>sources</code>, <code>value_for(key)</code>). Matching, the rejection diagnostic, <code>input_features</code>, <code>_extract_source_features</code> and <code>_resolve_operation</code> all read it.</p>
 <ul>
 <li><strong>Ownership:</strong> a name owns the feature when its <code>PREFIX_PATTERN</code> identifies the group, and an owned name is authoritative for every value it encodes.</li>
-<li><strong>Binding:</strong> every named capture of an owned name that is a <code>PROPERTY_MAPPING</code> key is bound and validated like an option, even when the option is also set; an unsupported value is a recorded match-time rejection. A legacy positional capture binds only a value already in the key's <code>allowed_values</code>.</li>
-<li><strong>Agreement:</strong> a declared option for a key the name binds, and a non-empty <code>in_features</code>, must agree with the name (<code>in_features</code> must equal the name's direct sources). A contradiction aborts the match with an error; <code>MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1</code> downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An agreeing <code>in_features</code> supplies the input features, so their options and <code>feature_group</code> scope are kept; a downgraded mismatch uses the name's bare sources instead. An override that calls only <code>match_parser_criteria</code> skips this check.</li>
+<li><strong>Binding:</strong> every named capture of an owned name that is a <code>PROPERTY_MAPPING</code> key is bound and validated like an option, even when the option is also set; an unsupported value is a recorded match-time rejection. A key's <code>name_converter</code> converts the captured text before validation (a raising one is a rejected value). A legacy positional capture binds only a value already in the key's <code>allowed_values</code>, unconverted.</li>
+<li><strong>Agreement:</strong> a declared option for a key the name binds, and a non-empty <code>in_features</code>, must agree with the name (<code>in_features</code> must equal the name's direct sources). A contradiction aborts the match with an error; <code>MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1</code> downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An agreeing <code>in_features</code> supplies the input features, so their options and <code>feature_group</code> scope are kept; a downgraded mismatch uses the name's bare sources instead. An override that calls only <code>match_parser_criteria</code> skips this check. A plugin that parses a value from the name by hand (one its captures do not bind) runs the option checks (not the <code>in_features</code> one) with <code>cls.validate_hand_parsed_bindings(feature_name, bindings, options)</code>.</li>
 <li><strong>Operands:</strong> every name or config source must be non-empty and the count within <code>MIN_IN_FEATURES</code> / <code>MAX_IN_FEATURES</code> (name path: recorded rejection; config path: silent non-match).</li>
 </ul>
 <h3 id="options-architecture-group-vs-context-parameters">Options Architecture: Group vs Context Parameters</h3>
@@ -421,7 +425,7 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 </tr>
 <tr>
 <td><code>PROPERTY_MAPPING</code></td>
-<td><code>dict[str, PropertySpec]</code></td>
+<td><code>Mapping[str, PropertySpec]</code></td>
 <td>Required</td>
 <td>Parameter validation configuration</td>
 </tr>
@@ -450,88 +454,17 @@ class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 <td>Declares a captureless pattern as recognition-only (binds no key from the name)</td>
 </tr>
 <tr>
-<td><code>REQUIRED_COLUMNWISE_HOOKS</code></td>
-<td><code>frozenset[str]</code></td>
-<td><code>frozenset()</code></td>
-<td>Column-wise data hooks the family requires</td>
+<td><code>NAME_ONLY_MATCH</code></td>
+<td><code>bool</code></td>
+<td><code>False</code></td>
+<td>Claim only a name the patterns own; a configuration-path feature (non-matching name resolved via options such as <code>in_features</code>) is declined</td>
 </tr>
 </tbody>
 </table>
+<p>Use <code>NAME_ONLY_MATCH = True</code> for a group with no discriminator option. An override of <code>match_feature_group_criteria</code> must delegate to <code>super()</code> or <code>match_parser_criteria</code> to keep it. The rejection-reason diagnostic always honors the flag, and code calling <code>FeatureChainParser.match_configuration_feature_chain_parser</code> directly passes <code>config_path=not cls.NAME_ONLY_MATCH</code>.</p>
 <p><code>Options.get_in_features()</code> returns sources in declared order (sets are sorted by name; duplicates are kept). Order-sensitive groups can reject sets with an <code>in_features</code> <code>match_guard=lambda v: not isinstance(v, (set, frozenset))</code> plus an <code>expected</code> text (for example "an ordered list, tuple or single source") so the rejection is reported.</p>
-<h3 id="column-wise-data-hooks">Column-Wise Data Hooks</h3>
-<p>Beyond parsing, the mixin declares three column-wise data hooks: <code>_get_available_columns</code>,
-<code>_check_source_features_exist</code> and <code>_add_result_to_data</code>. The concrete compute-framework subclass
-(pandas, PyArrow, Polars, python dict, ...) implements them; the inherited defaults raise
-<code>NotImplementedError</code> naming the class and the hook, so a missing implementation fails loudly
-instead of silently. A group that resolves column names against the data implements the discovery
-hook too; the others only need the check/add pair. <code>_get_available_columns</code> can return <code>&lt;Framework&gt;.extract_column_names(data)</code>, the framework's own instance-free column listing.</p>
-<p>Whether <code>_check_source_features_exist</code> tolerates partial presence (some source names missing) or
-rejects it is a per-feature-group policy, not a framework rule.</p>
-<p><code>REQUIRED_COLUMNWISE_HOOKS</code> declares which of the three a family needs. A family base sets it to the
-constant matching the hooks its own <code>calculate_feature</code> calls, and its compute-framework subclasses
-implement them. Both constants come from <code>mloda.provider</code>.</p>
-<table>
-<thead>
-<tr>
-<th>Constant</th>
-<th>Declares</th>
-</tr>
-</thead>
-<tbody>
-<tr>
-<td><code>COLUMNWISE_HOOKS</code></td>
-<td><code>_check_source_features_exist</code> and <code>_add_result_to_data</code></td>
-</tr>
-<tr>
-<td><code>COLUMN_DISCOVERY_HOOKS</code></td>
-<td>those two plus <code>_get_available_columns</code></td>
-</tr>
-</tbody>
-</table>
-<pre><code class="language-python">from mloda.provider import COLUMN_DISCOVERY_HOOKS, FeatureChainParserMixin, FeatureGroup
-from mloda.user.pandas import PandasDataFrame
-
-class RollingBase(FeatureChainParserMixin, FeatureGroup):
-    REQUIRED_COLUMNWISE_HOOKS = COLUMN_DISCOVERY_HOOKS
-
-class PandasRolling(RollingBase):
-    @classmethod
-    def compute_framework_rule(cls):
-        return {PandasDataFrame}
-
-    @classmethod
-    def _get_available_columns(cls, data):
-        return PandasDataFrame.extract_column_names(data)
-
-    @classmethod
-    def _check_source_features_exist(cls, data, feature_names):
-        if set(feature_names) - set(data.columns):
-            raise ValueError(f&quot;Missing source features, available: {list(data.columns)}&quot;)
-
-    @classmethod
-    def _add_result_to_data(cls, data, feature_name, result):
-        data[feature_name] = result
-        return data
-</code></pre>
-<p><code>missing_columnwise_hooks(cls)</code>, also from <code>mloda.provider</code>, returns the declared hooks a class does
-not implement. Assert it empty in your own test suite to catch a skipped hook there rather than
-mid-run:</p>
-<pre><code class="language-python">from mloda.provider import missing_columnwise_hooks
-
-def test_pandas_rolling_implements_its_hooks():
-    assert missing_columnwise_hooks(PandasRolling) == []
-</code></pre>
-<p><code>missing_columnwise_hooks(cls) == []</code> also passes vacuously for a class that never sets
-<code>REQUIRED_COLUMNWISE_HOOKS</code>. Use <code>declared_columnwise_hooks(cls)</code>, also from <code>mloda.provider</code>, to
-assert the declaration itself is what's expected:</p>
-<pre><code class="language-python">from mloda.provider import declared_columnwise_hooks, COLUMN_DISCOVERY_HOOKS
-
-def test_pandas_rolling_declares_all_hooks():
-    assert declared_columnwise_hooks(PandasRolling) == COLUMN_DISCOVERY_HOOKS
-</code></pre>
-<p>A hook that is not a <code>@classmethod</code> or <code>@staticmethod</code> counts as missing: the <code>cls._hook(...)</code> call
-cannot reach it. A family base reports all of its declared hooks, since it declares the contract its
-subclasses implement, so assert this on the framework-bound class rather than on the base.</p>
+<h3 id="groups-that-touch-columns">Groups That Touch Columns</h3>
+<p>To serve one column operation on several compute frameworks, write an <code>OperationFeatureGroup</code> with one <code>Implementation</code> per framework: the group owns the loop and each implementation passes its framework callables into it (see <a href="../compute-framework-integration/#operation-groups-one-group-one-implementation-per-framework">Operation Groups</a>).</p>
 <h3 id="captureless-patterns-and-name-binding">Captureless Patterns and Name Binding</h3>
 <p>A captureless <code>PREFIX_PATTERN</code> (one with no capture group, e.g. <code>r".*__cleaned_text$"</code>) binds no
 <code>PROPERTY_MAPPING</code> key from the feature name. The name identifies the feature group, but every value
@@ -558,7 +491,7 @@ working, but logs a definition-time warning until it either adds a named capture
 </code></pre>
 <h4 id="2-custom-input_features-method">2. Custom <code>input_features()</code> Method</h4>
 <p>Override when you need to add additional input features (e.g., time filter):</p>
-<pre><code class="language-py">class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, FeatureGroup):
+<pre><code class="language-py">class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, OperationFeatureGroup):
     def input_features(self, options: Options, feature_name: FeatureName) -&gt; set[Feature] | None:
         # The mixin resolves sources from the name or from in_features; add the extras.
         sources = super().input_features(options, feature_name) or set()
@@ -568,7 +501,7 @@ working, but logs a definition-time warning until it either adds a named capture
 <p>Override for the rules a <code>PROPERTY_MAPPING</code> spec cannot express, then delegate. Conditional
 requirements belong in <code>required_when</code> instead: it is enforced by a guard installed at class
 definition, so it still runs on an override.</p>
-<pre><code class="language-py">class SklearnPipelineFeatureGroup(FeatureChainParserMixin, FeatureGroup):
+<pre><code class="language-py">class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup):
     @classmethod
     def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None) -&gt; bool:
         &quot;&quot;&quot;Mutual exclusivity: pipeline_name and pipeline_steps cannot both be set.&quot;&quot;&quot;
@@ -606,7 +539,7 @@ class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
     }
 </code></pre>
 <p><code>expected</code> names what the guard accepts, so a rejection is reported in the resolution-failure output instead of staying a silent non-match.</p>
-<p>The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises, the value counts as rejected (match returns False).</p>
+<p>The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises, the value counts as rejected (match returns False), unless the raise is marked with <code>escalate_match_abort</code>.</p>
 <p>The full model, which invariant fires at which moment, the precedence between the two callables, and what a validator receives for each container type, lives in one place: <a href="../property-mapping/">PROPERTY_MAPPING Configuration</a>.</p>
 <h2 id="modern-implementation-in-feature-groups">Modern Implementation in Feature Groups</h2>
 <h3 id="1-define-property_mapping-configuration">1. Define PROPERTY_MAPPING Configuration</h3>
@@ -712,8 +645,12 @@ checked when the <code>PropertySpec</code> is constructed. Omitting <code>defaul
 <h2 id="forwarding-options-to-input-features">Forwarding Options to Input Features</h2>
 <p>The <a href="../property-mapping/#context-propagation">Context Propagation</a> docs describe the
 <strong>caller side</strong>: context options stay local by default, and <code>propagate_context_keys</code>
-opts specific keys in. This section describes the <strong>author side</strong>: what happens to a
-feature group's own options when it declares an input feature.</p>
+opts specific keys in for the direct input features only (<code>cascade_context_keys</code>
+continues the push down the chain). This section describes the <strong>author side</strong>: what
+happens to a
+feature group's own options when it declares an input feature. To preview what an input
+will receive, see
+<a href="../property-mapping/#previewing-the-forwarded-options">Previewing the forwarded options</a>.</p>
 <h3 id="forwarding-is-the-default">Forwarding is the default</h3>
 <p>When your <code>input_features()</code> returns a child <code>Feature</code>, the engine copies <strong>all</strong> of
 the consumer's group options (except <code>in_features</code>) onto that child. Configuration set
@@ -731,6 +668,7 @@ class GraphAnswer(FeatureGroup):
 <p>Rules:</p>
 <ul>
 <li><code>in_features</code> is never forwarded.</li>
+<li>A key whose spec sets <code>forward_to_inputs=False</code> (every credential handle) is not forwarded unless an explicit allowlist names it.</li>
 <li>If the child already carries a forwarded key with an equal value, the merge is a
   no-op for that key.</li>
 <li>If the child already carries a forwarded key with a <strong>different</strong> value, a
@@ -755,7 +693,7 @@ directive on the child <code>Feature</code> you return from <code>input_features
 <tbody>
 <tr>
 <td><code>forward_group=False</code></td>
-<td>Nothing flows: no group options and no consumer-side context push. Only an explicit child-side <code>inherit_context_keys</code> pull can still deliver values.</td>
+<td>Nothing flows: no group options and no consumer-side context push (the cascade stops here too). Only an explicit child-side <code>inherit_context_keys</code> pull can still deliver values.</td>
 </tr>
 <tr>
 <td><code>forward_group={"kg_backend"}</code></td>
@@ -795,7 +733,8 @@ copies the listed keys from the consumer's context into the child's context:</p>
 child = Feature(&quot;knowledge_graph&quot;, inherit_context_keys={&quot;tenant&quot;})
 </code></pre>
 <p>This is the child-side pull, symmetric to the caller-side push
-<code>propagate_context_keys</code>, which continues to work unchanged unless the child declared
+<code>propagate_context_keys</code> (one hop) or <code>cascade_context_keys</code> (all the way down), which
+continues to work unchanged unless the child declared
 <code>forward_group=False</code>: that skips the push entirely. Keys absent from the consumer's
 context are skipped silently. As with group forwarding, an inherited or pushed key
 whose child value differs raises a <code>ValueError</code>; equal values are a no-op. A child
@@ -811,6 +750,7 @@ rejected is named in the error's value-rejection lines; a key rejected merely fo
 present is not called out, because identifying it would need a second, speculative match
 pass. If a feature resolves without its forwarded group options but not with them, keep
 them off the child with <code>forward_group_exclude</code>, an allowlist, or <code>forward_group=False</code>.</p>
+<p>A forwarded <code>query_text</code> makes source groups without a query route decline, so consumers that use <code>query_text</code> for themselves should exclude it from forwarding.</p>
 <h3 id="upstream-feature-deduplication">Upstream feature deduplication</h3>
 <p>The engine deduplicates upstream features that share the same group identity. Declaring
 the same source feature as the input of several parents therefore computes it once,

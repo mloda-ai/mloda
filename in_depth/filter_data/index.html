@@ -155,6 +155,10 @@
                 </li>
                 <li class="toctree-l2"><a class="reference internal" href="../plan-lock/">Plan Lock</a>
                 </li>
+                <li class="toctree-l2"><a class="reference internal" href="../divergence-records/">Divergence Records</a>
+                </li>
+                <li class="toctree-l2"><a class="reference internal" href="../mcp-server/">MCP Server and CLI</a>
+                </li>
     </ul>
                   </li>
                   <li class="toctree-l1"><a class="reference internal" href="../data-type-enforcement/">Data Type Enforcement</a>
@@ -268,12 +272,12 @@ global_filter.filters
 </code></pre>
 <h4 id="how-to-deal-with-time-filters">How to deal with time filters</h4>
 <p>In this example, we show how one can manage datetime relations.</p>
-<pre><code class="language-python">from datetime import datetime, timezone
+<pre><code class="language-python">from datetime import UTC, datetime
 
-event_from = datetime(2023, 1, 1, tzinfo=timezone.utc)
-event_to = datetime(2023, 12, 31, tzinfo=timezone.utc)
-valid_from = datetime(2022, 1, 1, tzinfo=timezone.utc)
-valid_to = datetime(2022, 12, 31, tzinfo=timezone.utc)
+event_from = datetime(2023, 1, 1, tzinfo=UTC)
+event_to = datetime(2023, 12, 31, tzinfo=UTC)
+valid_from = datetime(2022, 1, 1, tzinfo=UTC)
+valid_to = datetime(2022, 12, 31, tzinfo=UTC)
 
 global_filter.add_time_and_time_travel_filters(event_from, event_to, valid_from, valid_to)
 
@@ -286,16 +290,16 @@ global_filter.filters
 <h4 id="example-access-to-filters-in-the-feature-group">Example access to Filters in the Feature Group</h4>
 <p>Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
 The implementation of the concrete filters is dependent on the feature group. This example is rather complex as we filter a python dictionary. </p>
-<p>Further, the feature is a data creator, so we create the data here itself. </p>
+<p>Further, the feature is a <code>DataCreatorFeatureGroup</code>, so we create the data here itself. </p>
 <pre><code class="language-python">from mloda.user import mloda
-from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, BaseInputData, DataCreator
+from mloda.provider import FeatureGroup, FeatureSet, ComputeFramework, DataCreatorFeatureGroup
 from typing import Any
 from mloda.user.pyarrow import PyArrowTable
 
-class ExampleOrderFilter(FeatureGroup):
+class ExampleOrderFilter(DataCreatorFeatureGroup):
     @classmethod
-    def input_data(cls) -&gt; BaseInputData | None:
-        return DataCreator({cls.get_class_name(), &quot;example_order_id&quot;})
+    def feature_names_supported(cls) -&gt; set[str]:
+        return {cls.get_class_name(), &quot;example_order_id&quot;}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -&gt; Any:
@@ -318,12 +322,11 @@ class ExampleOrderFilter(FeatureGroup):
         filtered_data = {
             key: [value[i] for i in order_id_filter]
             for key, value in _data_creator.items()
-            if key != filter_name
         }
         return filtered_data
     @classmethod
     def final_filters(cls) -&gt; bool | None:
-        # This group applies the filter itself and drops the filter column, so framework row elimination must not run.
+        # This group applies the filter itself, so framework row elimination must not run.
         return False
     @classmethod
     def compute_framework_rule(cls) -&gt; set[type[ComputeFramework]]:
@@ -534,6 +537,8 @@ def final_filters(cls) -&gt; bool | None:
 </tr>
 </tbody>
 </table>
+<p>A group that serves the filter feature must return its column even when it applies
+the filter itself (<code>final_filters()</code> returns <code>False</code>).</p>
 <p>This method does <strong>not</strong> affect whether <code>features.filters</code> is populated or whether
 <code>features.mask_engine</code> is wired. Both are set independently of <code>final_filters()</code>.</p>
 <p><code>final_filters()</code> is a <strong>semantic</strong> flag that controls <em>when</em> in the pipeline the
@@ -646,7 +651,7 @@ return pa.table({
 <td>Handles everything inline</td>
 <td style="text-align: center;"><code>False</code></td>
 <td style="text-align: center;">Yes</td>
-<td style="text-align: center;">No (elimination skipped)</td>
+<td style="text-align: center;">Only if your group serves the filter feature (it is then in the FeatureSet)</td>
 </tr>
 <tr>
 <td>Uses inline logic + elimination</td>

@@ -46,16 +46,23 @@
     },
     {
       "id": "bkHC",
-      "code_hash": "35691756c0042b487d0c346f7bc5c9d1",
+      "code_hash": "f07744cc30a9fd21a6188d2e9a2d19dc",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "multiple repeat at position 314",
+          "traceback": null
         }
       ],
-      "console": []
+      "console": [
+        {
+          "type": "stream",
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/tmp/marimo_1799194/__marimo__cell_bkHC_.py&quot;</span>, line <span class=\"m\">2</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.provider</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">FeatureGroup</span><span class=\"p\">,</span> <span class=\"n\">DataCreatorFeatureGroup</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/provider/__init__.py&quot;</span>, line <span class=\"m\">23</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.core.abstract_plugins.feature_group</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">FeatureGroup</span> <span class=\"k\">as</span> <span class=\"n\">FeatureGroup</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/feature_group.py&quot;</span>, line <span class=\"m\">10</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.core.abstract_plugins.components.base_artifact</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">BaseArtifact</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/base_artifact.py&quot;</span>, line <span class=\"m\">4</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.core.abstract_plugins.components.feature_set</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">FeatureSet</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/feature_set.py&quot;</span>, line <span class=\"m\">7</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.core.abstract_plugins.components.divergence</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">Divergence</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/divergence.py&quot;</span>, line <span class=\"m\">12</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.core.abstract_plugins.components.credential_scrub</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">scrub_credentials</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/credential_scrub.py&quot;</span>, line <span class=\"m\">105</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"n\">_KEYWORD_PATTERN</span> <span class=\"o\">=</span> <span class=\"n\">_keyword_pattern</span><span class=\"p\">(</span><span class=\"sa\">r</span><span class=\"s2\">&quot;[^;&amp;\\s&#39;</span><span class=\"se\">\\&quot;</span><span class=\"s2\">]*(?:[&#39;</span><span class=\"se\">\\&quot;</span><span class=\"s2\">]++(?![\\s,;&amp;:)\\]}&gt;]|$)[^;&amp;\\s&#39;</span><span class=\"se\">\\&quot;</span><span class=\"s2\">]+)*&quot;</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/abstract_plugins/components/credential_scrub.py&quot;</span>, line <span class=\"m\">95</span>, in <span class=\"n\">_keyword_pattern</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">re</span><span class=\"o\">.</span><span class=\"n\">compile</span><span class=\"p\">(</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/re.py&quot;</span>, line <span class=\"m\">251</span>, in <span class=\"n\">compile</span>\n<span class=\"w\">    </span><span class=\"k\">return</span> <span class=\"n\">_compile</span><span class=\"p\">(</span><span class=\"n\">pattern</span><span class=\"p\">,</span> <span class=\"n\">flags</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/re.py&quot;</span>, line <span class=\"m\">303</span>, in <span class=\"n\">_compile</span>\n<span class=\"w\">    </span><span class=\"n\">p</span> <span class=\"o\">=</span> <span class=\"n\">sre_compile</span><span class=\"o\">.</span><span class=\"n\">compile</span><span class=\"p\">(</span><span class=\"n\">pattern</span><span class=\"p\">,</span> <span class=\"n\">flags</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_compile.py&quot;</span>, line <span class=\"m\">788</span>, in <span class=\"n\">compile</span>\n<span class=\"w\">    </span><span class=\"n\">p</span> <span class=\"o\">=</span> <span class=\"n\">sre_parse</span><span class=\"o\">.</span><span class=\"n\">parse</span><span class=\"p\">(</span><span class=\"n\">p</span><span class=\"p\">,</span> <span class=\"n\">flags</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">955</span>, in <span class=\"n\">parse</span>\n<span class=\"w\">    </span><span class=\"n\">p</span> <span class=\"o\">=</span> <span class=\"n\">_parse_sub</span><span class=\"p\">(</span><span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">state</span><span class=\"p\">,</span> <span class=\"n\">flags</span> <span class=\"o\">&amp;</span> <span class=\"n\">SRE_FLAG_VERBOSE</span><span class=\"p\">,</span> <span class=\"mi\">0</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">444</span>, in <span class=\"n\">_parse_sub</span>\n<span class=\"w\">    </span><span class=\"n\">itemsappend</span><span class=\"p\">(</span><span class=\"n\">_parse</span><span class=\"p\">(</span><span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">state</span><span class=\"p\">,</span> <span class=\"n\">verbose</span><span class=\"p\">,</span> <span class=\"n\">nested</span> <span class=\"o\">+</span> <span class=\"mi\">1</span><span class=\"p\">,</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">841</span>, in <span class=\"n\">_parse</span>\n<span class=\"w\">    </span><span class=\"n\">p</span> <span class=\"o\">=</span> <span class=\"n\">_parse_sub</span><span class=\"p\">(</span><span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">state</span><span class=\"p\">,</span> <span class=\"n\">sub_verbose</span><span class=\"p\">,</span> <span class=\"n\">nested</span> <span class=\"o\">+</span> <span class=\"mi\">1</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">444</span>, in <span class=\"n\">_parse_sub</span>\n<span class=\"w\">    </span><span class=\"n\">itemsappend</span><span class=\"p\">(</span><span class=\"n\">_parse</span><span class=\"p\">(</span><span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">state</span><span class=\"p\">,</span> <span class=\"n\">verbose</span><span class=\"p\">,</span> <span class=\"n\">nested</span> <span class=\"o\">+</span> <span class=\"mi\">1</span><span class=\"p\">,</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">841</span>, in <span class=\"n\">_parse</span>\n<span class=\"w\">    </span><span class=\"n\">p</span> <span class=\"o\">=</span> <span class=\"n\">_parse_sub</span><span class=\"p\">(</span><span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">state</span><span class=\"p\">,</span> <span class=\"n\">sub_verbose</span><span class=\"p\">,</span> <span class=\"n\">nested</span> <span class=\"o\">+</span> <span class=\"mi\">1</span><span class=\"p\">)</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">444</span>, in <span class=\"n\">_parse_sub</span>\n<span class=\"w\">    </span><span class=\"n\">itemsappend</span><span class=\"p\">(</span><span class=\"n\">_parse</span><span class=\"p\">(</span><span class=\"n\">source</span><span class=\"p\">,</span> <span class=\"n\">state</span><span class=\"p\">,</span> <span class=\"n\">verbose</span><span class=\"p\">,</span> <span class=\"n\">nested</span> <span class=\"o\">+</span> <span class=\"mi\">1</span><span class=\"p\">,</span>\n  File <span class=\"nb\">&quot;/usr/lib/python3.10/sre_parse.py&quot;</span>, line <span class=\"m\">672</span>, in <span class=\"n\">_parse</span>\n<span class=\"w\">    </span><span class=\"k\">raise</span> <span class=\"n\">source</span><span class=\"o\">.</span><span class=\"n\">error</span><span class=\"p\">(</span><span class=\"s2\">&quot;multiple repeat&quot;</span><span class=\"p\">,</span>\n<span class=\"gr\">re.error</span>: <span class=\"n\">multiple repeat at position 314</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
+        }
+      ]
     },
     {
       "id": "lEQa",
@@ -75,18 +82,18 @@
       "code_hash": "096fd987a29171e58054127bfc0d6342",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "cannot import name 'UTC' from 'datetime' (/usr/lib/python3.10/datetime.py)",
+          "traceback": null
         }
       ],
       "console": [
         {
           "type": "stream",
-          "name": "stdout",
-          "text": "[    age state gender     weight\n0    55    NY      F  92.048332\n1    36    TX      M  74.012635\n2    40    FL      M  71.355146\n3    77    CA      M  55.414713\n4    36    TX      M  60.180648\n..  ...   ...    ...        ...\n95   63    CA      M  47.563638\n96   42    TX      M  61.098454\n97   35    NY      F  82.741975\n98   35    FL      M  48.767208\n99   63    CA      M  92.380329\n\n[100 rows x 4 columns]]\n",
-          "mimetype": "text/plain"
+          "name": "stderr",
+          "text": "<span class=\"codehilite\"><div class=\"highlight\"><pre><span></span><span class=\"gt\">Traceback (most recent call last):</span>\n  File <span class=\"nb\">&quot;/tmp/marimo_1799194/__marimo__cell_PKri_.py&quot;</span>, line <span class=\"m\">2</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.user</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">mloda</span><span class=\"p\">,</span> <span class=\"n\">PluginLoader</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/user/__init__.py&quot;</span>, line <span class=\"m\">14</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">mloda.core.api.request</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">mlodaAPI</span>\n  File <span class=\"nb\">&quot;/home/tom/nexus-tk/code/mloda/mloda/core/api/request.py&quot;</span>, line <span class=\"m\">5</span>, in <span class=\"n\">&lt;module&gt;</span>\n<span class=\"w\">    </span><span class=\"kn\">from</span><span class=\"w\"> </span><span class=\"nn\">datetime</span><span class=\"w\"> </span><span class=\"kn\">import</span> <span class=\"n\">UTC</span><span class=\"p\">,</span> <span class=\"n\">datetime</span>\n<span class=\"gr\">ImportError</span>: <span class=\"n\">cannot import name &#39;UTC&#39; from &#39;datetime&#39; (/usr/lib/python3.10/datetime.py)</span>\n</pre></div>\n</span>",
+          "mimetype": "application/vnd.marimo+traceback"
         }
       ]
     },
@@ -121,20 +128,13 @@
       "code_hash": "4bf0c8f59d9a90d1d9323e7a3f5b3946",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ImportError): ",
+          "traceback": null
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stdout",
-          "text": "[shape: (100, 1)\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 age__sum_aggr \u2502\n\u2502 ---           \u2502\n\u2502 i64           \u2502\n\u255e\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2561\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 \u2026             \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2502 4846          \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518]\n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "console": []
     },
     {
       "id": "RGSE",
@@ -154,20 +154,13 @@
       "code_hash": "e6179df7f51ae4e2e5ff87f33276a0af",
       "outputs": [
         {
-          "type": "data",
-          "data": {
-            "text/plain": ""
-          }
+          "type": "error",
+          "ename": "exception",
+          "evalue": "An ancestor raised an exception (ImportError): ",
+          "traceback": null
         }
       ],
-      "console": [
-        {
-          "type": "stream",
-          "name": "stdout",
-          "text": "[shape: (5, 1)\n\u250c\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2510\n\u2502 CustomConfiguration \u2502\n\u2502 ---                 \u2502\n\u2502 i64                 \u2502\n\u255e\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2550\u2561\n\u2502 246                 \u2502\n\u2502 246                 \u2502\n\u2502 246                 \u2502\n\u2502 246                 \u2502\n\u2502 246                 \u2502\n\u2514\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2500\u2518]\n",
-          "mimetype": "text/plain"
-        }
-      ]
+      "console": []
     },
     {
       "id": "emfo",

@@ -1555,35 +1555,29 @@ class TestUnpointedDeclaredNamesDeclineWithReason:
             " [code: source_not_found]"
         ) in str(exc_info.value)
 
-    def test_did_you_mean_lists_declared_prefixes_not_the_class_name(self) -> None:
+    @pytest.mark.parametrize(
+        ("requested", "expected_suggestion"),
+        [("toyfmt_pre", "'toyfmt_pre_'"), ("toyfmt_pre_", None)],
+    )
+    def test_did_you_mean_never_suggests_the_class_name(self, requested: str, expected_suggestion: str | None) -> None:
         with pytest.raises(FeatureResolutionError) as exc_info:
             mloda.run_all(
-                [Feature("toyfmt_pre")],
+                [Feature(requested)],
                 compute_frameworks=[PyArrowTable],
                 plugin_collector=PluginCollector.enabled_feature_groups({ToyDeclaredFG}),
                 data_access_collection=toy_dac(h1={COL: [1]}),
             )
 
         message = str(exc_info.value)
-        assert "'toyfmt_pre_'" in message.split("Did you mean one of:", 1)[1]
         assert "ToyDeclaredFG_" not in message
+        if expected_suggestion is not None:
+            assert expected_suggestion in message.split("Did you mean one of:", 1)[1]
 
     def test_name_catalog_skips_an_empty_declared_prefix(self) -> None:
         result = _identify(Feature("toyfmt_unknown"), None, _EmptyPrefixDeclaredFG)
 
         assert "toyfmt_pre_" in result.facts.known_names
         assert "" not in result.facts.known_names
-
-    def test_did_you_mean_for_the_bare_prefix_does_not_suggest_the_class_name(self) -> None:
-        with pytest.raises(FeatureResolutionError) as exc_info:
-            mloda.run_all(
-                [Feature("toyfmt_pre_")],
-                compute_frameworks=[PyArrowTable],
-                plugin_collector=PluginCollector.enabled_feature_groups({ToyDeclaredFG}),
-                data_access_collection=toy_dac(h1={"other": [1]}),
-            )
-
-        assert "ToyDeclaredFG_" not in str(exc_info.value)
 
     def test_missing_multiple_route_options_are_sorted_and_pluralized(self) -> None:
         result = _identify(Feature("toyfmt_declared_col"), None, _PluralRequiredOptionFG)

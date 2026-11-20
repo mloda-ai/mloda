@@ -88,6 +88,31 @@ class FpartLiteralFG(DataCreatorFeatureGroup):
         return {"fpart__lit~k": ["alice", "bob"]}
 
 
+class FpartRowsNumericFG(FpartRowsAnyFG):
+    """Declares numeric parts, which the default set_feature_name would strip."""
+
+    OUTPUT_PARTS = ("0", "1")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"fpart__rows~0": ["alice", "bob"], "fpart__rows~1": [1, 2]}
+
+
+class FpartRowsRenamingFG(FpartRowsAnyFG):
+    """Renames the base name in set_feature_name (leaving `~` names untouched) and emits the renamed columns."""
+
+    OUTPUT_PARTS = ("s", "t")
+
+    def set_feature_name(self, config: Options, feature_name: Any) -> Any:
+        if "~" in str(feature_name):
+            return feature_name
+        return type(feature_name)(f"{feature_name}_x")
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"fpart__rows_x~s": ["alice", "bob"], "fpart__rows_x~t": [1, 2]}
+
+
 def _run_part_filter(group: type[DataCreatorFeatureGroup], requested: str, filtered: str, flight_server: Any) -> Any:
     global_filter = GlobalFilter()
     global_filter.add_filter(filtered, "equal", {"value": "alice"})
@@ -101,20 +126,33 @@ def _run_part_filter(group: type[DataCreatorFeatureGroup], requested: str, filte
     )
 
 
-@pytest.mark.parametrize("group", [FpartRowsAnyFG, FpartRowsDeclaredFG], ids=["any_part", "declared_parts"])
-def test_filter_on_declared_output_part_filters_rows(group: type[DataCreatorFeatureGroup], flight_server: Any) -> None:
-    result = _run_part_filter(group, "fpart__rows~s", "fpart__rows~s", flight_server)
+# (group, filtered/requested part, other part, base name of the returned column)
+_PART_CASES = [
+    pytest.param(FpartRowsAnyFG, "s", "t", "fpart__rows", id="any_part"),
+    pytest.param(FpartRowsDeclaredFG, "s", "t", "fpart__rows", id="declared_parts"),
+    pytest.param(FpartRowsNumericFG, "0", "1", "fpart__rows", id="numeric_parts"),
+    pytest.param(FpartRowsRenamingFG, "s", "t", "fpart__rows_x", id="renaming_group"),
+]
+
+
+@pytest.mark.parametrize("group, part, other, out_base", _PART_CASES)
+def test_filter_on_declared_output_part_filters_rows(
+    group: type[DataCreatorFeatureGroup], part: str, other: str, out_base: str, flight_server: Any
+) -> None:
+    result = _run_part_filter(group, f"fpart__rows~{part}", f"fpart__rows~{part}", flight_server)
 
     assert len(result.results) == 1
-    assert result.results[0] == {"fpart__rows~s": ["alice"]}
+    assert result.results[0] == {f"{out_base}~{part}": ["alice"]}
 
 
-@pytest.mark.parametrize("group", [FpartRowsAnyFG, FpartRowsDeclaredFG], ids=["any_part", "declared_parts"])
-def test_filter_part_differs_from_requested_part(group: type[DataCreatorFeatureGroup], flight_server: Any) -> None:
-    result = _run_part_filter(group, "fpart__rows~t", "fpart__rows~s", flight_server)
+@pytest.mark.parametrize("group, part, other, out_base", _PART_CASES)
+def test_filter_part_differs_from_requested_part(
+    group: type[DataCreatorFeatureGroup], part: str, other: str, out_base: str, flight_server: Any
+) -> None:
+    result = _run_part_filter(group, f"fpart__rows~{other}", f"fpart__rows~{part}", flight_server)
 
     assert len(result.results) == 1
-    assert result.results[0] == {"fpart__rows~t": [1]}
+    assert result.results[0] == {f"{out_base}~{other}": [1]}
 
 
 def test_filter_on_literal_whole_name_with_tilde_still_applies(flight_server: Any) -> None:
@@ -211,19 +249,21 @@ def test_unify_options_preserves_key_category() -> None:
 
 @pytest.mark.parametrize(
     "filter_column, expected_applicable",
-    [("fpart__base~s", True), ("fpart__base~other", False), ("fpart__base", True), (None, False)],
+    [("fpart__base~s", True), ("fpart__base~other", False), ("fpart__base", True)],
 )
-def test_applicable_filters_matches_requested_output_parts(
-    filter_column: str | None, expected_applicable: bool
-) -> None:
-    """A filter on `<base>~<requested part>` is applicable; an unrequested part is not; None filters give []."""
+def test_applicable_filters_matches_requested_output_parts(filter_column: str, expected_applicable: bool) -> None:
+    """A filter on `<base>~<requested part>` is applicable; an unrequested part is not."""
     feature = Feature("fpart__base")
     feature.record_part("s")
     feature_set = FeatureSet([feature])
-    if filter_column is None:
-        feature_set.filters = None
-        assert BaseFilterEngine.applicable_filters(feature_set) == []
-        return
     single_filter = SingleFilter(filter_column, FilterType.MIN, {"value": 1})
     feature_set.filters = {single_filter}
     assert BaseFilterEngine.applicable_filters(feature_set) == ([single_filter] if expected_applicable else [])
+
+
+def test_applicable_filters_none_filters_gives_empty() -> None:
+    feature = Feature("fpart__base")
+    feature.record_part("s")
+    feature_set = FeatureSet([feature])
+    feature_set.filters = None
+    assert BaseFilterEngine.applicable_filters(feature_set) == []

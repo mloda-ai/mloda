@@ -1014,6 +1014,14 @@ class MeasureProducer(FeatureGroup):
         return {PandasDataFrame}
 
 
+class WideMeasureProducer(MeasureProducer):
+    """MeasureProducer that also accepts PyArrowTable."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame, PyArrowTable}
+
+
 class WildcardProducer(FeatureGroup):
     """Parts are named at run time; produces wild~a and wild~b."""
 
@@ -1241,10 +1249,26 @@ class TestDeclaredOutputParts:
         assert _columns(results) == {"measure~value", "measure~unit"}
         assert MeasureProducer.calls == 1
 
-    def test_parts_of_one_base_merge_across_a_direct_request_and_a_consumer(self) -> None:
-        _run(["measure_consumer_output", "measure~unit"], MeasureProducer, MeasureConsumer)
+    @pytest.mark.parametrize(
+        "producer, direct, frameworks",
+        [
+            pytest.param(MeasureProducer, "measure~unit", None, id="same-framework-sets"),
+            pytest.param(
+                WideMeasureProducer,
+                Feature("measure~unit", compute_framework="PandasDataFrame"),
+                [PandasDataFrame, PyArrowTable],
+                id="pinned-direct-request-narrower-than-consumer",
+            ),
+        ],
+    )
+    def test_parts_of_one_base_merge_across_a_direct_request_and_a_consumer(
+        self,
+        producer: type[FeatureGroup],
+        direct: Feature | str,
+        frameworks: list[type[ComputeFramework]] | None,
+    ) -> None:
+        _run(["measure_consumer_output", direct], producer, MeasureConsumer, frameworks=frameworks)
 
-        assert MeasureProducer.calls == 1
         [feature] = MeasureProducer.captured
         assert feature.requested_parts == frozenset({"value", "unit"})
 

@@ -950,7 +950,7 @@ class Engine:
                         and t_cf < host_cf
                         and t.child_options_differ(host)
                         and t._equals(host, False, include_child_options=False)
-                        and self._same_merge_scope(t, host)
+                        and self._same_merge_scope(t, host, parts=False)
                     ]
                     # Intake's typed reuse; the resolved-input guard it needs always holds after resolution.
                     narrower = narrower or [
@@ -1022,12 +1022,12 @@ class Engine:
         ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
-    def _same_merge_scope(self, a: Feature, b: Feature) -> bool:
-        """True when cascade keys, requested parts and parts_only match (intake's merge guards)."""
+    def _same_merge_scope(self, a: Feature, b: Feature, parts: bool = True) -> bool:
+        """True when cascade keys, parts_only and (if parts) requested parts match."""
         return (
             self._cascade_keys_at_resolution.get(a.uuid, a.options.cascade_context_keys)
             == self._cascade_keys_at_resolution.get(b.uuid, b.options.cascade_context_keys)
-            and a.requested_parts == b.requested_parts
+            and (not parts or a.requested_parts == b.requested_parts)
             and a.parts_only == b.parts_only
         )
 

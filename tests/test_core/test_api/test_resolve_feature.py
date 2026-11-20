@@ -16,7 +16,7 @@ import sys
 import textwrap
 
 import pytest
-from typing import Any
+from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
@@ -375,6 +375,7 @@ class NameOnlyEngineNomFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
 ELIM_WIN_FEATURE = "elim_resolve_feature_a"
 ELIM_FAIL_FEATURE = "elim_resolve_feature_b"
+ELIM_NONSTR_FEATURE = "elim_resolve_feature_c"
 ELIM_REASON = "elim option value was rejected"
 ELIM_SECRET_PASSWORD = "elimpw-Xq7Lm2Vd9"  # nosec B105
 ELIM_REGISTERED_SECRET = "elim-reg-Hk4Tn8Wz3"  # nosec B105
@@ -394,7 +395,7 @@ class WinnerElimFG(FeatureGroup):
         options: Options,
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
-        return str(feature_name) == ELIM_WIN_FEATURE
+        return str(feature_name) in (ELIM_WIN_FEATURE, ELIM_NONSTR_FEATURE)
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -420,6 +421,8 @@ class DeclinerElimFG(FeatureGroup):
         elif name == ELIM_FAIL_FEATURE:
             reason = f"{ELIM_REASON} password={ELIM_SECRET_PASSWORD} token {ELIM_REGISTERED_SECRET}"
             record_match_rejection(cls.__name__, reason, code=CoreDeclineCode.OPTION_VALUE_REJECTED)
+        elif name == ELIM_NONSTR_FEATURE:
+            record_match_rejection(cls.__name__, cast(str, 42), code=CoreDeclineCode.OPTION_VALUE_REJECTED)
         return False
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
@@ -969,7 +972,10 @@ class TestResolveFeatureIsNonThrowing:
         assert result.raised is None
 
     def test_a_marked_match_abort_records_the_raised_class_name(self) -> None:
-        assert self._resolve_abort("bad", secret_dac=False).raised == "ValueError"
+        result = self._resolve_abort("bad", secret_dac=False)
+
+        assert result.raised == "ValueError"
+        assert not result.eliminations
 
     @staticmethod
     def _resolve_echo_branch(
@@ -1097,12 +1103,6 @@ class TestResolveFeatureEliminations:
         assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
         assert WinnerElimFG not in result.eliminations
 
-    def test_failure_reports_the_declined_candidate(self) -> None:
-        result = self._resolve(ELIM_FAIL_FEATURE)
-
-        assert result.feature_group is None
-        assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
-
     def test_code_matches_the_engine_elimination(self) -> None:
         accessible_plugins: FeatureGroupEnvironmentMapping = {
             WinnerElimFG: {PandasDataFrame},
@@ -1120,7 +1120,15 @@ class TestResolveFeatureEliminations:
         result = self._resolve(ELIM_FAIL_FEATURE)
 
         assert engine_code is CoreDeclineCode.OPTION_VALUE_REJECTED
+        assert result.feature_group is None
         assert result.eliminations[DeclinerElimFG].code is engine_code
+
+    def test_non_str_reason_is_stringified_not_raised(self) -> None:
+        result = self._resolve(ELIM_NONSTR_FEATURE)
+
+        assert result.feature_group is WinnerElimFG
+        assert result.eliminations[DeclinerElimFG].reason == "42"
+        assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
 
     def test_reason_without_a_collection_is_scrubbed_of_a_credential_shape(self) -> None:
         result = self._resolve(ELIM_FAIL_FEATURE)

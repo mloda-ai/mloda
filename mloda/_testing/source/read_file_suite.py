@@ -18,6 +18,7 @@ from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin, _cha
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
+from mloda.core.abstract_plugins.components.handle_option_names import DATA_ACCESS_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.implementation import loaded_implementations
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 __all__ = ["FOREIGN_SUFFIX", "HANDLE_OPTION", "ReadFileFGTestMixin"]
 
 FOREIGN_SUFFIX = ".notmyformat"
-HANDLE_OPTION = "data_access_handle"
+HANDLE_OPTION = DATA_ACCESS_HANDLE_OPTION
 
 
 class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
@@ -165,7 +166,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         assert "column_to_file" in message
         assert self._group_name() in message
         assert "narrow with a data_access_handle or column_to_file." not in message
-        assert "data_access_handle" not in message  # a folder handle still holds both files, so it cannot pick one
+        assert HANDLE_OPTION not in message  # a folder handle still holds both files, so it cannot pick one
         assert "file handles" not in message
         assert "toyfmt-secret-value" not in message
 

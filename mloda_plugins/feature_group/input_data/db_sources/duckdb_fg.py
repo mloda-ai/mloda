@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     record_match_rejection,
 )
 from mloda.core.abstract_plugins.components.credential_handle import named_handles_text
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, FeatureSet, Implementation, PropertySpec, SourceFeatureGroup
 from mloda.user import DataAccessCollection, Options
@@ -19,7 +20,7 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framewor
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 
-HANDLE_KEY = "connection_handle"
+HANDLE_KEY = CONNECTION_HANDLE_OPTION
 _CATALOG_SQL = (
     "SELECT table_name, column_name FROM information_schema.columns "
     "WHERE table_schema = 'main' AND table_catalog = current_database() ORDER BY table_name, ordinal_position"
@@ -87,7 +88,7 @@ class DuckdbFG(SourceFeatureGroup):
             reason = f"{name} has no pointer; select a connection with {HANDLE_KEY}"
             record_match_rejection(name, reason, stage=INPUT_DATA_STAGE, code=CoreDeclineCode.POINTER_INVALID)
             return []
-        handle = cls.read_option("connection_handle", options)
+        handle = cls.read_option(HANDLE_KEY, options)
         connections = {} if data_access_collection is None else data_access_collection.connections
         if not isinstance(handle, str) or handle not in connections:
             auto = data_access_collection.auto_handles if data_access_collection is not None else frozenset()

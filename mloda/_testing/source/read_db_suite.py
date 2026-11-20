@@ -261,7 +261,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         assert self.identity_of(other) in message
         assert OWN_TABLE not in message
         assert "second_table" not in message
-        assert "data_access_handle" in message
+        assert HANDLE_OPTION in message
         assert "select one database" in message
         assert "db_a" in message
         assert "db_b" in message
@@ -749,7 +749,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         message = str(exc_info.value)
         assert self._query_source(self.own_path, query) in message
         assert self._query_source(other, query) in message
-        assert "data_access_handle" in message
+        assert HANDLE_OPTION in message
         assert SECRET not in message
 
     def test_db_query_text_suppresses_the_table_route_and_opens_no_connection_at_match_time(

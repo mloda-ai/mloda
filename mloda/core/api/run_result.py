@@ -10,6 +10,7 @@ from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.validators.options_validator import redact_conflict_value
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
@@ -109,14 +110,14 @@ class RunResult(_RunOutcomeFields, list[Any]):
             keys = frozenset() if step.feature_group is None else frozenset(credential_handle_keys(step.feature_group))
             snapshot = snapshot_group(feature.options.group, keys)
             if feature.connection is not None:
-                snapshot = {**snapshot, "connection_handle": self._connection_handles.get(id(feature.connection))}
+                snapshot = {**snapshot, CONNECTION_HANDLE_OPTION: self._connection_handles.get(id(feature.connection))}
             return snapshot
 
         group: dict[Any, Any] | None = None
         if not isinstance(feature, str):
             group = snapshot_group(feature.options.group)
             if feature.connection is not None:
-                group["connection_handle"] = self._connection_handles.get(id(feature.connection))
+                group[CONNECTION_HANDLE_OPTION] = self._connection_handles.get(id(feature.connection))
         digests = {} if isinstance(feature, str) else match_digests(feature.options.group)
         pinned = None if isinstance(feature, str) else feature.compute_frameworks
         frames = self.frames()

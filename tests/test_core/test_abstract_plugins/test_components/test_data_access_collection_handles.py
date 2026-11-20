@@ -3,6 +3,7 @@
 See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guide.
 """
 
+import ast
 import json
 import logging
 import sqlite3
@@ -329,6 +330,29 @@ class TestConnectionHandleResolver:
         assert source_feature_group.HANDLE_OPTION == DATA_ACCESS_HANDLE_OPTION
         assert data_access_collection.CONNECTION_HANDLE_OPTION == CONNECTION_HANDLE_OPTION
         assert HANDLE_OPTION_NAMES == frozenset({CONNECTION_HANDLE_OPTION, DATA_ACCESS_HANDLE_OPTION})
+
+        from mloda._testing.source import read_file_suite
+        from mloda_plugins.feature_group.input_data.db_sources import duckdb_fg
+
+        assert read_file_suite.HANDLE_OPTION == DATA_ACCESS_HANDLE_OPTION
+        assert duckdb_fg.HANDLE_KEY == CONNECTION_HANDLE_OPTION
+
+    def test_handle_option_names_are_spelled_only_in_their_module(self) -> None:
+        """Only handle_option_names.py may spell the option names as string literals."""
+
+        from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
+
+        root = Path(__file__).resolve().parents[4]
+        home = (root / "mloda/core/abstract_plugins/components/handle_option_names.py").resolve()
+        files = [p for d in ("mloda", "mloda_plugins") for p in (root / d).rglob("*.py") if p.resolve() != home]
+        assert files, "no source files found; the repo root anchor is wrong"
+        hits = [
+            f"{p.relative_to(root)}:{n.lineno}"
+            for p in files
+            for n in ast.walk(ast.parse(p.read_text(encoding="utf-8")))
+            if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in HANDLE_OPTION_NAMES
+        ]
+        assert not hits, f"handle option names spelled as bare literals: {sorted(hits)}"
 
     def test_connection_handle_is_explicit_and_picks_the_named_one(self) -> None:
         dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})

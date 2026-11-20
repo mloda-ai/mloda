@@ -11,6 +11,10 @@ from mloda._testing.compute_framework.host import ComputeFrameworkSuite
 from mloda._testing.compute_framework_shape import serves_connection
 from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.source import reclaim
+from mloda.core.abstract_plugins.components.handle_option_names import (
+    CONNECTION_HANDLE_OPTION,
+    DATA_ACCESS_HANDLE_OPTION,
+)
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import (
@@ -149,7 +153,7 @@ class ConnectionPickSuite(ComputeFrameworkSuite, suite_base=True):
         second = self.second_connection(second_adapter)
         assert adapter.connection is not second
         dac = DataAccessCollection(connections={"primary": adapter.connection, "secondary": second})
-        options = Options(context={"data_access_handle": "secondary"})
+        options = Options(context={DATA_ACCESS_HANDLE_OPTION: "secondary"})
         assert framework.pick_connection_from_dac(dac, options=options) is second
 
     def test_connection_handle_picks_the_named_connection(
@@ -157,7 +161,7 @@ class ConnectionPickSuite(ComputeFrameworkSuite, suite_base=True):
     ) -> None:
         second = self.second_connection(second_adapter)
         dac = DataAccessCollection(connections={"a": adapter.connection, "b": second})
-        options = Options(group={"connection_handle": "b"})
+        options = Options(group={CONNECTION_HANDLE_OPTION: "b"})
         assert framework.pick_connection_from_dac(dac, options=options) is second
 
     def test_adopt_connection_rejects_data_on_another_connection_than_the_bound_one(

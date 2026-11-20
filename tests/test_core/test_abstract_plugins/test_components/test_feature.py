@@ -1,6 +1,7 @@
 import copy
 import enum
 import pickle  # nosec B403
+import re
 from pathlib import Path
 from typing import Any
 
@@ -513,7 +514,10 @@ def test_feature_connection_with_a_connection_handle_option_raises() -> None:
     import sqlite3
 
     conn = sqlite3.connect(":memory:")
-    with pytest.raises(ValueError, match="connection_handle"):
+    with pytest.raises(
+        ValueError,
+        match=re.escape("Feature(connection=...) cannot be combined with a 'connection_handle' option; use one."),
+    ):
         Feature("x", connection=conn, options={"connection_handle": "x"})
     conn.close()
 

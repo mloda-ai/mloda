@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.credential import Credential
 from mloda.core.abstract_plugins.components.divergence import Divergence
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.input_data_load import (
     _is_fallback_identity,
 )
@@ -370,8 +371,8 @@ def build_plan_steps(
             identity = None if match is None else match[0].data_access_identity(match[1])
             is_fallback = None if match is None or identity is None else _is_fallback_identity(match[1], identity)
             identity = None if identity is None else mask_literals(identity, current_identity_secrets())
-            named = None if step.features.options is None else step.features.options.get("connection_handle")
-            declared_here = any(f.options.is_own("connection_handle") for f in step.features.features)
+            named = None if step.features.options is None else step.features.options.get(CONNECTION_HANDLE_OPTION)
+            declared_here = any(f.options.is_own(CONNECTION_HANDLE_OPTION) for f in step.features.features)
             leaves_handle = (
                 named
                 if named is not None and declared_here and not declared and step.connection_handle != named
@@ -400,8 +401,8 @@ def build_plan_steps(
             if snapshot is not None and options is not None:
                 snapshot.registered_handle_options = options.registered_handle_options
             hash_options = snapshot
-            if snapshot is not None and snapshot.group.get("connection_handle") in auto_handles:
-                hash_options = Options(group={**snapshot.group, "connection_handle": "<unnamed>"})
+            if snapshot is not None and snapshot.group.get(CONNECTION_HANDLE_OPTION) in auto_handles:
+                hash_options = Options(group={**snapshot.group, CONNECTION_HANDLE_OPTION: "<unnamed>"})
             impl = step.features.implementation
             path = implementation_path(step.feature_group, impl, match)
             plan.append(

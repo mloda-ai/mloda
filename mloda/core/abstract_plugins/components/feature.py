@@ -19,6 +19,7 @@ from mloda.core.abstract_plugins.components.hashable_dict import (
     _deep_hashable,
     _reduce_dict_items,
 )
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.index.index import Index
 from mloda.core.abstract_plugins.components.link import Link
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
@@ -156,8 +157,10 @@ class Feature:
         self.name = FeatureName(name) if isinstance(name, str) else name
         self.options = Options(options) if isinstance(options, dict) else options
         reject_reserved_reader_key(self.options)
-        if connection is not None and self.options.get("connection_handle") is not None:
-            raise ValueError("Feature(connection=...) cannot be combined with a 'connection_handle' option; use one.")
+        if connection is not None and self.options.get(CONNECTION_HANDLE_OPTION) is not None:
+            raise ValueError(
+                f"Feature(connection=...) cannot be combined with a '{CONNECTION_HANDLE_OPTION}' option; use one."
+            )
         self._connection_holder = None if connection is None else _ConnectionHolder(connection)
         self.domain = self._set_domain(domain, self.options.get("domain"))
         if "domain" in self.options.group:

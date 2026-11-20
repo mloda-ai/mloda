@@ -68,6 +68,7 @@ from mloda.core.abstract_plugins.run_context import RunContext, RunInputs
 from mloda.core.abstract_plugins.verified_context import current_verified_context
 from mloda.core.abstract_plugins.components.credential_handle import validate_credential_handles
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, runtime_parameter_keys
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
@@ -519,7 +520,7 @@ class mlodaAPI:
                     handles[id(connection)] = f"_feature_connection_{index}"
                     dac.bind_auto_connection(connection, handles[id(connection)])
             feature.options = copy(feature.options)
-            feature.options.set("connection_handle", handles[id(connection)])
+            feature.options.set(CONNECTION_HANDLE_OPTION, handles[id(connection)])
         return dac, handles
 
     def _process_features(

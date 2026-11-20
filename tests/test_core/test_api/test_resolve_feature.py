@@ -7,6 +7,8 @@ and candidate tracking.
 """
 
 import ast
+import copy
+import dataclasses
 import inspect
 import json
 import linecache
@@ -16,6 +18,7 @@ import textwrap
 import pytest
 from typing import Any
 
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
@@ -35,6 +38,8 @@ from mloda.core.prepare.accessible_plugins import (
     FeatureGroupEnvironmentMapping,
     RedefinitionConflictError,
 )
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError
+from mloda.core.prepare.resolution_types import Elimination
 from tests.test_core.test_prepare.identify_seam import evaluate_or_raise
 from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsVaultFG
 from mloda.user import PluginLoader
@@ -368,6 +373,59 @@ class NameOnlyEngineNomFeatureGroup(FeatureChainParserMixin, FeatureGroup):
     PROPERTY_MAPPING = ConfigPathEngineNomFeatureGroup.PROPERTY_MAPPING
 
 
+ELIM_WIN_FEATURE = "elim_resolve_feature_a"
+ELIM_FAIL_FEATURE = "elim_resolve_feature_b"
+ELIM_REASON = "elim option value was rejected"
+ELIM_SECRET_PASSWORD = "elimpw-Xq7Lm2Vd9"  # nosec B105
+ELIM_REGISTERED_SECRET = "elim-reg-Hk4Tn8Wz3"  # nosec B105
+
+
+class WinnerElimFG(FeatureGroup):
+    """Matches only the unique winning elimination feature name."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == ELIM_WIN_FEATURE
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class DeclinerElimFG(FeatureGroup):
+    """Records an option-value rejection for the two elimination feature names, matches nothing."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        name = str(feature_name)
+        if name == ELIM_WIN_FEATURE:
+            record_match_rejection(cls.__name__, ELIM_REASON, code=CoreDeclineCode.OPTION_VALUE_REJECTED)
+        elif name == ELIM_FAIL_FEATURE:
+            reason = f"{ELIM_REASON} password={ELIM_SECRET_PASSWORD} token {ELIM_REGISTERED_SECRET}"
+            record_match_rejection(cls.__name__, reason, code=CoreDeclineCode.OPTION_VALUE_REJECTED)
+        return False
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
 @pytest.fixture(scope="module", autouse=True)
 def load_plugins() -> None:
     """Load all plugins before running tests in this module."""
@@ -442,6 +500,19 @@ class TestResolvedFeatureDataclass:
         )
         assert hasattr(result, "error")
         assert result.error == "Some error"
+
+    def test_eliminations_defaults_empty(self) -> None:
+        assert not ResolvedFeature("n", None, [], None).eliminations
+
+    def test_deepcopy_and_asdict_preserve_eliminations(self) -> None:
+        elimination = Elimination(stage="value_rejection", reason="why", code=CoreDeclineCode.OPTION_VALUE_REJECTED)
+        resolved = ResolvedFeature("n", None, [], None, eliminations={WinnerElimFG: elimination})
+
+        clone = copy.deepcopy(resolved)
+
+        assert clone.eliminations[WinnerElimFG].reason == "why"
+        assert clone.eliminations[WinnerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
+        assert dataclasses.asdict(resolved)["eliminations"][WinnerElimFG]["reason"] == "why"
 
 
 class TestResolveFeatureReturnType:
@@ -941,6 +1012,8 @@ class TestResolveFeatureIsNonThrowing:
         assert result.error is not None
         assert ABORT_ECHO_SECRET not in result.error
         assert "***" in result.error
+        if branch != "no_match":
+            assert not result.eliminations
 
     @pytest.mark.parametrize("branch", ECHO_BRANCHES)
     def test_every_error_branch_keeps_text_without_a_credential_collection(
@@ -950,6 +1023,8 @@ class TestResolveFeatureIsNonThrowing:
 
         assert result.error is not None
         assert ABORT_ECHO_SECRET in result.error
+        if branch != "no_match":
+            assert not result.eliminations
 
     def test_success_with_a_credential_collection_has_no_error(self) -> None:
         dac = DataAccessCollection(credentials={"vault": {"token": ABORT_ECHO_SECRET}})
@@ -1000,6 +1075,66 @@ class TestResolveFeatureIsNonThrowing:
             f"Error must surface the unknown compute framework reason, got: {result.error}"
         )
         assert "NoSuchFrameworkXYZ" not in result.error
+
+
+class TestResolveFeatureEliminations:
+    """resolve_feature reports why each eliminated candidate lost, on success and on failure."""
+
+    @staticmethod
+    def _resolve(name: str, dac: DataAccessCollection | None = None) -> ResolvedFeature:
+        return resolve_feature(
+            name,
+            plugin_collector=PluginCollector.enabled_feature_groups({WinnerElimFG, DeclinerElimFG}),
+            data_access_collection=dac,
+        )
+
+    def test_success_reports_the_declined_loser(self) -> None:
+        result = self._resolve(ELIM_WIN_FEATURE)
+
+        assert result.feature_group is WinnerElimFG
+        assert result.error is None
+        assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
+        assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
+        assert WinnerElimFG not in result.eliminations
+
+    def test_failure_reports_the_declined_candidate(self) -> None:
+        result = self._resolve(ELIM_FAIL_FEATURE)
+
+        assert result.feature_group is None
+        assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
+
+    def test_code_matches_the_engine_elimination(self) -> None:
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            WinnerElimFG: {PandasDataFrame},
+            DeclinerElimFG: {PandasDataFrame},
+        }
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(
+                feature=Feature(ELIM_FAIL_FEATURE),
+                accessible_plugins=accessible_plugins,
+                links=None,
+                data_access_collection=None,
+            )
+        engine_code = exc_info.value.result.eliminations[DeclinerElimFG].code
+
+        result = self._resolve(ELIM_FAIL_FEATURE)
+
+        assert engine_code is CoreDeclineCode.OPTION_VALUE_REJECTED
+        assert result.eliminations[DeclinerElimFG].code is engine_code
+
+    def test_reason_without_a_collection_is_scrubbed_of_a_credential_shape(self) -> None:
+        result = self._resolve(ELIM_FAIL_FEATURE)
+
+        assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
+        assert ELIM_SECRET_PASSWORD not in result.eliminations[DeclinerElimFG].reason
+
+    def test_reason_with_a_registered_collection_masks_the_registered_secret(self) -> None:
+        dac = DataAccessCollection(credentials={"vault": {"token": ELIM_REGISTERED_SECRET}})
+
+        result = self._resolve(ELIM_FAIL_FEATURE, dac)
+
+        assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
+        assert ELIM_REGISTERED_SECRET not in result.eliminations[DeclinerElimFG].reason
 
 
 class TestResolveFeatureOptionsNoneEqualsEmpty:

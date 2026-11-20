@@ -379,7 +379,8 @@ ELIM_NONSTR_FEATURE = "elim_resolve_feature_c"
 ELIM_REASON = "elim option value was rejected"
 ELIM_SECRET_PASSWORD = "elimpw-Xq7Lm2Vd9"  # nosec B105
 ELIM_REGISTERED_SECRET = "elim-reg-Hk4Tn8Wz3"  # nosec B105
-ELIM_DEFER_MESSAGE = "elim deferred abort"
+ELIM_DEFER_MESSAGE = f"elim deferred abort password={ELIM_SECRET_PASSWORD} token {ELIM_REGISTERED_SECRET}"
+ELIM_DEFER_PREFIX = "elim deferred abort"
 
 
 class WinnerElimFG(FeatureGroup):
@@ -1166,7 +1167,7 @@ class TestResolveFeatureEliminations:
         assert result.feature_group is None
         assert result.raised == "FeatureResolutionError"
         assert result.error is not None
-        assert ELIM_DEFER_MESSAGE in result.error
+        assert ELIM_DEFER_PREFIX in result.error
         assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
         assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
         assert result.eliminations[DeferringElimFG].stage == "input_data"
@@ -1179,6 +1180,10 @@ class TestResolveFeatureEliminations:
 
         assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
         assert ELIM_SECRET_PASSWORD not in result.eliminations[DeclinerElimFG].reason
+        if DeferringElimFG in groups:
+            assert ELIM_SECRET_PASSWORD not in result.eliminations[DeferringElimFG].reason
+            assert result.error is not None
+            assert ELIM_SECRET_PASSWORD not in result.error
 
     @pytest.mark.parametrize("groups", ELIM_GROUP_SETS, ids=["declined", "deferred"])
     def test_reason_with_a_registered_collection_masks_the_registered_secret(
@@ -1190,6 +1195,10 @@ class TestResolveFeatureEliminations:
 
         assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
         assert ELIM_REGISTERED_SECRET not in result.eliminations[DeclinerElimFG].reason
+        if DeferringElimFG in groups:
+            assert ELIM_REGISTERED_SECRET not in result.eliminations[DeferringElimFG].reason
+            assert result.error is not None
+            assert ELIM_REGISTERED_SECRET not in result.error
 
 
 class TestResolveFeatureOptionsNoneEqualsEmpty:

@@ -229,6 +229,13 @@ def safe_field_with_exception(
         return fallback, exc
 
 
+def abort_fields(exc: Exception) -> tuple[str, str, bool]:
+    """Return (message or the class name when blank, class name, is_credential_abort)."""
+    message = safe_exc_str(exc)
+    raised_type = type(exc).__name__
+    return message if message.strip() else raised_type, raised_type, is_credential_abort(exc)
+
+
 def safe_field_with_abort(
     read: Callable[[], T],
     fallback: T,
@@ -238,9 +245,7 @@ def safe_field_with_abort(
     value, exc = safe_field_with_exception(read, fallback, catching)
     if exc is None:
         return value, None, None, False
-    message = safe_exc_str(exc)
-    raised_type = type(exc).__name__
-    return value, message if message.strip() else raised_type, raised_type, is_credential_abort(exc)
+    return (value, *abort_fields(exc))
 
 
 def safe_field_with_error(

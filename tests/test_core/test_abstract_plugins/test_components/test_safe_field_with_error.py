@@ -4,14 +4,14 @@ TestSbfixSafeFieldWithErrorSwallowsRaisingStr is a red-phase test: it currently 
 caught exception's own str(exc) is read eagerly and escapes the guard.
 """
 
+import pytest
+
 from mloda.core.abstract_plugins.components.utils import (
     mark_credential_abort,
     safe_field_with_abort,
     safe_field_with_error,
     safe_field_with_exception,
 )
-
-import pytest
 
 
 def _sbfix_boom() -> int:

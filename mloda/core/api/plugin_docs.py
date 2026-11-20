@@ -31,12 +31,11 @@ from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDe
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import (
+    abort_fields,
     as_str,
     get_all_subclasses,
     is_nominal_subclass,
     safe_field,
-    is_credential_abort,
-    safe_exc_str,
     safe_field_with_error,
     safe_field_with_exception,
 )
@@ -545,15 +544,7 @@ def _resolve_feature(
 
     evaluation, escaped = safe_field_with_exception(_evaluate, None)
     if evaluation is None:
-        eval_error = ""
-        raised = None
-        refused = False
-        if escaped is not None:
-            eval_error = safe_exc_str(escaped)
-            raised = type(escaped).__name__
-            refused = is_credential_abort(escaped)
-            if not eval_error.strip():
-                eval_error = raised
+        eval_error, raised, refused = abort_fields(escaped) if escaped is not None else ("", None, False)
         return ResolvedFeature(
             feature_name,
             None,

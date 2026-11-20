@@ -943,7 +943,7 @@ class Engine:
                         if t is not host and t_cf < host_cf and t.equals_ignoring_compute_frameworks(host)
                     ]
                     # Child-options twins only matter when no exact twin exists.
-                    narrower = exact or [
+                    child = [
                         (t, t_cf)
                         for t, t_cf in bucket
                         if t is not host
@@ -952,6 +952,8 @@ class Engine:
                         and t._equals(host, False, include_child_options=False)
                         and self._same_merge_scope(t, host, parts=False)
                     ]
+                    # Prefer twins requesting the host's own parts.
+                    narrower = exact or [p for p in child if p[0].requested_parts == host.requested_parts] or child
                     # Intake's typed reuse; the resolved-input guard it needs always holds after resolution.
                     narrower = narrower or [
                         (t, t_cf)
@@ -1022,8 +1024,8 @@ class Engine:
         ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
-    def _same_merge_scope(self, a: Feature, b: Feature, parts: bool = True) -> bool:
-        """True when cascade keys, parts_only and (if parts) requested parts match."""
+    def _same_merge_scope(self, a: Feature, b: Feature, *, parts: bool = True) -> bool:
+        """True when cascade keys and parts_only match, and requested parts too unless parts=False."""
         return (
             self._cascade_keys_at_resolution.get(a.uuid, a.options.cascade_context_keys)
             == self._cascade_keys_at_resolution.get(b.uuid, b.options.cascade_context_keys)

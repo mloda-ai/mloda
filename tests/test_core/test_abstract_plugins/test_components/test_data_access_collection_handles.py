@@ -3,6 +3,7 @@
 See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guide.
 """
 
+import ast
 import json
 import logging
 import sqlite3
@@ -338,7 +339,6 @@ class TestConnectionHandleResolver:
 
     def test_handle_option_names_are_spelled_only_in_their_module(self) -> None:
         """Only handle_option_names.py may spell the option names as string literals."""
-        import ast
 
         from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
 

@@ -18,7 +18,7 @@ from mloda._testing.source.source_suite import SourceFeatureGroupTestMixin, _cha
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION as HANDLE_OPTION
+from mloda.core.abstract_plugins.components.handle_option_names import DATA_ACCESS_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, MatchRejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.implementation import loaded_implementations
@@ -31,9 +31,10 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.table import P
 if TYPE_CHECKING:
     from mloda.provider import ReadFileFG
 
-__all__ = ["FOREIGN_SUFFIX", "ReadFileFGTestMixin"]
+__all__ = ["FOREIGN_SUFFIX", "HANDLE_OPTION", "ReadFileFGTestMixin"]
 
 FOREIGN_SUFFIX = ".notmyformat"
+HANDLE_OPTION = DATA_ACCESS_HANDLE_OPTION
 
 
 class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):

@@ -459,7 +459,7 @@ def resolve_feature(
             if resolved.error is not None:
                 resolved.error = scrub_credentials(resolved.error)
             resolved.eliminations = {
-                fg: replace(elimination, reason=scrub_credentials(elimination.reason))
+                fg: replace(elimination, reason=scrub_credentials(str(elimination.reason)))
                 for fg, elimination in resolved.eliminations.items()
             }
             return resolved
@@ -571,9 +571,9 @@ def _resolve_feature(
             unsupported_compute_frameworks=unsupported_names,
             subtype=subtype,
             subtype_family=subtype_family,
-            eliminations=dict(result.eliminations),
+            eliminations=result.eliminations,
         )
 
     # A projection of the evaluation already in hand: the same message the engine raises with, and the
     # renderer emits the scope callout itself, so scope_suffix must not be appended a second time.
-    return ResolvedFeature(feature_name, None, candidates, error=message, eliminations=dict(result.eliminations))
+    return ResolvedFeature(feature_name, None, candidates, error=message, eliminations=result.eliminations)

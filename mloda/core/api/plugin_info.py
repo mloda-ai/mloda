@@ -1,4 +1,5 @@
 from dataclasses import dataclass, field
+from collections.abc import Mapping
 from typing import TYPE_CHECKING
 
 from mloda.core.abstract_plugins.components.divergence import Divergence
@@ -6,6 +7,7 @@ from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimR
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
+    from mloda.core.prepare.resolution_types import Elimination
 
 
 @dataclass
@@ -76,5 +78,5 @@ class ResolvedFeature:
     credential_refusal: bool = False
     # Class name of an exception that escaped the evaluation; a contained matcher raise leaves it None.
     raised: str | None = None
-    # Decline code per candidate feature group, keyed by class name; empty when no candidate declined.
-    decline_codes: dict[str, str] = field(default_factory=dict)
+    # Why each eliminated candidate lost (engine elimination records, reasons credential-scrubbed); empty when matching never ran.
+    eliminations: Mapping[type["FeatureGroup"], "Elimination"] = field(default_factory=dict)

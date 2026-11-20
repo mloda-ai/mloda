@@ -172,11 +172,11 @@ If the parts depend on the feature name or options, override the classmethod `ou
 - An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.
 - A declared part matches only in full: declare `0` and `0~lower` to resolve both `f~0` and `f~0~lower`, or override `output_parts` for variable-width nested parts. A request for `f~0` still returns its nested columns.
 - Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`; a missing index fails after the computation.
-- `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution, not in global filters.
+- `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution and in global filters, where `<base>~<part>` is read against the declared parts.
 - Artifacts are keyed by the base feature name, not a part column.
 - `supports_compute_framework` and `Implementation.accepts` take a keyword-only `part`, the requested declared output part, so a part can run on a framework that refuses the whole.
-- `feature_name` is the base name when `part` is set, otherwise the requested name.
-- With `part=None` a `~` name can still arrive whole: the implicit `vec~N` path of a group declaring no parts, a group matching `x~k` as a whole name, and global filters (which pass the filter feature's name unsplit).
+- `feature_name` is the base name when `part` is set (in resolution and in global filters), otherwise the requested name.
+- With `part=None` a `~` name can still arrive whole: the implicit `vec~N` path of a group declaring no parts, and a group matching `x~k` as a whole name.
 - A whole and a part request fold into one step when one framework allows both. Otherwise (pins, or a consumer whose framework rule excludes the whole's framework) each runs as its own step computing the base, so the producer should honor `parts_only`.
 - A trailing `~N` is also read against the declared parts: `measure~0` fails at resolution unless `0` is declared.
 - A part's declared data type is checked on its own column (`measure~value`).

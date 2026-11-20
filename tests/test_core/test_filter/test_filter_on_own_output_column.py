@@ -1,8 +1,10 @@
 """Regression tests for issue #712: a GlobalFilter on a column that a root FeatureGroup itself outputs."""
 
-from typing import Any
+from typing import Any, ClassVar
 
-from mloda.provider import ComputeFramework, FeatureSet, DataCreatorFeatureGroup
+import pytest
+
+from mloda.provider import ANY_OUTPUT_PART, ComputeFramework, FeatureSet, DataCreatorFeatureGroup
 from mloda.user import Feature, Features, GlobalFilter, Options, ParallelizationMode, PluginCollector
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
@@ -32,6 +34,84 @@ class FilterOwnOutputRetrievalFG(DataCreatorFeatureGroup):
             "retrieval__doc_id": [1, 2, 3],
             "retrieval__distance": [0.1, 0.4, 0.9],
         }
+
+
+class FpartRowsAnyFG(DataCreatorFeatureGroup):
+    """Serves only parts of fpart__rows, naming them at run time."""
+
+    OUTPUT_PARTS: ClassVar[tuple[str, ...] | None] = (ANY_OUTPUT_PART,)
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"fpart__rows"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        names = {str(feature.name) for feature in features.features}
+        assert names == {"fpart__rows"}, f"a parts-only group must be handed the base name only, got {names}"
+        return {"fpart__rows~s": ["alice", "bob"], "fpart__rows~t": [1, 2]}
+
+
+class FpartRowsDeclaredFG(FpartRowsAnyFG):
+    """Same group declaring its parts."""
+
+    OUTPUT_PARTS = ("s", "t")
+
+
+class FpartLiteralFG(DataCreatorFeatureGroup):
+    """Claims the literal whole name fpart__lit~k."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"fpart__lit~k"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"fpart__lit~k": ["alice", "bob"]}
+
+
+def _run_part_filter(group: type[DataCreatorFeatureGroup], requested: str, filtered: str, flight_server: Any) -> Any:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(filtered, "equal", {"value": "alice"})
+    return MlodaTestRunner.run_api(
+        Features([Feature(requested)]),
+        compute_frameworks=[PythonDictFramework],
+        parallelization_modes={ParallelizationMode.SYNC},
+        flight_server=flight_server,
+        global_filter=global_filter,
+        plugin_collector=PluginCollector.enabled_feature_groups({group}),
+    )
+
+
+@pytest.mark.parametrize("group", [FpartRowsAnyFG, FpartRowsDeclaredFG], ids=["any_part", "declared_parts"])
+def test_filter_on_declared_output_part_filters_rows(group: type[DataCreatorFeatureGroup], flight_server: Any) -> None:
+    result = _run_part_filter(group, "fpart__rows~s", "fpart__rows~s", flight_server)
+
+    assert len(result.results) == 1
+    assert result.results[0] == {"fpart__rows~s": ["alice"]}
+
+
+@pytest.mark.parametrize("group", [FpartRowsAnyFG, FpartRowsDeclaredFG], ids=["any_part", "declared_parts"])
+def test_filter_part_differs_from_requested_part(group: type[DataCreatorFeatureGroup], flight_server: Any) -> None:
+    result = _run_part_filter(group, "fpart__rows~t", "fpart__rows~s", flight_server)
+
+    assert len(result.results) == 1
+    assert result.results[0] == {"fpart__rows~t": [1]}
+
+
+def test_filter_on_literal_whole_name_with_tilde_still_applies(flight_server: Any) -> None:
+    result = _run_part_filter(FpartLiteralFG, "fpart__lit~k", "fpart__lit~k", flight_server)
+
+    assert len(result.results) == 1
+    assert result.results[0] == {"fpart__lit~k": ["alice"]}
 
 
 _ENABLED = PluginCollector.enabled_feature_groups({FilterOwnOutputRetrievalFG})

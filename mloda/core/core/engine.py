@@ -763,9 +763,12 @@ class Engine:
             )
 
             for match in matched_filters:
-                match.filter_feature.name = feature_group.set_feature_name(
-                    match.filter_feature.options, match.filter_feature.name
-                )
+                stored_name = feature_group.set_feature_name(match.filter_feature.options, match.filter_feature.name)
+                if match.output_part is None:
+                    match.filter_feature.name = stored_name
+                else:
+                    # The queue twin is named like host resolution; the stored filter keeps the part column name.
+                    self._set_feature_name(match.filter_feature, feature_group, match.output_part)
                 # We assign a new UUID to the filter feature to ensure
                 # it is treated as a separate instance from the original filter feature
                 match.filter_feature.uuid = uuid.uuid4()
@@ -787,6 +790,7 @@ class Engine:
                 # handle_filter_feature copies via Feature.__copy__, which owns the containers that decide the hash.
                 # The copy keeps the queue twin's uuid on purpose: nothing reads the stored filter feature's uuid.
                 match.filter_feature = match.handle_filter_feature(match.filter_feature)
+                match.filter_feature.name = stored_name
                 self.global_filter.add_filter_to_collection(feature_group_class, feature.name, match)
 
             # After the loop, so the recorded filters are the renamed ones.

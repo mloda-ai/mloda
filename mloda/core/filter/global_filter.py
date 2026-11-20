@@ -218,7 +218,7 @@ class GlobalFilter:
                     feature_group, _filter, "domain", self._domain_reason(_filter, feat, feature_group)
                 )
                 continue
-            supported = self.capability(_filter, feat, feature_group)
+            supported = self.capability(_filter, feat, feature_group, part=_filter.output_part)
             if supported is not None and not supported:
                 self._record_near_miss(feature_group, _filter, "capability", self._capability_reason(_filter, feat))
                 continue
@@ -354,17 +354,21 @@ class GlobalFilter:
         defect warns whatever its exception type, unlike the resolution seam, because nothing else surfaces
         it here. A typed decline can flip an attachment verdict.
 
+        A part match leaves `filter.output_part` set for the engine.
+
         Mark-or-contain policy: see call_match_hook.
         `filter` must be one of this GlobalFilter's declared filters or a per-match copy of one: the drop ledger
         keys on its uuid.
         """
         reject_reserved_reader_key(filter.filter_feature.options)
+        filter.output_part = None
         with feature_group_scope(None, contain_aborts=True):
             probe = probe_match_criteria(
                 feature_group,
                 filter.filter_feature.name,
                 filter.filter_feature.options,
                 data_access_collection,
+                resolve_parts=True,
             )
         probe_options = filter.filter_feature.options
         host_match_key = _PROBE_HOST_KEY.get()
@@ -379,7 +383,11 @@ class GlobalFilter:
             probe_options.set(feature_group.pointer_keys()[0], host_match_key[1])
             with feature_group_scope(None, contain_aborts=True):
                 probe = probe_match_criteria(
-                    feature_group, filter.filter_feature.name, probe_options, data_access_collection
+                    feature_group,
+                    filter.filter_feature.name,
+                    probe_options,
+                    data_access_collection,
+                    resolve_parts=True,
                 )
         # The pair carries credentials: it moves off the options onto the filter feature.
         if probe.written is not None:
@@ -394,6 +402,7 @@ class GlobalFilter:
         if probe.rejection is not None:
             self._record_rejected_filter(feature_group, filter, probe.rejection)
             return False
+        filter.output_part = probe.part
         return probe.matched
 
     @staticmethod
@@ -541,13 +550,24 @@ class GlobalFilter:
         return scope is None or matches_feature_group_scope(feature_group, scope)
 
     def capability(
-        self, filter: SingleFilter, feat: Feature, feature_group: type[FeatureGroup]
+        self,
+        filter: SingleFilter,
+        feat: Feature,
+        feature_group: type[FeatureGroup],
+        *,
+        part: tuple[str, str] | None = None,
     ) -> set[type[ComputeFramework]] | None:
         """The hook removes rejected frameworks from what the filter would ride, as on the resolution seam.
         Unguarded, unlike `criteria`: a raising hook fails loudly."""
         ride_frameworks = filter.filter_feature.compute_frameworks or feat.compute_frameworks
         if not ride_frameworks:
             return None
+        if part is not None:
+            return {
+                cfw
+                for cfw in ride_frameworks
+                if feature_group.supports_compute_framework(part[0], filter.filter_feature.options, cfw, part=part[1])
+            }
         return {
             cfw
             for cfw in ride_frameworks

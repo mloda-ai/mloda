@@ -528,11 +528,12 @@ class TestHookContextResultAttributes:
     def test_publish_sets_and_merges_later_key_wins(self) -> None:
         context = _make_context()
 
-        with context.activate():
+        with context.activate() as ctx:
             HookContext.publish_result_attributes({"a": 1, "b": "x"})
             HookContext.publish_result_attributes({"b": "y", "c": True})
+            assert ctx.result_attributes == {"a": 1, "b": "y", "c": True}
 
-        assert context.result_attributes == {"a": 1, "b": "y", "c": True}
+        assert ctx.result_attributes == {"a": 1, "b": "y", "c": True}
 
     def test_result_is_read_only_dict(self) -> None:
         context = _make_context()

@@ -190,7 +190,7 @@ class HookContext:
             merged = _frozen_dict({**(current.result_attributes or {}), **validated})
             object.__setattr__(current, "result_attributes", merged)
 
-    def activate(self) -> VarScope["HookContext | None"]:
+    def activate(self) -> VarScope["HookContext"]:
         """Make this instance the current() context for the scope, restoring the previous one on exit."""
         return VarScope(_current_hook_context, self)
 

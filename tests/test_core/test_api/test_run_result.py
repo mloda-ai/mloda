@@ -225,9 +225,10 @@ def _order_probe_ids_in_plan(plan: list[PlanStep]) -> list[str]:
     return ids
 
 
-def _run_probe(features: list[Feature | str]) -> Any:
+def _run_probe(features: list[Feature | str], data_access_collection: DataAccessCollection | None = None) -> Any:
     return mlodaAPI.run_all(
         features,
+        data_access_collection=data_access_collection,
         compute_frameworks=[PandasDataFrame],
         parallelization_modes={ParallelizationMode.SYNC},
         plugin_collector=_PROBE_PLUGINS,
@@ -992,21 +993,50 @@ class TestRunResultFrameFor:
         with pytest.raises(ValueError, match="ambiguous"):
             results.frame_for("run_result_any_value")
 
-    def test_credential_group_values_are_redacted_in_errors(self) -> None:
-        dsn = "postgres://user:s3cretpw@host/db"
+    @pytest.mark.parametrize(
+        ("key", "secret_value"),
+        [
+            pytest.param("dsn", "postgres://user:s3cretpw@host/db", id="credential-shaped-option"),
+            pytest.param("data_access_handle", "s3cretpw-pasted", id="unregistered-handle-value"),
+        ],
+    )
+    def test_credential_group_values_are_redacted_in_errors(self, key: str, secret_value: str) -> None:
         results = _run_probe(
-            [Feature("run_result_probe_value", options={"source_table": t, "dsn": dsn}) for t in ("A", "B")]
+            [Feature("run_result_probe_value", options={"source_table": t, key: secret_value}) for t in ("A", "B")]
         )
 
         with pytest.raises(ValueError, match="ambiguous") as ambiguous:
             results.frame_for("run_result_probe_value")
         with pytest.raises(ValueError, match="run_result_probe_value") as no_match:
-            results.frame_for(Feature("run_result_probe_value", options={"source_table": "C", "dsn": dsn}))
+            results.frame_for(Feature("run_result_probe_value", options={"source_table": "C", key: secret_value}))
 
         assert "s3cretpw" not in str(ambiguous.value)
         assert "s3cretpw" not in str(no_match.value)
         assert "source_table" in str(no_match.value)
         assert "'C'" in str(no_match.value)
+
+    def test_registered_handle_name_is_shown_in_errors_and_its_secret_is_not(self) -> None:
+        secret = "named-cred-secret-5678"  # nosec B105
+
+        def feature(table: str) -> Feature:
+            return Feature(
+                "run_result_probe_value", options={"source_table": table, "data_access_handle": "named-cred"}
+            )
+
+        results = _run_probe(
+            [feature("A"), feature("B")],
+            data_access_collection=DataAccessCollection(credentials={"named-cred": {"key": secret}}),
+        )
+
+        with pytest.raises(ValueError, match="ambiguous") as ambiguous:
+            results.frame_for("run_result_probe_value")
+        with pytest.raises(ValueError, match="run_result_probe_value") as no_match:
+            results.frame_for(feature("C"))
+
+        assert "'named-cred'" in str(ambiguous.value)
+        assert "'named-cred'" in str(no_match.value)
+        assert secret not in str(ambiguous.value)
+        assert secret not in str(no_match.value)
 
     def test_frame_for_a_handle_feature_succeeds_and_a_miss_names_the_requested_options(self) -> None:
         secret = "chs-secret-value-1234"  # nosec B105

@@ -9,7 +9,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
-from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
+from mloda.core.abstract_plugins.components.validators.options_validator import redact_conflict_value
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal
 from mloda.core.abstract_plugins.components.credential_handle import credential_handle_keys
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
@@ -146,7 +146,11 @@ class RunResult(_RunOutcomeFields, list[Any]):
             return pairs[0][1]
         if not pairs:
             available = sorted({n for step, _ in frames for n in step.requested_feature_names})
-            detail = f" with group options {_redacted(group)}" if group is not None else ""
+            detail = (
+                f" with group options {_redacted(group, frozenset().union(*(_validated(step) for step in self._plan)))}"
+                if group is not None
+                else ""
+            )
             hint = ""
             if name not in available:
                 computed = sorted({str(step.feature_group_name) for step in self._plan if name in step.feature_names})
@@ -154,7 +158,7 @@ class RunResult(_RunOutcomeFields, list[Any]):
                     hint = f"; '{name}' was computed by {', '.join(computed)} but not requested; request it to get its frame"
             raise ValueError(f"No frame requested feature '{name}'{detail}. Requested features: {available}{hint}")
         matches = [
-            f"(group options {_redacted(_group_of(step))}, "
+            f"(group options {_redacted(_group_of(step), _validated(step))}, "
             f"feature group {step.feature_group_name}, "
             f"compute framework {step.compute_framework_name})"
             for step, _ in pairs
@@ -169,8 +173,14 @@ def _group_of(step: PlanStep) -> Any:
     return {} if step.feature_set_options is None else step.feature_set_options.group
 
 
-def _redacted(group: Any) -> dict[Any, Any]:
-    return {k: redact_option_value(v) for k, v in group.items()}
+def _validated(step: PlanStep) -> frozenset[tuple[str, str]]:
+    return frozenset() if step.feature_set_options is None else step.feature_set_options.registered_handle_options
+
+
+def _redacted(group: Any, validated: frozenset[tuple[str, str]]) -> dict[Any, Any]:
+    return {
+        k: v if isinstance(v, str) and (k, v) in validated else redact_conflict_value(k, v) for k, v in group.items()
+    }
 
 
 @dataclass

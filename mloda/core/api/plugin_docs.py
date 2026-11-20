@@ -35,8 +35,10 @@ from mloda.core.abstract_plugins.components.utils import (
     get_all_subclasses,
     is_nominal_subclass,
     safe_field,
-    safe_field_with_abort,
+    is_credential_abort,
+    safe_exc_str,
     safe_field_with_error,
+    safe_field_with_exception,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.function_extender import Extender
@@ -63,7 +65,7 @@ from mloda.core.abstract_plugins.implementation import (
     current_implementations,
     serving_implementation,
 )
-from mloda.core.prepare.identify_feature_group import evaluate_and_render
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, evaluate_and_render
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.prepare.resolution_failure_renderer import scope_callout
 from mloda.core.prepare.resolution_types import CandidateFrameworks
@@ -541,15 +543,25 @@ def _resolve_feature(
                 excluded=pre_filter.excluded_feature_groups,
             )
 
-    evaluation, eval_error, raised, refused = safe_field_with_abort(_evaluate, None)
+    evaluation, escaped = safe_field_with_exception(_evaluate, None)
     if evaluation is None:
+        eval_error = ""
+        raised = None
+        refused = False
+        if escaped is not None:
+            eval_error = safe_exc_str(escaped)
+            raised = type(escaped).__name__
+            refused = is_credential_abort(escaped)
+            if not eval_error.strip():
+                eval_error = raised
         return ResolvedFeature(
             feature_name,
             None,
             [],
-            error=f"{'' if eval_error is None else eval_error}{scope_suffix}",
+            error=f"{eval_error}{scope_suffix}",
             credential_refusal=refused,
             raised=raised,
+            eliminations=escaped.result.eliminations if isinstance(escaped, FeatureResolutionError) else {},
         )
     result, message = evaluation
 

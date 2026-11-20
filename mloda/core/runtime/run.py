@@ -640,9 +640,11 @@ class ExecutionOrchestrator:
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             return
         raise_on_multiprocessing_connection_conflict(self.execution_planner)
-        raise_on_unpicklable_join_link(self.execution_planner)
-        raise_on_unpicklable_step_feature_group(self.execution_planner)
-        raise_on_unpicklable_step_credentials(self.execution_planner, self.data_access_collection)
+        raise_on_unpicklable_join_link(self.execution_planner, parallelization_modes)
+        raise_on_unpicklable_step_feature_group(self.execution_planner, parallelization_modes)
+        raise_on_unpicklable_step_credentials(
+            self.execution_planner, parallelization_modes, self.data_access_collection
+        )
         raise_on_unpicklable_child_bootstrap(run_context.child_bootstrap)
         raise_on_unpicklable_extender(function_extender)
         raise_on_missing_flight_server(self.execution_planner, parallelization_modes, self.flight_server)

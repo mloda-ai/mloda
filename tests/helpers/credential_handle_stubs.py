@@ -16,6 +16,7 @@ from mloda.user import Feature, FeatureName, Options
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 HANDLE_KEY = "chs_vault_token"
+CREDENTIAL_HANDLE_KEYS = ["data_access_handle", "connection_handle", HANDLE_KEY]
 
 
 class ChsSource(DataCreatorFeatureGroup):

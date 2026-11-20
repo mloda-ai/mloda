@@ -3,6 +3,15 @@ from typing import Any
 from mloda.core.abstract_plugins.components.credential_scrub import redact_option_value
 
 
+def redact_conflict_value(key: Any, value: Any) -> Any:
+    """Return *** for handle keys, else the redacted value."""
+    from mloda.core.abstract_plugins.components.credential_handle import handle_option_keys
+
+    if key in handle_option_keys():
+        return "***"
+    return redact_option_value(value)
+
+
 class OptionsValidator:
     """Validates Options configuration consistency."""
 
@@ -30,7 +39,7 @@ class OptionsValidator:
             if value != group[key]:
                 raise ValueError(
                     f"Key {key} already exists in group options with a different value: "
-                    f"{redact_option_value(group[key])}"
+                    f"{redact_conflict_value(key, group[key])}"
                 )
         if key in context:
             raise ValueError(f"Key {key} already exists in context options. Cannot add to group.")
@@ -48,7 +57,7 @@ class OptionsValidator:
             if value != context[key]:
                 raise ValueError(
                     f"Key {key} already exists in context options with a different value: "
-                    f"{redact_option_value(context[key])}"
+                    f"{redact_conflict_value(key, context[key])}"
                 )
         if key in group:
             raise ValueError(f"Key {key} already exists in group options. Cannot add to context.")

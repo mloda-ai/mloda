@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import re
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, cast
 
 try:
@@ -14,6 +14,7 @@ try:
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_type_semantics import is_tz_aware_type
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     ensure_distinct_identifiers,
@@ -53,10 +54,36 @@ class DuckdbRelation(SqlBaseRelation):
       literal values. See ``sql_utils`` module docstring for details.
     """
 
-    def __init__(self, connection: duckdb.DuckDBPyConnection, relation: duckdb.DuckDBPyRelation) -> None:
+    def __init__(
+        self,
+        connection: duckdb.DuckDBPyConnection,
+        relation: duckdb.DuckDBPyRelation,
+        time_zones: Mapping[str, str] | None = None,
+    ) -> None:
         self._connection = connection
         self._relation = relation
         self._alias: str | None = None
+        self._time_zones: dict[str, str] = {}
+        if time_zones:
+            tz_aware = {c for c, t in zip(relation.columns, relation.dtypes) if is_tz_aware_type(t)}
+            self._time_zones = {c: z for c, z in time_zones.items() if c in tz_aware}
+
+    def _derive(
+        self, new_rel: duckdb.DuckDBPyRelation, time_zones: Mapping[str, str] | None = None
+    ) -> "DuckdbRelation":
+        return DuckdbRelation(self._connection, new_rel, self._time_zones if time_zones is None else time_zones)
+
+    def time_zone(self, column: str) -> str | None:
+        """Return the recorded source zone of a tz-aware column, else None."""
+        self._require_columns(column)
+        return self._time_zones.get(column)
+
+    def with_time_zone(self, column: str, zone: str) -> "DuckdbRelation":
+        """Return a relation whose tz-aware ``column`` carries ``zone``."""
+        self._require_columns(column)
+        if not is_tz_aware_type(self._relation.dtypes[self._relation.columns.index(column)]):
+            raise ValueError(f"Column {column!r} is not a time zone aware timestamp.")
+        return self._derive(self._relation, {**self._time_zones, column: zone})
 
     @property
     def connection(self) -> duckdb.DuckDBPyConnection:
@@ -80,14 +107,14 @@ class DuckdbRelation(SqlBaseRelation):
         if params:
             condition = inline_params(condition, params)
         new_rel = self._relation.filter(condition)
-        return DuckdbRelation(self._connection, new_rel)
+        return self._derive(new_rel)
 
     def select(self, *columns: str) -> "DuckdbRelation":
         """Project named columns, quoting each identifier."""
         self._require_columns(*columns)
         projection = ", ".join(quote_ident(c) for c in columns)
         new_rel = self._relation.project(projection)
-        return DuckdbRelation(self._connection, new_rel)
+        return self._derive(new_rel)
 
     def project(self, expression: str) -> "DuckdbRelation":
         """Project columns using a raw SQL projection string.
@@ -95,7 +122,7 @@ class DuckdbRelation(SqlBaseRelation):
         Bypasses identifier quoting; never pass user-controlled input.
         """
         new_rel = self._relation.project(expression)
-        return DuckdbRelation(self._connection, new_rel)
+        return self._derive(new_rel)
 
     def aggregate(self, agg_expr: str, group_by: str = "") -> "DuckdbRelation":
         """GROUP BY aggregation. Thin wrapper around ``DuckDBPyRelation.aggregate``.
@@ -104,7 +131,7 @@ class DuckdbRelation(SqlBaseRelation):
         user-controlled input.
         """
         new_rel = self._relation.aggregate(agg_expr, group_by) if group_by else self._relation.aggregate(agg_expr)
-        return DuckdbRelation(self._connection, new_rel)
+        return self._derive(new_rel)
 
     def query(self, view_name: str, sql: str) -> "DuckdbRelation":
         """Execute a full SELECT statement against this relation under ``view_name``.
@@ -115,10 +142,10 @@ class DuckdbRelation(SqlBaseRelation):
         new_rel = self._relation.query(view_name, sql)
         if new_rel is None:
             raise ValueError("DuckdbRelation.query expects a SELECT statement; DuckDB returned no relation.")
-        return DuckdbRelation(self._connection, new_rel)
+        return self._derive(new_rel)
 
     def set_alias(self, alias: str) -> "DuckdbRelation":
-        new_rel = DuckdbRelation(self._connection, self._relation.set_alias(alias))
+        new_rel = self._derive(self._relation.set_alias(alias))
         new_rel._alias = alias
         return new_rel
 
@@ -152,7 +179,10 @@ class DuckdbRelation(SqlBaseRelation):
         projection = self._build_join_projection(self_alias, self_cols, other_alias, other_cols, shared, how)
         result = joined.project(projection)
 
-        return DuckdbRelation(self._connection, result)
+        zones = (
+            {**self._time_zones, **other._time_zones} if how == "right" else {**other._time_zones, **self._time_zones}
+        )
+        return self._derive(result, zones)
 
     @staticmethod
     def _build_join_projection(
@@ -182,18 +212,23 @@ class DuckdbRelation(SqlBaseRelation):
 
     def limit(self, n: int) -> "DuckdbRelation":
         new_rel = self._relation.limit(n)
-        return DuckdbRelation(self._connection, new_rel)
+        return self._derive(new_rel)
 
     def order(self, *columns: str) -> "DuckdbRelation":
         """Return a new relation sorted by a raw SQL order fragment (the arguments are joined verbatim)."""
-        return DuckdbRelation(self._connection, self._relation.order(", ".join(columns)))
+        return self._derive(self._relation.order(", ".join(columns)))
 
     def drop(self) -> None:
         """No-op: native relations have no persistent state to clean up."""
         pass
 
     def to_arrow_table(self) -> pa.Table:
-        return self._relation.arrow().read_all()
+        table = self._relation.arrow().read_all()
+        for name, zone in self._time_zones.items():
+            idx = table.schema.get_field_index(name)
+            unit = table.schema.field(idx).type.unit
+            table = table.set_column(idx, name, table.column(idx).cast(pa.timestamp(unit, tz=zone)))
+        return table
 
     def df(self) -> Any:
         return self._relation.df()
@@ -206,7 +241,7 @@ class DuckdbRelation(SqlBaseRelation):
 
     def _select_ordered(self, columns: Sequence[str], order_column: str) -> "DuckdbRelation":
         ordered = self._relation.order(quote_ident(order_column))
-        return DuckdbRelation(self._connection, ordered.project(", ".join(quote_ident(c) for c in columns)))
+        return self._derive(ordered.project(", ".join(quote_ident(c) for c in columns)))
 
     def append_column(self, name: str, values: list[Any]) -> "DuckdbRelation":
         """Return a new relation with an additional column appended positionally.
@@ -230,14 +265,17 @@ class DuckdbRelation(SqlBaseRelation):
         keep = ", ".join(f'"__l__".{quote_ident(c)}' for c in self.columns)
         keep += "".join(f', "__r__".{quote_ident(n)}' for n in columns)
         # DuckDB 2.0 drops the join aliases once order() is applied, so project the row number first.
-        kept = DuckdbRelation(self._connection, joined.project(f'{keep}, "__l__".{qrn} AS {qrn}'))
+        kept = self._derive(
+            joined.project(f'{keep}, "__l__".{qrn} AS {qrn}'), {**self._time_zones, **new_col_rel._time_zones}
+        )
         return kept._select_ordered([*self.columns, *columns], rn)
 
     @classmethod
     def from_arrow(cls, connection: duckdb.DuckDBPyConnection, arrow_table: pa.Table) -> "DuckdbRelation":
         ensure_distinct_identifiers(arrow_table.column_names, "from_arrow")
         relation = connection.from_arrow(arrow_table)
-        return cls(connection, relation)
+        zones = {f.name: f.type.tz for f in arrow_table.schema if pa.types.is_timestamp(f.type) and f.type.tz}
+        return cls(connection, relation, zones)
 
     @classmethod
     def from_dict(cls, connection: duckdb.DuckDBPyConnection, data: dict[str, list[Any]]) -> "DuckdbRelation":

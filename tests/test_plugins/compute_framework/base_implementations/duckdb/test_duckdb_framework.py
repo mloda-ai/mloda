@@ -74,6 +74,16 @@ class TestDuckDBFrameworkComputeFramework:
         expected_arrow = pa.Table.from_pydict(dict_data)
         return DuckdbRelation.from_arrow(connection, expected_arrow)
 
+    def test_select_data_by_column_names_keeps_source_time_zone(
+        self, duckdb_framework: DuckDBFramework, connection: Any
+    ) -> None:
+        table = pa.table({"ts": pa.array([datetime(2021, 1, 1, 1)], type=pa.timestamp("us", tz="+05:00"))})
+        relation = DuckdbRelation.from_arrow(connection, table)
+
+        result = duckdb_framework.select_data_by_column_names(relation, [FeatureName("ts")])
+
+        assert result.schema.field("ts").type == pa.timestamp("us", tz="+05:00")
+
     def test_expected_data_framework(self, duckdb_framework: DuckDBFramework) -> None:
         assert duckdb_framework.expected_data_framework() == DuckdbRelation
 

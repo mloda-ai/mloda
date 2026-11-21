@@ -19,7 +19,7 @@ import pytest
 from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
-from mloda.core.abstract_plugins.components.utils import escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import defer_match_abort, escalate_match_abort
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.domain import Domain
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -379,6 +379,8 @@ ELIM_NONSTR_FEATURE = "elim_resolve_feature_c"
 ELIM_REASON = "elim option value was rejected"
 ELIM_SECRET_PASSWORD = "elimpw-Xq7Lm2Vd9"  # nosec B105
 ELIM_REGISTERED_SECRET = "elim-reg-Hk4Tn8Wz3"  # nosec B105
+ELIM_DEFER_MESSAGE = f"elim deferred abort password={ELIM_SECRET_PASSWORD} token {ELIM_REGISTERED_SECRET}"
+ELIM_DEFER_PREFIX = "elim deferred abort"
 
 
 class WinnerElimFG(FeatureGroup):
@@ -396,6 +398,28 @@ class WinnerElimFG(FeatureGroup):
         data_access_collection: DataAccessCollection | None = None,
     ) -> bool:
         return str(feature_name) in (ELIM_WIN_FEATURE, ELIM_NONSTR_FEATURE)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class DeferringElimFG(FeatureGroup):
+    """Raises a deferred match abort for the failing elimination feature name, matches nothing."""
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+        return {PandasDataFrame}
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        if str(feature_name) == ELIM_FAIL_FEATURE:
+            raise defer_match_abort(ValueError(ELIM_DEFER_MESSAGE))
+        return False
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
         return None
@@ -1083,14 +1107,21 @@ class TestResolveFeatureIsNonThrowing:
         assert "NoSuchFrameworkXYZ" not in result.error
 
 
+ELIM_GROUP_SETS = [{WinnerElimFG, DeclinerElimFG}, {DeferringElimFG, DeclinerElimFG}]
+
+
 class TestResolveFeatureEliminations:
     """resolve_feature reports why each eliminated candidate lost, on success and on failure."""
 
     @staticmethod
-    def _resolve(name: str, dac: DataAccessCollection | None = None) -> ResolvedFeature:
+    def _resolve(
+        name: str,
+        dac: DataAccessCollection | None = None,
+        groups: set[type[FeatureGroup]] | None = None,
+    ) -> ResolvedFeature:
         return resolve_feature(
             name,
-            plugin_collector=PluginCollector.enabled_feature_groups({WinnerElimFG, DeclinerElimFG}),
+            plugin_collector=PluginCollector.enabled_feature_groups(groups or {WinnerElimFG, DeclinerElimFG}),
             data_access_collection=dac,
         )
 
@@ -1130,19 +1161,44 @@ class TestResolveFeatureEliminations:
         assert result.eliminations[DeclinerElimFG].reason == "42"
         assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
 
-    def test_reason_without_a_collection_is_scrubbed_of_a_credential_shape(self) -> None:
-        result = self._resolve(ELIM_FAIL_FEATURE)
+    def test_deferred_abort_reports_the_engine_eliminations(self) -> None:
+        result = self._resolve(ELIM_FAIL_FEATURE, groups={DeferringElimFG, DeclinerElimFG})
+
+        assert result.feature_group is None
+        assert result.raised == "FeatureResolutionError"
+        assert result.error is not None
+        assert ELIM_DEFER_PREFIX in result.error
+        assert result.eliminations[DeclinerElimFG].code is CoreDeclineCode.OPTION_VALUE_REJECTED
+        assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
+        assert result.eliminations[DeferringElimFG].stage == "input_data"
+
+    @pytest.mark.parametrize("groups", ELIM_GROUP_SETS, ids=["declined", "deferred"])
+    def test_reason_without_a_collection_is_scrubbed_of_a_credential_shape(
+        self, groups: set[type[FeatureGroup]]
+    ) -> None:
+        result = self._resolve(ELIM_FAIL_FEATURE, groups=groups)
 
         assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
         assert ELIM_SECRET_PASSWORD not in result.eliminations[DeclinerElimFG].reason
+        if DeferringElimFG in groups:
+            assert ELIM_SECRET_PASSWORD not in result.eliminations[DeferringElimFG].reason
+            assert result.error is not None
+            assert ELIM_SECRET_PASSWORD not in result.error
 
-    def test_reason_with_a_registered_collection_masks_the_registered_secret(self) -> None:
+    @pytest.mark.parametrize("groups", ELIM_GROUP_SETS, ids=["declined", "deferred"])
+    def test_reason_with_a_registered_collection_masks_the_registered_secret(
+        self, groups: set[type[FeatureGroup]]
+    ) -> None:
         dac = DataAccessCollection(credentials={"vault": {"token": ELIM_REGISTERED_SECRET}})
 
-        result = self._resolve(ELIM_FAIL_FEATURE, dac)
+        result = self._resolve(ELIM_FAIL_FEATURE, dac, groups)
 
         assert ELIM_REASON in result.eliminations[DeclinerElimFG].reason
         assert ELIM_REGISTERED_SECRET not in result.eliminations[DeclinerElimFG].reason
+        if DeferringElimFG in groups:
+            assert ELIM_REGISTERED_SECRET not in result.eliminations[DeferringElimFG].reason
+            assert result.error is not None
+            assert ELIM_REGISTERED_SECRET not in result.error
 
 
 class TestResolveFeatureOptionsNoneEqualsEmpty:

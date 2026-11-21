@@ -31,12 +31,13 @@ from mloda.core.abstract_plugins.components.subtype_declaration import SubtypeDe
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, feature_group_subclasses
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.utils import (
+    abort_fields,
     as_str,
     get_all_subclasses,
     is_nominal_subclass,
     safe_field,
-    safe_field_with_abort,
     safe_field_with_error,
+    safe_field_with_exception,
 )
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, compute_framework_subclasses
 from mloda.core.abstract_plugins.function_extender import Extender
@@ -63,7 +64,7 @@ from mloda.core.abstract_plugins.implementation import (
     current_implementations,
     serving_implementation,
 )
-from mloda.core.prepare.identify_feature_group import evaluate_and_render
+from mloda.core.prepare.identify_feature_group import FeatureResolutionError, evaluate_and_render
 from mloda.core.prepare.resolution_types import EvaluationResult
 from mloda.core.prepare.resolution_failure_renderer import scope_callout
 from mloda.core.prepare.resolution_types import CandidateFrameworks
@@ -541,15 +542,17 @@ def _resolve_feature(
                 excluded=pre_filter.excluded_feature_groups,
             )
 
-    evaluation, eval_error, raised, refused = safe_field_with_abort(_evaluate, None)
+    evaluation, escaped = safe_field_with_exception(_evaluate, None)
     if evaluation is None:
+        eval_error, raised, refused = abort_fields(escaped) if escaped is not None else ("", None, False)
         return ResolvedFeature(
             feature_name,
             None,
             [],
-            error=f"{'' if eval_error is None else eval_error}{scope_suffix}",
+            error=f"{eval_error}{scope_suffix}",
             credential_refusal=refused,
             raised=raised,
+            eliminations=escaped.result.eliminations if isinstance(escaped, FeatureResolutionError) else {},
         )
     result, message = evaluation
 

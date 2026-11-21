@@ -5,6 +5,7 @@ Artifact for storing fitted scikit-learn transformers and estimators.
 import json
 import base64
 import logging
+import os
 import tempfile
 from pathlib import Path
 from typing import Any
@@ -35,7 +36,7 @@ class SklearnArtifact(BaseArtifact):
 
     ARTIFACT_STORAGE_PATH = "artifact_storage_path"
     ARTIFACT_STORAGE_PATH_SPEC = property_spec(
-        "Filesystem directory for persisting fitted sklearn artifacts; owned by SklearnArtifact, exposed by each sklearn feature group. Defaults to the system temp dir.",
+        "Filesystem directory for persisting fitted sklearn artifacts; owned by SklearnArtifact, exposed by each sklearn feature group. Defaults to a private per-user cache dir ($XDG_CACHE_HOME/mloda/sklearn_artifacts).",
         default=None,
     )
 
@@ -149,11 +150,43 @@ class SklearnArtifact(BaseArtifact):
             # Generate unique file path for this artifact
             file_path = cls._get_artifact_file_path_for_key(features, artifact_key)
 
-            # Save this specific artifact
-            joblib.dump(artifact_data, file_path)
+            # Write to a temp file in the same dir, then rename, so readers never see a torn file
+            fd, tmp_name = tempfile.mkstemp(dir=file_path.parent, prefix=".sklearn_artifact_", suffix=".tmp")
+            try:
+                with os.fdopen(fd, "wb") as handle:
+                    joblib.dump(artifact_data, handle)
+                os.replace(tmp_name, file_path)
+            except BaseException:
+                Path(tmp_name).unlink(missing_ok=True)
+                raise
             saved_paths[artifact_key] = str(file_path)
 
         return saved_paths
+
+    @classmethod
+    def _get_storage_dir(cls, features: FeatureSet) -> Path:
+        """Return the configured storage dir, or the private per-user default."""
+        options = cls.get_singular_option_from_options(features)
+        storage_path = options.get(cls.ARTIFACT_STORAGE_PATH) if options else None
+        if storage_path is not None:
+            return Path(storage_path)
+        return cls._default_storage_dir()
+
+    @staticmethod
+    def _default_storage_dir() -> Path:
+        """
+        A private per-user cache dir. The loader unpickles every artifact file it finds here, so a
+        dir another user can write to (like the shared system temp dir) is refused.
+        """
+        cache_home = os.environ.get("XDG_CACHE_HOME") or str(Path.home() / ".cache")
+        storage_dir = Path(cache_home) / "mloda" / "sklearn_artifacts"
+        storage_dir.mkdir(mode=0o700, parents=True, exist_ok=True)
+        stat = storage_dir.lstat()
+        if storage_dir.is_symlink() or (hasattr(os, "getuid") and stat.st_uid != os.getuid()):
+            raise PermissionError(f"Refusing sklearn artifact dir {storage_dir}: not a directory owned by this user")
+        if stat.st_mode & 0o022:
+            raise PermissionError(f"Refusing sklearn artifact dir {storage_dir}: writable by other users")
+        return storage_dir
 
     @classmethod
     def _get_artifact_file_path_for_key(cls, features: FeatureSet, artifact_key: str) -> Path:
@@ -167,22 +200,11 @@ class SklearnArtifact(BaseArtifact):
         Returns:
             Path object for the artifact file
         """
-        # Get storage path from options or use default temp directory
-        storage_path = None
-
-        options = cls.get_singular_option_from_options(features)
-        if options:
-            storage_path = options.get(cls.ARTIFACT_STORAGE_PATH)
-
-        if storage_path is None:
-            storage_path = tempfile.gettempdir()
+        storage_dir = cls._get_storage_dir(features)
+        storage_dir.mkdir(parents=True, exist_ok=True)
 
         # Simple filename based on artifact key
         filename = f"sklearn_artifact_{artifact_key}.joblib"
-
-        # Ensure the directory exists
-        storage_dir = Path(storage_path)
-        storage_dir.mkdir(parents=True, exist_ok=True)
 
         return storage_dir / filename
 
@@ -202,16 +224,7 @@ class SklearnArtifact(BaseArtifact):
         except ImportError:
             raise ImportError("joblib is required for SklearnArtifact. Install with: pip install joblib")
 
-        # Get storage path
-        storage_path = None
-
-        options = cls.get_singular_option_from_options(features)
-        if options:
-            storage_path = options.get(cls.ARTIFACT_STORAGE_PATH)
-        if storage_path is None:
-            storage_path = tempfile.gettempdir()
-
-        storage_dir = Path(storage_path)
+        storage_dir = cls._get_storage_dir(features)
         if not storage_dir.exists():
             return None
 

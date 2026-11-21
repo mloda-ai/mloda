@@ -255,6 +255,9 @@ opts in but forgets the hook raises a clear error rather than silently skipping
 validation. As-of joins always require `_column_semantics` regardless of the flag,
 since ordered time columns are intrinsic to the operation.
 
+What a framework does with the zone of a timezone-aware column when data moves in or out is in the
+[time zone computation rule](timezone-computation.md#compute-frameworks).
+
 ### Operation Groups: one group, one Implementation per framework
 
 An operation is written once as an `OperationFeatureGroup` (naming, options, input features) and served by one `Implementation` per compute framework. Both come from `mloda.provider`. `AggregatedFeatureGroup`, `TimeWindowFeatureGroup`, `MissingValueFeatureGroup`, `TextCleaningFeatureGroup`, `GeoDistanceFeatureGroup`, `ScalingFeatureGroup`, `EncodingFeatureGroup`, `SklearnPipelineFeatureGroup`, `ClusteringFeatureGroup`, `DimensionalityReductionFeatureGroup`, `NodeCentralityFeatureGroup` and `ForecastingFeatureGroup` are built this way.

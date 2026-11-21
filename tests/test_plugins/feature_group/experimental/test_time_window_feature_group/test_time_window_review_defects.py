@@ -17,6 +17,8 @@ Defects pinned:
 from __future__ import annotations
 
 import datetime
+import math
+import statistics
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
@@ -313,3 +315,87 @@ def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable
     feature_set.add(Feature(feature_name))
     with pytest.raises(ValueError):
         cls.calculate(TimeWindowFeatureGroup, data_factory(), feature_set, None)
+
+
+def test_pyarrow_date_reference_column_uses_calendar_months() -> None:
+    dates = [datetime.date(2023, 1, 31), datetime.date(2023, 2, 28), datetime.date(2023, 3, 1)]
+    dates.append(datetime.date(2023, 3, 31))
+    table = pa.table({"value": [1, 10, 100, 1000], REFERENCE_TIME: pa.array(dates, type=pa.date32())})
+    result = PyArrowTimeWindow._perform_window_operation(
+        table, "sum", TimeWindowFeatureGroup._window_span(1, "month"), ["value"], REFERENCE_TIME
+    )
+    assert _as_floats(result) == [1.0, 11.0, 110.0, 1100.0]
+
+
+_MEMBERS = {
+    "bound_in_gap": (
+        ["2023-03-12 07:10", "2023-03-12 07:40", "2023-03-13 06:30", "2023-03-13 07:00"],
+        [[1], [1, 10], [10, 100], [1, 10, 100, 1000]],
+    ),
+    "source_in_repeated_hour": (
+        ["2023-11-04 05:20", "2023-11-04 05:40", "2023-11-05 05:50", "2023-11-05 06:30"],
+        [[1], [1, 10], [100], [10, 100, 1000]],
+    ),
+}
+
+
+def _from_members(function: str, members: list[int]) -> float:
+    if function == "count":
+        return float(len(members))
+    if function == "sum":
+        return float(sum(members))
+    if function == "min":
+        return float(min(members))
+    if function == "max":
+        return float(max(members))
+    if function in ("avg", "mean"):
+        return statistics.fmean(members)
+    if function == "median":
+        return float(statistics.median(members))
+    if function == "first":
+        return float(members[0])
+    if function == "last":
+        return float(members[-1])
+    if len(members) < 2:
+        return math.nan
+    return statistics.stdev(members) if function == "std" else statistics.variance(members)
+
+
+def _nan_for_none(result: Any) -> list[float]:
+    values = result.to_pylist() if hasattr(result, "to_pylist") else list(result)
+    return [math.nan if v is None else float(v) for v in values]
+
+
+@pytest.mark.parametrize("dataset", list(_MEMBERS))
+@pytest.mark.parametrize(
+    "function", ["sum", "min", "max", "avg", "mean", "count", "std", "var", "median", "first", "last"]
+)
+def test_window_starts_that_go_back_keep_every_function_right(dataset: str, function: str) -> None:
+    instants, members = _MEMBERS[dataset]
+    frame = _zoned_frame(instants, _NY, [1, 10, 100, 1000])
+    span = TimeWindowFeatureGroup._window_span(1, "day")
+    expected = [_from_members(function, m) for m in members]
+
+    pandas_result = PandasTimeWindow._perform_window_operation(frame.copy(), function, span, ["value"], REFERENCE_TIME)
+    pyarrow_result = PyArrowTimeWindow._perform_window_operation(
+        pa.Table.from_pandas(frame), function, span, ["value"], REFERENCE_TIME
+    )
+
+    assert _nan_for_none(pandas_result) == pytest.approx(expected, nan_ok=True)
+    assert _nan_for_none(pyarrow_result) == pytest.approx(expected, nan_ok=True)
+
+
+@pytest.mark.parametrize(("size", "unit"), [(30, "day"), (1, "month")])
+def test_window_reaching_before_the_earliest_instant(size: int, unit: str) -> None:
+    df = pd.DataFrame({"value": [1, 10], REFERENCE_TIME: pd.to_datetime(["1677-10-01", "1677-10-20"])})
+    span = TimeWindowFeatureGroup._window_span(size, unit)
+
+    pandas_result = _as_floats(
+        PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)
+    )
+    pyarrow_result = _as_floats(
+        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(df), "sum", span, ["value"], REFERENCE_TIME)
+    )
+
+    assert pandas_result == [1.0, 11.0]
+    assert pyarrow_result == [1.0, 11.0]

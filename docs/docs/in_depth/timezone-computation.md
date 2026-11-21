@@ -29,7 +29,7 @@ calendar it is read on.
 |------|-------|------------|
 | `second`, `minute`, `hour` | elapsed time | exactly that long later |
 | `day`, `week` | wall clock of the column's zone | the same wall time on the later date |
-| `month`, `year` | wall clock of the column's zone | the same day and wall time in the later month, clamped to the month end |
+| `month`, `year` | wall clock of the column's zone | the same day and wall time in the later month or year, clamped to the month end |
 
 On naive, UTC and fixed-offset columns both clocks agree. The rule only changes results in a zone with
 daylight saving time, and `24_hour` stays available where `1_day` is not what is meant.
@@ -83,9 +83,6 @@ A transfer into or out of a compute framework keeps the instant and the zone. A 
 Handing the same instants back under another zone is not one of them. Every calendar operation then
 gives a valid but different answer that nothing downstream can detect, so a
 [divergence record](divergence-records.md) does not cover it.
-
-Two built-in frameworks do not meet this yet: DuckDB returns a zoned column as UTC, and Polars raises its
-own `ComputeError` for a fixed offset that is not a whole number of hours.
 
 ## Core feature groups
 

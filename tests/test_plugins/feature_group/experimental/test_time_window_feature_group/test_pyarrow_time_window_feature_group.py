@@ -34,7 +34,6 @@ class TestPyArrowTimeWindow:
     def test_window_span(self, size: int, unit: str) -> None:
         span = TimeWindowFeatureGroup._window_span(size, unit)
         assert span == WindowSpan(size, unit)
-        assert (span.size, span.unit) == (size, unit)
 
     def test_window_span_rejects_an_unknown_unit(self) -> None:
         with pytest.raises(ValueError):

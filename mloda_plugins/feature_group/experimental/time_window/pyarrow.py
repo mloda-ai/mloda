@@ -108,10 +108,8 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
             ]
 
         # Time-based (not row-count) window: include rows in (t - span, t].
-        # Bound each window by ABSOLUTE integer nanoseconds (not Python datetimes):
-        # wall-clock datetime subtraction is wrong across a DST transition, whereas
-        # int64 ns since epoch is DST-safe, unit-uniform, and works for tz-aware
-        # timestamps and date32/date64 too.
+        # Rows are ordered and window membership is decided on absolute instants (int64 ns since the epoch);
+        # the lower bound follows the unit's clock (elapsed or wall).
         sorted_times_ns = pc.take(time_column, sorted_indices).cast(pa.timestamp("ns")).cast(pa.int64()).to_pylist()
         zone = (
             pa.lib.string_to_tzinfo(time_column.type.tz)

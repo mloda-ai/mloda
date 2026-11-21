@@ -24,6 +24,9 @@ except ImportError:
     pd = None
 
 
+_INT64_MIN = int(np.iinfo(np.int64).min)
+
+
 class _SpanIndexer(BaseIndexer):  # type: ignore[misc]
     """Rolling window bounds given explicitly per row."""
 
@@ -74,11 +77,20 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
             picked = values[starts] if window_function == "first" else values
             return pd.Series(picked, index=col.index)
 
-        indexer = _SpanIndexer(starts, np.arange(1, len(values) + 1))
+        # pandas recomputes every window when starts go backwards; roll on monotone starts, fix the few rows.
+        monotone = np.maximum.accumulate(starts)
+        indexer = _SpanIndexer(monotone, np.arange(1, len(values) + 1))
         rolling = col.rolling(window=indexer, min_periods=0 if window_function == "sum" else 1)
+        name = {"avg": "mean"}.get(window_function, window_function)
+        result = getattr(rolling, name)()
+        back = np.flatnonzero(monotone != starts)
+        if len(back):
+            corrected = result.to_numpy(dtype="float64", na_value=np.nan, copy=True)
+            for i in back:
+                corrected[i] = getattr(pd.Series(values[starts[i] : i + 1]), name)()
+            result = pd.Series(corrected, index=col.index)
         if window_function == "count":
-            return rolling.count()
-        result = getattr(rolling, {"avg": "mean"}.get(window_function, window_function))()
+            return result
 
         def window_count(flags: np.ndarray) -> np.ndarray:
             cum = np.concatenate(([0], np.cumsum(flags)))
@@ -170,10 +182,12 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         ns = sorted_index.as_unit("ns").asi8
         width = TimeWindowFeatureGroup._fixed_span_ns(span, zone)
         if width is not None:
-            lower = ns - width
+            lower = np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
         else:
             lower = np.fromiter(
-                (shift_ns(int(v), -span.size, span.unit, zone) for v in ns), dtype=np.int64, count=len(ns)
+                (max(shift_ns(int(v), -span.size, span.unit, zone), _INT64_MIN) for v in ns),
+                dtype=np.int64,
+                count=len(ns),
             )
         starts = np.searchsorted(ns, lower, side="right")
 

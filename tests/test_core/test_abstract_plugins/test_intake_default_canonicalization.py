@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
-from mloda.user import FeatureName, Index, JoinSpec, Link, PluginCollector, mloda
+from mloda.user import FeatureName, GlobalFilter, Index, JoinSpec, Link, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
@@ -73,7 +73,7 @@ def _make_ctx_default_root_fg(*feature_names: str) -> type[FeatureGroup]:
     return IdcCtxDefaultRootFeatureGroup
 
 
-def _make_grp_default_root_fg(feature_name: str) -> type[FeatureGroup]:
+def _make_grp_default_root_fg(*feature_names: str) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup with one group concrete default, echoing the observed value."""
 
     class IdcGrpDefaultRootFeatureGroup(DataCreatorFeatureGroup):
@@ -83,7 +83,7 @@ def _make_grp_default_root_fg(feature_name: str) -> type[FeatureGroup]:
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
-            return {feature_name}
+            return set(feature_names)
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -632,6 +632,77 @@ def test_double_requested_link_index_still_warns_once(layout: str, caplog: pytes
     caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
     prefix = f"idc_dbl_{layout}"
     _run_index_twin(layout, prefix)
+    warnings = _default_equivalent_warnings(caplog)
+    assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
+    assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"
+
+
+def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> list[Any]:
+    """Run a filtered-request layout end-to-end and return the raw result frames."""
+    key, value = f"{prefix}_key", f"{prefix}_val"
+    if default_kind == "ctx":
+        fg = _make_ctx_default_root_fg(key, value)
+        explicit = Options(context={IDC_CTX_KEY: IDC_CTX_DEFAULT})
+        default = IDC_CTX_DEFAULT
+    else:
+        fg = _make_grp_default_root_fg(key, value)
+        explicit = Options(group={IDC_GRP_KEY: IDC_GRP_DEFAULT})
+        default = IDC_GRP_DEFAULT
+    requests: dict[str, list[Feature]] = {
+        "key_only": [Feature(key)],
+        "value_then_key": [Feature(value), Feature(key)],
+        "key_then_value": [Feature(key), Feature(value)],
+        "value_only": [Feature(value)],
+        "filter_explicit": [Feature(key)],
+        "twin_before": [Feature(value), Feature(key), Feature(key, explicit)],
+        "twin_after": [Feature(key), Feature(key, explicit), Feature(value)],
+    }
+    global_filter = GlobalFilter()
+    if layout == "filter_explicit":
+        global_filter.add_filter(Feature(key, explicit), "equal", {"value": default})
+    else:
+        global_filter.add_filter(value if layout == "value_only" else key, "equal", {"value": default})
+    results = mloda.run_all(
+        requests[layout],
+        compute_frameworks=[PythonDictFramework],
+        global_filter=global_filter,
+        plugin_collector=PluginCollector.enabled_feature_groups({fg}),
+    )
+    return list(results)
+
+
+@pytest.mark.parametrize("default_kind", ["ctx", "grp"])
+@pytest.mark.parametrize("layout", ["key_only", "value_then_key", "key_then_value", "value_only", "filter_explicit"])
+def test_injected_filter_twin_merge_does_not_warn(
+    layout: str, default_kind: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """A filter twin merging with the single request of its column is not a double request."""
+    caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
+    prefix = f"idc_ftwin_{default_kind}_{layout}"
+    default = IDC_CTX_DEFAULT if default_kind == "ctx" else IDC_GRP_DEFAULT
+    frames = _run_filter_twin(layout, prefix, default_kind)
+    requested = {
+        "key_only": [f"{prefix}_key"],
+        "value_then_key": [f"{prefix}_key", f"{prefix}_val"],
+        "key_then_value": [f"{prefix}_key", f"{prefix}_val"],
+        "value_only": [f"{prefix}_val"],
+        "filter_explicit": [f"{prefix}_key"],
+    }[layout]
+    for column in requested:
+        assert _single_row(_frame_with(frames, column), column) == default
+    warnings = _default_equivalent_warnings(caplog)
+    assert not warnings, f"an injected filter twin must not trigger a default-equivalent warning, got: {warnings!r}"
+
+
+@pytest.mark.parametrize("default_kind", ["ctx", "grp"])
+@pytest.mark.parametrize("layout", ["twin_before", "twin_after"])
+def test_double_requested_filtered_column_still_warns_once(
+    layout: str, default_kind: str, caplog: pytest.LogCaptureFixture
+) -> None:
+    """Two user requests of a filtered column differing only in an explicit default warn exactly once."""
+    caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
+    prefix = f"idc_fdbl_{default_kind}_{layout}"
+    _run_filter_twin(layout, prefix, default_kind)
     warnings = _default_equivalent_warnings(caplog)
     assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
     assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"

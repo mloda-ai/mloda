@@ -637,8 +637,8 @@ def test_double_requested_link_index_still_warns_once(layout: str, caplog: pytes
     assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"
 
 
-def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> list[Any]:
-    """Run a filtered-request layout end-to-end and return the raw result frames."""
+def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> tuple[list[Any], list[str], GlobalFilter]:
+    """Run a filtered-request layout end-to-end; return the frames, plain requested names and the filter."""
     key, value = f"{prefix}_key", f"{prefix}_val"
     if default_kind == "ctx":
         fg = _make_ctx_default_root_fg(key, value)
@@ -654,11 +654,15 @@ def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> list[Any]:
         "key_then_value": [Feature(key), Feature(value)],
         "value_only": [Feature(value)],
         "filter_explicit": [Feature(key)],
+        "two_filters": [Feature(key)],
         "twin_before": [Feature(value), Feature(key), Feature(key, explicit)],
         "twin_after": [Feature(key), Feature(key, explicit), Feature(value)],
     }
     global_filter = GlobalFilter()
     if layout == "filter_explicit":
+        global_filter.add_filter(Feature(key, explicit), "equal", {"value": default})
+    elif layout == "two_filters":
+        global_filter.add_filter(key, "equal", {"value": default})
         global_filter.add_filter(Feature(key, explicit), "equal", {"value": default})
     else:
         global_filter.add_filter(value if layout == "value_only" else key, "equal", {"value": default})
@@ -668,11 +672,14 @@ def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> list[Any]:
         global_filter=global_filter,
         plugin_collector=PluginCollector.enabled_feature_groups({fg}),
     )
-    return list(results)
+    names = sorted({str(f.name) for f in requests[layout]})
+    return list(results), names, global_filter
 
 
 @pytest.mark.parametrize("default_kind", ["ctx", "grp"])
-@pytest.mark.parametrize("layout", ["key_only", "value_then_key", "key_then_value", "value_only", "filter_explicit"])
+@pytest.mark.parametrize(
+    "layout", ["key_only", "value_then_key", "key_then_value", "value_only", "filter_explicit", "two_filters"]
+)
 def test_injected_filter_twin_merge_does_not_warn(
     layout: str, default_kind: str, caplog: pytest.LogCaptureFixture
 ) -> None:
@@ -680,16 +687,11 @@ def test_injected_filter_twin_merge_does_not_warn(
     caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
     prefix = f"idc_ftwin_{default_kind}_{layout}"
     default = IDC_CTX_DEFAULT if default_kind == "ctx" else IDC_GRP_DEFAULT
-    frames = _run_filter_twin(layout, prefix, default_kind)
-    requested = {
-        "key_only": [f"{prefix}_key"],
-        "value_then_key": [f"{prefix}_key", f"{prefix}_val"],
-        "key_then_value": [f"{prefix}_key", f"{prefix}_val"],
-        "value_only": [f"{prefix}_val"],
-        "filter_explicit": [f"{prefix}_key"],
-    }[layout]
+    frames, requested, global_filter = _run_filter_twin(layout, prefix, default_kind)
     for column in requested:
         assert _single_row(_frame_with(frames, column), column) == default
+    declared = {f.uuid for f in global_filter.filters}
+    assert declared <= global_filter.matched_filter_uuids, "every declared filter must have matched a feature"
     warnings = _default_equivalent_warnings(caplog)
     assert not warnings, f"an injected filter twin must not trigger a default-equivalent warning, got: {warnings!r}"
 
@@ -702,7 +704,7 @@ def test_double_requested_filtered_column_still_warns_once(
     """Two user requests of a filtered column differing only in an explicit default warn exactly once."""
     caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
     prefix = f"idc_fdbl_{default_kind}_{layout}"
-    _run_filter_twin(layout, prefix, default_kind)
+    _frames, _names, _filter = _run_filter_twin(layout, prefix, default_kind)
     warnings = _default_equivalent_warnings(caplog)
     assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
     assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"

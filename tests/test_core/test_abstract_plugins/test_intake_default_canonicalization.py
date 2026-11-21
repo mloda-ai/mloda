@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
-from mloda.user import FeatureName, PluginCollector, mloda
+from mloda.user import FeatureName, Index, JoinSpec, Link, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
@@ -54,7 +54,7 @@ IDC_DUP_PARENT_B = "idc_dup_parent_b"
 IDC_ENGINE_LOGGER = "mloda.core.core.engine"
 
 
-def _make_ctx_default_root_fg(feature_name: str) -> type[FeatureGroup]:
+def _make_ctx_default_root_fg(*feature_names: str) -> type[FeatureGroup]:
     """A throwaway root FeatureGroup with one context concrete default, echoing the observed value."""
 
     class IdcCtxDefaultRootFeatureGroup(DataCreatorFeatureGroup):
@@ -64,7 +64,7 @@ def _make_ctx_default_root_fg(feature_name: str) -> type[FeatureGroup]:
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
-            return {feature_name}
+            return set(feature_names)
 
         @classmethod
         def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -575,3 +575,63 @@ def test_name_only_and_typed_context_request_merge_to_the_int_in_both_orders(nam
 def test_name_converter_returning_an_unhashable_value_works_through_intake() -> None:
     seen = _run_converted(lambda text: [int(text)], [None])
     assert seen[f"{IDC_CONV_COLUMN}__idcvt_5"] == ([5],)
+
+
+def _run_index_twin(layout: str, prefix: str) -> list[Any]:
+    """Run an index-twin request layout end-to-end and return the raw result frames."""
+    key, value, left_key = f"{prefix}_key", f"{prefix}_val", f"{prefix}_left_key"
+    explicit = Options(context={IDC_CTX_KEY: IDC_CTX_DEFAULT})
+    right_fg = _make_ctx_default_root_fg(key, value)
+    left_fg = make_root_fg("IdcTwinLeft", __name__, left_key, [1])
+    links: set[Link] | None = (
+        None if layout == "keep_index" else {Link.inner(JoinSpec(left_fg, left_key), JoinSpec(right_fg, key))}
+    )
+    requests: dict[str, list[Feature]] = {
+        "key_first": [Feature(left_key), Feature(key), Feature(value)],
+        "value_first": [Feature(left_key), Feature(value), Feature(key)],
+        "value_explicit": [Feature(left_key), Feature(value, explicit), Feature(key)],
+        "keep_index": [Feature(value, index=Index((key,)), keep_index=True), Feature(key)],
+        "twin_before": [Feature(left_key), Feature(value), Feature(key), Feature(key, explicit)],
+        "twin_after": [Feature(left_key), Feature(key), Feature(key, explicit), Feature(value)],
+    }
+    results = mloda.run_all(
+        requests[layout],
+        compute_frameworks=[PythonDictFramework],
+        links=links,
+        plugin_collector=PluginCollector.enabled_feature_groups({left_fg, right_fg}),
+    )
+    return list(results)
+
+
+def _frame_with(frames: list[Any], column: str) -> Any:
+    matching = [frame for frame in frames if (column in frame if isinstance(frame, dict) else column in frame[0])]
+    assert len(matching) == 1, f"expected exactly one frame holding {column!r}, got: {frames!r}"
+    return matching[0]
+
+
+@pytest.mark.parametrize(
+    "layout",
+    ["key_first", "value_first", "value_explicit", "keep_index"],
+    ids=["link_key_first", "link_value_first", "link_value_explicit", "keep_index_no_link"],
+)
+def test_injected_index_twin_merge_does_not_warn(layout: str, caplog: pytest.LogCaptureFixture) -> None:
+    """An index twin merging with the single request of its column is not a double request."""
+    caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
+    prefix = f"idc_twin_{layout}"
+    frames = _run_index_twin(layout, prefix)
+    frame = _frame_with(frames, f"{prefix}_val")
+    assert _single_row(frame, f"{prefix}_key") == IDC_CTX_DEFAULT
+    assert _single_row(frame, f"{prefix}_val") == IDC_CTX_DEFAULT
+    warnings = _default_equivalent_warnings(caplog)
+    assert not warnings, f"an injected index twin must not trigger a default-equivalent warning, got: {warnings!r}"
+
+
+@pytest.mark.parametrize("layout", ["twin_before", "twin_after"])
+def test_double_requested_link_index_still_warns_once(layout: str, caplog: pytest.LogCaptureFixture) -> None:
+    """Two user requests of a link index column differing only in an explicit default warn exactly once."""
+    caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
+    prefix = f"idc_dbl_{layout}"
+    _run_index_twin(layout, prefix)
+    warnings = _default_equivalent_warnings(caplog)
+    assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
+    assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"

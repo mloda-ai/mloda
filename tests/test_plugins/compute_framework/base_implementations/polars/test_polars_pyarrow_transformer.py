@@ -1,3 +1,6 @@
+import re
+from datetime import datetime, UTC
+
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
     PolarsPyArrowTransformer,
@@ -129,3 +132,25 @@ class TestPolarsPyArrowTransformer:
 
         with pytest.raises(ValueError):
             PolarsPyArrowTransformer.transform(list, dict, df, None)
+
+    @pytest.mark.parametrize("tz", ["-03:30", "+05:30", "+0545", "-00:30"])
+    def test_sub_hour_offset_raises_value_error(self, tz: str) -> None:
+        table = pa.table(
+            {"id": [1], "ts": pa.array([datetime(2024, 1, 1, tzinfo=UTC)], type=pa.timestamp("us", tz=tz))}
+        )
+
+        with pytest.raises(ValueError, match=re.escape("'ts'")) as exc_info:
+            PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
+
+        assert re.escape(tz) in re.escape(str(exc_info.value))
+
+    @pytest.mark.parametrize("tz", ["+05:00", "+0500", "UTC", "Asia/Kolkata", None])
+    def test_whole_hour_named_and_naive_timestamps_transfer(self, tz: str | None) -> None:
+        table = pa.table(
+            {"id": [1], "ts": pa.array([datetime(2024, 1, 1, tzinfo=UTC)], type=pa.timestamp("us", tz=tz))}
+        )
+
+        result = PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
+
+        assert isinstance(result, pl.DataFrame)
+        assert "ts" in result.columns

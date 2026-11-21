@@ -1,3 +1,6 @@
+import re
+from datetime import datetime, UTC
+
 import pytest
 from unittest.mock import patch
 
@@ -95,6 +98,19 @@ class TestPolarsLazyPyArrowTransformer:
         ):
             with pytest.raises(ImportError, match="Polars is not installed"):
                 PolarsLazyPyArrowTransformer.transform_other_fw_to_fw(self.arrow_table)
+
+    def test_sub_hour_offset_raises_value_error(self) -> None:
+        table = pa.table(
+            {
+                "id": [1],
+                "ts": pa.array([datetime(2024, 1, 1, tzinfo=UTC)], type=pa.timestamp("us", tz="+05:30")),
+            }
+        )
+
+        with pytest.raises(ValueError, match=re.escape("'ts'")) as exc_info:
+            PolarsLazyPyArrowTransformer.transform_other_fw_to_fw(table)
+
+        assert re.escape("+05:30") in re.escape(str(exc_info.value))
 
 
 @pytest.mark.skipif(pl is None or pa is None, reason="Polars or PyArrow is not installed. Skipping this test.")

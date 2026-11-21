@@ -1,6 +1,9 @@
+import re
 from typing import Any
 
 from mloda.provider import BaseTransformer
+
+_FIXED_OFFSET = re.compile(r"^[+-]\d{2}:?(\d{2})$")
 
 try:
     import polars as pl
@@ -60,4 +63,19 @@ class PolarsPyArrowTransformer(BaseTransformer):
         """
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
+        cls._reject_sub_hour_offsets(data)
         return pl.from_arrow(data)
+
+    @classmethod
+    def _reject_sub_hour_offsets(cls, data: Any) -> None:
+        """Raise ValueError for timestamp columns with fixed offsets that have non-zero minutes."""
+        for field in data.schema:
+            if not pa.types.is_timestamp(field.type):
+                continue
+            tz = field.type.tz
+            match = _FIXED_OFFSET.match(tz) if tz else None
+            if match and match.group(1) != "00":
+                raise ValueError(
+                    f"Column '{field.name}' has time zone '{tz}', but Polars has no sub-hour fixed offset. "
+                    "Convert it to UTC first."
+                )

@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any, Literal, cast
 
 import pytest
@@ -1257,7 +1257,9 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
     assert TOY_TOKEN not in repr(result)
 
 
-@pytest.mark.parametrize("holder", ["itself", "mapping_value", "attribute", "toy_columns", "unrelated"])
+@pytest.mark.parametrize(
+    "holder", ["itself", "mapping_value", "attribute", "toy_columns", "unrelated", "tuple_item", "lazy_mapping"]
+)
 def test_held_handles_finds_an_entry_held_by_identity(holder: str) -> None:
     pytest.importorskip("pyarrow")
     from types import SimpleNamespace
@@ -1269,14 +1271,27 @@ def test_held_handles_finds_an_entry_held_by_identity(holder: str) -> None:
 
     dac = toy_dac(h1={"toyfmt_col": [1]}, h2={"toyfmt_col": [2]})
     entry = dac.credentials["h1"]
+
+    class _LazyMapping(Mapping[str, Any]):
+        def __getitem__(self, key: str) -> Any:
+            return entry
+
+        def __iter__(self) -> Iterator[str]:
+            return iter(["k"])
+
+        def __len__(self) -> int:
+            return 1
+
     access: Any = {
+        "tuple_item": ("path", entry),
+        "lazy_mapping": _LazyMapping(),
         "itself": entry,
         "mapping_value": {"k": entry, "other": 1},
         "attribute": SimpleNamespace(credentials=entry),
         "toy_columns": ToyColumns({"toyfmt_col": [1]}, entry),
         "unrelated": {"toyfmt_col": [1], "copy": dict(entry)},
     }[holder]
-    expected = [] if holder == "unrelated" else ["h1"]
+    expected = [] if holder in ("unrelated", "lazy_mapping") else ["h1"]
     assert fgs._held_handles(dac, access) == expected
 
 

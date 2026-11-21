@@ -244,10 +244,12 @@ def _shown(dac: DataAccessCollection, handle: str) -> str:
 
 
 def _held_handles(dac: DataAccessCollection, access: Any) -> list[str]:
-    """The registered handles whose entry is, by identity, access, one of its values or one of its attributes."""
+    """The registered handles whose entry is, by identity, access, a dict value, a tuple or list item, or an attribute."""
     candidates = [access]
-    if isinstance(access, Mapping):
+    if isinstance(access, dict):
         candidates.extend(access.values())
+    if isinstance(access, (tuple, list)):
+        candidates.extend(access)
     if hasattr(access, "__dict__"):
         candidates.extend(vars(access).values())
     handles = (credential_handle_of(dac, candidate) for candidate in candidates)

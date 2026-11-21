@@ -29,6 +29,7 @@ def test_step_and_worker_upload_a_requested_result_once(need_to_upload: bool, sh
     features.features = set()
     features.artifact_to_save = None
     features.runtime_parameters = ()
+    features.options = None
     features.get_initial_requested_features.return_value = {"requested"}
     step = FeatureGroupStep(MockFeatureGroup, features, set(), ComputeFramework)
     step.need_to_upload = need_to_upload

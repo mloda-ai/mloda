@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable
+from collections.abc import Callable, Iterator, Mapping
 from typing import Any, Literal, cast
 
 import pytest
@@ -1165,6 +1165,29 @@ def _credential_variant(kind: str) -> type[FeatureGroup]:
 
         return HidesBinding
 
+    if kind in ("optional_hidden", "optional_registered"):
+        from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import ToyColumns
+
+        class OptionalBinder(ToySourceFG):
+            """One fixed source with or without the h1 slot; the slot is only held when registered."""
+
+            @classmethod
+            def find_sources(
+                cls, route: Any, feature_name: str, options: Options, data_access_collection: Any
+            ) -> list[SourceMatch]:
+                dac = data_access_collection
+                held = dac.credentials.get("h1") if dac else None
+                access = ToyColumns({"toyfmt_col": [_SECRET_CELL]}, held)
+                return [SourceMatch(source="toyfmt:optional", access=access)]
+
+            if kind == "optional_hidden":
+
+                @classmethod
+                def match_credentials(cls, match: SourceMatch) -> Any:
+                    return None
+
+        return OptionalBinder
+
     class ReturnsSubMapping(ToySourceFG):
         @classmethod
         def match_credentials(cls, match: SourceMatch) -> Any:
@@ -1186,6 +1209,9 @@ def _credential_failures(result: Any) -> list[str]:
         ("sub_mapping", True, ["h1", "match_credentials"], False),
         ("abort_secret", False, [], True),
         ("raises_secret", True, ["raised"], False),
+        ("optional_hidden", True, ["h1", "match_credentials", "'toyfmt_col'"], False),
+        ("optional_registered", False, [], False),
+        ("optional_unbound", False, [], False),
     ],
 )
 def test_source_credential_binding_shape(case: str, flagged: bool, needles: list[str], names_aborted: bool) -> None:
@@ -1195,6 +1221,7 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
         TOY_KEY,
         TOY_TOKEN,
         ToySourceFG,
+        foreign_dac,
         toy_dac,
         toy_token_dac,
     )
@@ -1204,10 +1231,14 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
         group: type[FeatureGroup] = _credential_variant("hidden")
     elif case == "registered":
         group = ToySourceFG
+    elif case == "optional_unbound":
+        group = _credential_variant("optional_hidden")
     else:
         group = _credential_variant(case)
     if case == "hidden_auto_handle":
         dac = DataAccessCollection(credentials=[{TOY_KEY: cell}])
+    elif case == "optional_unbound":
+        dac = foreign_dac()
     elif case.endswith("_secret"):
         dac = toy_token_dac(h1=cell)
     else:
@@ -1224,6 +1255,44 @@ def test_source_credential_binding_shape(case: str, flagged: bool, needles: list
         assert not names, result.failures
     assert str(_SECRET_CELL) not in repr(result)
     assert TOY_TOKEN not in repr(result)
+
+
+@pytest.mark.parametrize(
+    "holder", ["itself", "mapping_value", "attribute", "toy_columns", "unrelated", "tuple_item", "lazy_mapping"]
+)
+def test_held_handles_finds_an_entry_held_by_identity(holder: str) -> None:
+    pytest.importorskip("pyarrow")
+    from types import SimpleNamespace
+
+    from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import (
+        ToyColumns,
+        toy_dac,
+    )
+
+    dac = toy_dac(h1={"toyfmt_col": [1]}, h2={"toyfmt_col": [2]})
+    entry = dac.credentials["h1"]
+
+    class _LazyMapping(Mapping[str, Any]):
+        def __getitem__(self, key: str) -> Any:
+            return entry
+
+        def __iter__(self) -> Iterator[str]:
+            return iter(["k"])
+
+        def __len__(self) -> int:
+            return 1
+
+    access: Any = {
+        "tuple_item": ("path", entry),
+        "lazy_mapping": _LazyMapping(),
+        "itself": entry,
+        "mapping_value": {"k": entry, "other": 1},
+        "attribute": SimpleNamespace(credentials=entry),
+        "toy_columns": ToyColumns({"toyfmt_col": [1]}, entry),
+        "unrelated": {"toyfmt_col": [1], "copy": dict(entry)},
+    }[holder]
+    expected = [] if holder in ("unrelated", "lazy_mapping") else ["h1"]
+    assert fgs._held_handles(dac, access) == expected
 
 
 def test_pointer_only_claim_needs_no_match_credentials() -> None:

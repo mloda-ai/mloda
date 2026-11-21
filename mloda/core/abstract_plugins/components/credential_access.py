@@ -84,12 +84,13 @@ class ResolvedCredential(MutableMapping[str, Any]):
 class _ReadableScope:
     """Set the readable window for a block; a class, not @contextmanager (see registered_secrets_scope)."""
 
-    def __init__(self, hide: bool) -> None:
+    def __init__(self, hide: bool, unset: tuple[str, ...] = ()) -> None:
         self._hide = hide
+        self._unset = unset
         self._frames: list[tuple[_ReadableWindow | None, Token[_ReadableWindow | None]]] = []
 
     def __enter__(self) -> None:
-        window = None if self._hide else _ReadableWindow(_GRANT_HOLDER.get())
+        window = None if self._hide else _ReadableWindow(_GRANT_HOLDER.get(), self._unset)
         self._frames.append((window, _READABLE.set(window)))
 
     def __exit__(self, *exc_info: object) -> None:
@@ -99,9 +100,9 @@ class _ReadableScope:
         _READABLE.reset(token)
 
 
-def readable_credentials() -> _ReadableScope:
-    """Make the held grant readable for the block."""
-    return _ReadableScope(hide=False)
+def readable_credentials(unset: tuple[str, ...] = ()) -> _ReadableScope:
+    """Make the held grant readable for the block; unset names the step's unset handle options."""
+    return _ReadableScope(hide=False, unset=unset)
 
 
 def hidden_credentials() -> _ReadableScope:
@@ -124,12 +125,12 @@ def restore_readable(method: Callable[..., Any]) -> Callable[..., Any]:
     return wrapper
 
 
-def readable(method: Callable[..., Any]) -> Callable[..., Any]:
+def readable(method: Callable[..., Any], unset: tuple[str, ...] = ()) -> Callable[..., Any]:
     """Wrap method so it runs with the grant readable; keeps __self__."""
 
     @functools.wraps(method)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
-        with readable_credentials():
+        with readable_credentials(unset):
             return method(*args, **kwargs)
 
     if hasattr(method, "__self__"):
@@ -178,6 +179,17 @@ def read_credential(handle: str) -> ResolvedCredential:
         raise CredentialReadRefused(
             f"Credential '{handle}' can only be read inside calculate_feature or an artifact saver "
             "of a step that declares it."
+        )
+    if handle is None:
+        unset = window.unset() if window is not None else ()
+        if not unset:
+            raise CredentialReadRefused("read_credential got None, not a credential handle name.")
+        names = ", ".join(repr(name) for name in unset)
+        noun = "option" if len(unset) == 1 else "options"
+        verb = "is" if len(unset) == 1 else "are"
+        raise CredentialReadRefused(
+            f"read_credential got None: credential handle {noun} {names} of this step {verb} unset; "
+            "set it or skip the read."
         )
     if handle not in values:
         names = ", ".join(repr(name) for name in sorted(values))

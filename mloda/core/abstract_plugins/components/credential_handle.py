@@ -155,6 +155,11 @@ def _declared(feature_group: type[FeatureGroup], options: Options) -> dict[str, 
     return {key: resolved.get(key) for key in keys}
 
 
+def unset_credential_handle_options(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
+    """Sorted handle option keys whose resolved value is None."""
+    return tuple(sorted(key for key, value in _declared(feature_group, options).items() if value is None))
+
+
 def declared_credential_handles(feature_group: type[FeatureGroup], options: Options) -> tuple[str, ...]:
     """Sorted handle names a step declares; an unset optional handle declares nothing."""
     return tuple(sorted({v for v in _declared(feature_group, options).values() if isinstance(v, str)}))

@@ -260,6 +260,19 @@ def _make_plain_fg() -> type[FeatureGroup]:
     return FerPlainFG
 
 
+def _make_output_parts_fg() -> type[FeatureGroup]:
+    """A throwaway group serving the host name through the declared output part s."""
+
+    class FerPartsFG(FeatureGroup):
+        OUTPUT_PARTS = ("s",)
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {HOST_FEATURE}
+
+    return FerPartsFG
+
+
 def _make_scope_tie_a_fg() -> type[FeatureGroup]:
     """A plain matcher whose class name sorts before its twin's."""
 
@@ -1028,6 +1041,20 @@ class TestEachGateRecordsItsOwnFact:
         assert OTHER_DOMAIN in reason, f"the reason must name the filter feature's declared domain: {reason}"
         assert compared in reason, f"the reason must name the domain it was compared against: {reason}"
 
+    def test_an_undeclared_output_part_records_output_part_unknown(self, caplog: pytest.LogCaptureFixture) -> None:
+        snapshot = _drive_matching([_make_output_parts_fg], caplog, filter_feature=f"{HOST_FEATURE}~bogus")
+
+        assert snapshot.escaped is None, f"nothing may cross identify_matched_filters: {snapshot.escaped}"
+        assert snapshot.names == (), f"an undeclared part must attach no filter, got: {snapshot.names}"
+        assert snapshot.rows == (
+            (
+                "FerPartsFG",
+                f"{HOST_FEATURE}~bogus",
+                NAME_ELIMINATION_STAGE,
+                f"'bogus' is not an output part of '{HOST_FEATURE}'; declared parts: ['s']",
+            ),
+        ), f"exactly one name fact, got: {snapshot.rows}"
+
     def test_the_capability_gate_mirrors_the_canonical_seams_wording(self, caplog: pytest.LogCaptureFixture) -> None:
         """The rejected frameworks are the ones the filter would ride, named as the canonical seam names them."""
         snapshot = _drive_matching(
@@ -1302,6 +1329,22 @@ class TestTheUnmatchedWarningNamesTheNearestMiss:
         expected_bullet = near_miss_text(SCOPE_TIE_A_CLASS_NAME, DOMAIN_STAGE, DEFAULT_DOMAIN_REASON)
         assert snapshot.unmatched == (f"{BARE_MESSAGE} {NEAREST_MISS_PHRASE}{expected_bullet}",), (
             f"the tie must break by class name, got: {snapshot.unmatched}"
+        )
+
+    def test_an_undeclared_output_part_is_the_nearest_miss_with_its_code(
+        self, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        from mloda.core.prepare.resolution_failure_renderer import near_miss_text
+
+        snapshot = _drive_matching(
+            [_make_output_parts_fg], caplog, filter_feature=f"{HOST_FEATURE}~bogus", warn_unmatched=True
+        )
+
+        reason = f"'bogus' is not an output part of '{HOST_FEATURE}'; declared parts: ['s']"
+        bullet = near_miss_text("FerPartsFG", NAME_ELIMINATION_STAGE, reason, CoreDeclineCode.OUTPUT_PART_UNKNOWN)
+        message = _bare_message(f"{HOST_FEATURE}~bogus")
+        assert snapshot.unmatched == (f"{message} {NEAREST_MISS_PHRASE}{bullet}",), (
+            f"the undeclared part must be the nearest miss, got: {snapshot.unmatched}"
         )
 
     def test_a_filter_that_matched_warns_nothing(self, caplog: pytest.LogCaptureFixture) -> None:

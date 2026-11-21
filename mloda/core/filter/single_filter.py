@@ -30,6 +30,8 @@ class SingleFilter:
         self.parameter = self.handle_parameter(parameter)
 
         self.uuid = uuid.uuid4()
+        # Set on a per-match copy when the filter column is a declared output part; not part of identity.
+        self.output_part: tuple[str, str] | None = None
 
     @property
     def name(self) -> str:

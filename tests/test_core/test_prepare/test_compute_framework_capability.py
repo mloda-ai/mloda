@@ -34,7 +34,7 @@ from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import ANY_OUTPUT_PART
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.steward import get_feature_group_docs
-from mloda.user import PluginCollector, mloda
+from mloda.user import GlobalFilter, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping
 from tests.test_core.test_abstract_plugins.test_components.test_input_data import toy_operation_group
@@ -439,12 +439,19 @@ class TestPartDispatch:
         ],
         ids=["part", "whole", "any_concrete_part", "any_nested_part", "declared_nested_part"],
     )
+    @pytest.mark.parametrize("seam", ["resolution", "filter"])
     def test_hook_receives_base_name_and_part(
-        self, group: type[PartRecordingFeatureGroup], requested: str, expected_part: str | None
+        self, group: type[PartRecordingFeatureGroup], requested: str, expected_part: str | None, seam: str
     ) -> None:
-        plugins: FeatureGroupEnvironmentMapping = {group: {CapabilityFwA}}
-
-        identify_winner(feature=Feature(requested), accessible_plugins=plugins)
+        if seam == "resolution":
+            plugins: FeatureGroupEnvironmentMapping = {group: {CapabilityFwA}}
+            identify_winner(feature=Feature(requested), accessible_plugins=plugins)
+        else:
+            global_filter = GlobalFilter()
+            global_filter.add_filter(requested, "equal", {"value": 1})
+            host = Feature(CAPABILITY_FEATURE)
+            host.compute_frameworks = {CapabilityFwA}
+            global_filter.identify_matched_filters(group, host, None)
 
         assert set(PartRecordingFeatureGroup.seen) == {(CAPABILITY_FEATURE, expected_part)}
 

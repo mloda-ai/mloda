@@ -25,13 +25,21 @@ class BaseFilterEngine(ABC):
     def applicable_filters(cls, features: Any) -> list[SingleFilter]:
         """Return the filters that apply_filters will actually process.
 
-        A filter is applicable when its column name appears in features.get_all_names().
+        A filter is applicable when its column name appears in features.get_all_names() or is a requested part column.
         This method is the single source of truth for that decision; both the filter
         engine and the pre-elimination validator in ComputeFramework use it.
         """
+        # Call-time import: feature_set imports this module at module level.
+        from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+
         if features.filters is None:
             return []
         all_names = set(features.get_all_names())
+        if isinstance(features, FeatureSet):
+            # A filter on a declared output part names its column, which no feature carries as its own name.
+            all_names.update(
+                f"{feature.name}~{part}" for feature in features.features for part in feature.requested_parts
+            )
         return [sf for sf in features.filters if sf.filter_feature.name in all_names]
 
     @classmethod

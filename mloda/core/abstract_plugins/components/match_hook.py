@@ -101,7 +101,7 @@ def call_match_hook(
     source group's conflicting option write is contained as an elimination of that group.
 
     The contained exception is handed back rather than judged here: each seam records and isolates options its own way.
-    resolve_parts (feature resolution only) reads `<base>~<part>` against the declared parts.
+    resolve_parts (feature resolution and global filters) reads `<base>~<part>` against the declared parts.
     """
     windows: list[dict[str, MatchRejection]] = []
     priority: list[dict[str, MatchRejection]] = []

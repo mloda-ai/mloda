@@ -194,9 +194,9 @@ clears these gates, in the order they run:
 | Gate | Shared with feature resolution | Filter policy |
 |------|--------------------------------|---------------|
 | scope | `matches_feature_group_scope`: the named class and its subclasses, class-object and string forms alike | a FeatureGroup outside the filter feature's `feature_group=` is skipped before its matcher runs and records nothing in `dropped_filters`, as in feature resolution |
-| criteria | [one shared probe](feature-group-matching.md#modern-unified-matching) | asked about the filter feature's name and its enriched options, plus the run's `DataAccessCollection` |
+| criteria | [one shared probe](feature-group-matching.md#modern-unified-matching) | asked about the filter feature's name (a `<base>~<part>` name is read against the declared output parts, as in resolution) and its enriched options, plus the run's `DataAccessCollection` |
 | domain | `Domain` equality only: resolution compares the FeatureGroup's domain to the feature's, and passes any candidate for a domainless feature | the filter feature's domain must equal the resolved feature's, or the FeatureGroup's when the feature declares none; a domainless filter copy adopts that domain, though never a default group domain |
-| capability (`compute framework`) | the `supports_compute_framework` hook and its narrowing | asked over the frameworks the filter would ride (its own pin, else the resolved feature's), skipped when neither carries one; nothing accepted detaches the filter, and an unpinned copy rides the accepted subset, or the feature's frameworks when the hook was never consulted |
+| capability (`compute framework`) | the `supports_compute_framework` hook and its narrowing | asked (with the base name and `part` for a part column) over the frameworks the filter would ride (its own pin, else the resolved feature's), skipped when neither carries one; nothing accepted detaches the filter, and an unpinned copy rides the accepted subset, or the feature's frameworks when the hook was never consulted |
 | compute framework pin | only the pin-cardinality validator, which raises `ComputeFrameworkPinError` at `add_filter`, not at this gate | the resolved feature's framework must be the filter feature's pin; resolution instead tests the feature's pin against the candidate's supported frameworks |
 
 Links are deliberately not re-checked: feature resolution already covered them. Declaring
@@ -274,7 +274,7 @@ as `for (feature_group, name), elimination in ...` must now unpack three parts.
 A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
 appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
 ranks last. A FeatureGroup outside the filter feature's `feature_group=` scope is skipped silently and
-is never named as the nearest miss.
+is never named as the nearest miss. Such a filter is dropped: the run returns unfiltered rows and does not raise.
 
 ```text
 Filter feature 'price' matched no feature group. Nearest miss: SalesTotal (domain): the filter feature's domain 'finance' does not match 'sales'

@@ -5,7 +5,6 @@ Tests for the PyArrowTimeWindow implementation.
 from typing import Any
 import pyarrow as pa
 import pytest
-import datetime
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
@@ -13,7 +12,7 @@ from mloda.provider import FeatureSet
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, WindowSpan
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.conftest import EXPECTED_VALUES
 from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.time_window_zero_row_test_mixin import (
     TimeWindowZeroRowTestMixin,
@@ -28,19 +27,18 @@ class TestPyArrowTimeWindow:
         """Test compute_framework_rule method."""
         assert PyArrowTimeWindow.compute_framework is PyArrowTable
 
-    def test_get_time_delta(self) -> None:
-        """Test _get_time_delta method."""
-        assert TimeWindowFeatureGroup._get_time_delta(3, "day") == datetime.timedelta(days=3)
-        assert TimeWindowFeatureGroup._get_time_delta(7, "hour") == datetime.timedelta(hours=7)
-        assert TimeWindowFeatureGroup._get_time_delta(2, "minute") == datetime.timedelta(minutes=2)
-        assert TimeWindowFeatureGroup._get_time_delta(4, "second") == datetime.timedelta(seconds=4)
-        assert TimeWindowFeatureGroup._get_time_delta(1, "week") == datetime.timedelta(weeks=1)
-        assert TimeWindowFeatureGroup._get_time_delta(6, "month") == datetime.timedelta(days=180)  # 6 * 30
-        assert TimeWindowFeatureGroup._get_time_delta(2, "year") == datetime.timedelta(days=730)  # 2 * 365
+    @pytest.mark.parametrize(
+        ("size", "unit"),
+        [(3, "day"), (7, "hour"), (2, "minute"), (4, "second"), (1, "week"), (6, "month"), (2, "year")],
+    )
+    def test_window_span(self, size: int, unit: str) -> None:
+        span = TimeWindowFeatureGroup._window_span(size, unit)
+        assert span == WindowSpan(size, unit)
+        assert (span.size, span.unit) == (size, unit)
 
-        # Test with invalid time unit
+    def test_window_span_rejects_an_unknown_unit(self) -> None:
         with pytest.raises(ValueError):
-            TimeWindowFeatureGroup._get_time_delta(3, "invalid")
+            TimeWindowFeatureGroup._window_span(3, "invalid")
 
     @pytest.mark.parametrize(
         "window_function,expected_values",
@@ -58,7 +56,7 @@ class TestPyArrowTimeWindow:
         result = PyArrowTimeWindow._perform_window_operation(
             sample_time_table,
             window_function,
-            TimeWindowFeatureGroup._get_time_delta(3, "day"),
+            TimeWindowFeatureGroup._window_span(3, "day"),
             ["temperature"],
             DefaultOptionKeys.reference_time,
         )
@@ -76,7 +74,7 @@ class TestPyArrowTimeWindow:
             PyArrowTimeWindow._perform_window_operation(
                 sample_time_table,
                 "invalid",
-                TimeWindowFeatureGroup._get_time_delta(3, "day"),
+                TimeWindowFeatureGroup._window_span(3, "day"),
                 ["temperature"],
                 DefaultOptionKeys.reference_time,
             )

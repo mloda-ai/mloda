@@ -187,6 +187,27 @@ class TestForecastingFeatureGroup:
             ForecastingFeatureGroup().input_features(self.options, FeatureName(name))
         assert str(exc_info.value) == reason
 
+    @pytest.mark.parametrize(
+        ("last", "horizon", "unit", "expected_tail"),
+        [
+            (pd.Timestamp("2023-01-31 12:00"), 2, "month", ["2023-02-28T12:00:00", "2023-03-31T12:00:00"]),
+            (pd.Timestamp("2024-02-29"), 1, "year", ["2025-02-28T00:00:00"]),
+            (
+                pd.Timestamp("2023-03-11 12:00", tz="America/New_York"),
+                2,
+                "day",
+                ["2023-03-12T12:00:00-04:00", "2023-03-13T12:00:00-04:00"],
+            ),
+            (pd.Timestamp("2023-03-11 12:00", tz="America/New_York"), 24, "hour", ["2023-03-12T13:00:00-04:00"]),
+        ],
+    )
+    def test_generate_future_timestamps_follow_the_zone_rule(
+        self, last: pd.Timestamp, horizon: int, unit: str, expected_tail: list[str]
+    ) -> None:
+        result = PandasForecasting._generate_future_timestamps(last, horizon, unit)
+        assert len(result) == horizon
+        assert [t.isoformat() for t in result][-len(expected_tail) :] == expected_tail
+
     def test_pandas_forecasting(self) -> None:
         """Test forecasting with the Pandas implementation."""
         # Perform forecasting

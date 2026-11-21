@@ -1,10 +1,10 @@
 """Regression tests pinning defects found by two reviews of the time-window fix.
 
 The window for a row at reference time ``t`` is the half-open interval
-``(t - span, t]`` (right-closed, left-open) with ``span = window_size * time_unit``
-and week/month/year approximated as 7/30/365 days. All expected values are derived
-by an independent brute-force reference (``_reference``) so the tests are
-self-checking and never trust hand-computed numbers.
+``(t - span, t]`` (right-closed, left-open) with ``span = window_size * time_unit``.
+Second, minute and hour are elapsed time; day, week, month and year are calendar
+units on the column's own wall clock. Elapsed-time expectations come from a
+brute-force reference (``_reference``); calendar ones are pinned literals.
 
 Defects pinned:
 - Pandas mis-aligns time-sorted results back to original (unsorted) rows.
@@ -152,12 +152,12 @@ def test_dst_transition_uses_absolute_time() -> None:
 
     pandas_result = _as_floats(
         PandasTimeWindow._perform_window_operation(
-            _dst_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(1, "hour"), ["value"], REFERENCE_TIME
+            _dst_dataframe(), "sum", TimeWindowFeatureGroup._window_span(1, "hour"), ["value"], REFERENCE_TIME
         )
     )
     pyarrow_result = _as_floats(
         PyArrowTimeWindow._perform_window_operation(
-            _dst_table(), "sum", TimeWindowFeatureGroup._get_time_delta(1, "hour"), ["value"], REFERENCE_TIME
+            _dst_table(), "sum", TimeWindowFeatureGroup._window_span(1, "hour"), ["value"], REFERENCE_TIME
         )
     )
 
@@ -166,38 +166,92 @@ def test_dst_transition_uses_absolute_time() -> None:
     assert pandas_result == pytest.approx(pyarrow_result)
 
 
-# --------------------------------------------------------------------------- #
-# 3. month / year: assert exact values (span = 90 / 1095 days), not length.    #
-# --------------------------------------------------------------------------- #
-
-_MY_DATES = pd.date_range(start="2023-01-01", periods=6, freq="D")
-_MY_VALUES = [1, 2, 3, 4, 5, 6]
-_MY_SPAN_DAYS = {"month": 90, "year": 1095}
+_NY = "America/New_York"
 
 
-@pytest.mark.parametrize("time_unit", ["month", "year"])
-def test_month_and_year_window_values(time_unit: str) -> None:
-    """month/year windows must return the exact brute-force values on both backends."""
-    span = datetime.timedelta(days=_MY_SPAN_DAYS[time_unit])
-    expected = _reference([d.to_pydatetime() for d in _MY_DATES], _MY_VALUES, span, "sum")
+def _zoned_frame(instants: list[str], zone: str, values: list[int]) -> pd.DataFrame:
+    times = pd.to_datetime(instants, utc=True).tz_convert(zone)
+    return pd.DataFrame({"value": values, REFERENCE_TIME: times})
 
-    df = pd.DataFrame({"value": list(_MY_VALUES), REFERENCE_TIME: _MY_DATES})
-    table = pa.Table.from_pandas(df)
+
+@pytest.mark.parametrize(
+    ("zone", "instants", "values", "size", "unit", "expected"),
+    [
+        (_NY, ["2023-03-11 16:30", "2023-03-12 16:00"], [1, 10], 1, "day", [1, 10]),
+        (_NY, ["2023-03-11 16:30", "2023-03-12 16:00"], [1, 10], 24, "hour", [1, 11]),
+        (_NY, ["2023-11-04 16:30", "2023-11-05 17:00"], [1, 10], 1, "day", [1, 11]),
+        (_NY, ["2023-11-04 16:30", "2023-11-05 17:00"], [1, 10], 24, "hour", [1, 10]),
+        (_NY, ["2023-11-05 05:40", "2023-11-05 06:40", "2023-11-06 06:30"], [1, 10, 100], 1, "day", [1, 11, 110]),
+        (_NY, ["2023-03-12 07:15", "2023-03-12 07:45", "2023-03-13 06:30"], [1, 10, 100], 1, "day", [1, 11, 110]),
+        (
+            "+05:30",
+            ["2023-01-31 06:30", "2023-02-28 12:30", "2023-03-01 06:30"],
+            [1, 10, 100],
+            1,
+            "month",
+            [1, 11, 110],
+        ),
+        ("+05:30", ["2023-01-31 06:30", "2023-02-28 12:30", "2023-03-01 06:30"], [1, 10, 100], 1, "day", [1, 10, 110]),
+    ],
+    ids=[
+        "dst_short_day_calendar",
+        "dst_short_day_elapsed",
+        "dst_long_day_calendar",
+        "dst_long_day_elapsed",
+        "bound_in_repeated_hour",
+        "bound_in_gap",
+        "fixed_offset_month",
+        "fixed_offset_day",
+    ],
+)
+def test_zoned_window_follows_the_column_wall_clock(
+    zone: str, instants: list[str], values: list[int], size: int, unit: str, expected: list[int]
+) -> None:
+    frame = _zoned_frame(instants, zone, values)
+    span = TimeWindowFeatureGroup._window_span(size, unit)
 
     pandas_result = _as_floats(
-        PandasTimeWindow._perform_window_operation(
-            df.copy(), "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
-        )
+        PandasTimeWindow._perform_window_operation(frame.copy(), "sum", span, ["value"], REFERENCE_TIME)
     )
     pyarrow_result = _as_floats(
-        PyArrowTimeWindow._perform_window_operation(
-            table, "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
-        )
+        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(frame), "sum", span, ["value"], REFERENCE_TIME)
     )
 
-    assert pandas_result == pytest.approx(expected)
-    assert pyarrow_result == pytest.approx(expected)
-    assert pandas_result == pytest.approx(pyarrow_result)
+    assert pandas_result == [float(v) for v in expected]
+    assert pyarrow_result == [float(v) for v in expected]
+
+
+@pytest.mark.parametrize(
+    ("size", "unit", "times", "expected"),
+    [
+        (
+            1,
+            "month",
+            ["2023-01-31 12:00", "2023-02-28 12:00", "2023-03-01 12:00", "2023-03-31 12:00"],
+            [1, 11, 110, 1100],
+        ),
+        (
+            1,
+            "year",
+            ["2023-02-28 12:00", "2024-02-28 18:00", "2024-02-29 12:00", "2025-02-28 12:00"],
+            [1, 10, 110, 1110],
+        ),
+    ],
+)
+def test_month_and_year_window_values(size: int, unit: str, times: list[str], expected: list[int]) -> None:
+    """Month and year windows are calendar months with the month-end clamp, not 30 and 365 days."""
+    df = pd.DataFrame({"value": [1, 10, 100, 1000], REFERENCE_TIME: pd.to_datetime(times)})
+    span = TimeWindowFeatureGroup._window_span(size, unit)
+
+    pandas_result = _as_floats(
+        PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)
+    )
+    pyarrow_result = _as_floats(
+        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(df), "sum", span, ["value"], REFERENCE_TIME)
+    )
+
+    assert pandas_result == [float(v) for v in expected]
+    assert pyarrow_result == [float(v) for v in expected]
 
 
 # --------------------------------------------------------------------------- #
@@ -217,7 +271,7 @@ def test_pyarrow_narrow_window_value() -> None:
 
     pyarrow_result = _as_floats(
         PyArrowTimeWindow._perform_window_operation(
-            table, "sum", TimeWindowFeatureGroup._get_time_delta(3, "second"), ["value"], REFERENCE_TIME
+            table, "sum", TimeWindowFeatureGroup._window_span(3, "second"), ["value"], REFERENCE_TIME
         )
     )
     assert pyarrow_result == pytest.approx(expected)
@@ -241,6 +295,7 @@ def _null_pyarrow() -> pa.Table:
     return pa.Table.from_pandas(_null_pandas())
 
 
+@pytest.mark.parametrize("feature_name", ["value__sum_3_hour_window", "value__sum_1_month_window"])
 @pytest.mark.parametrize(
     "cls,data_factory",
     [
@@ -248,13 +303,13 @@ def _null_pyarrow() -> pa.Table:
         (PyArrowTimeWindow, _null_pyarrow),
     ],
 )
-def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable[[], Any]) -> None:
+def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable[[], Any], feature_name: str) -> None:
     """A null/NaT reference time must raise a clear ValueError on both backends.
 
     Pins the pyarrow defect: it raises TypeError (``None - timedelta``) instead
     of a consistent ValueError.
     """
     feature_set = FeatureSet()
-    feature_set.add(Feature("value__sum_3_hour_window"))
+    feature_set.add(Feature(feature_name))
     with pytest.raises(ValueError):
         cls.calculate(TimeWindowFeatureGroup, data_factory(), feature_set, None)

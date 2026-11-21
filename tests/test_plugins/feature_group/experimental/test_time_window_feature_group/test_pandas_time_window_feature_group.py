@@ -42,7 +42,7 @@ class TestPandasTimeWindow:
         result = PandasTimeWindow._perform_window_operation(
             sample_time_dataframe,
             window_function,
-            TimeWindowFeatureGroup._get_time_delta(3, "day"),
+            TimeWindowFeatureGroup._window_span(3, "day"),
             ["temperature"],
             DefaultOptionKeys.reference_time,
         )
@@ -60,7 +60,7 @@ class TestPandasTimeWindow:
             PandasTimeWindow._perform_window_operation(
                 sample_time_dataframe,
                 "invalid",
-                TimeWindowFeatureGroup._get_time_delta(3, "day"),
+                TimeWindowFeatureGroup._window_span(3, "day"),
                 ["temperature"],
                 DefaultOptionKeys.reference_time,
             )

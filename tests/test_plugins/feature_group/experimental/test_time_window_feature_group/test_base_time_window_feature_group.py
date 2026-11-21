@@ -8,6 +8,7 @@ import statistics
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
+from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -26,7 +27,7 @@ from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, WindowSpan
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 from mloda.provider import FeatureChainParser
@@ -270,7 +271,7 @@ class TestTimeWindowFeatureGroup:
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.get_reference_time_column(options)
 
-    def test_window_hands_the_group_time_delta_to_perform(self) -> None:
+    def test_window_hands_the_group_span_to_perform(self) -> None:
         df = pd.DataFrame({"x": [1.0, 2.0], DefaultOptionKeys.reference_time: pd.date_range("2023-01-01", periods=2)})
         feature_set = FeatureSet()
         feature_set.add(Feature("x__sum_2_hour_window"))
@@ -286,10 +287,25 @@ class TestTimeWindowFeatureGroup:
             column_semantics=pandas_type_semantics.column_semantics,
         )
 
-        span = TimeWindowFeatureGroup._get_time_delta(2, "hour")
+        span = TimeWindowFeatureGroup._window_span(2, "hour")
         perform.assert_called_once_with(df, "sum", span, ["x"], DefaultOptionKeys.reference_time)
         add_column.assert_called_once_with(df, "x__sum_2_hour_window", [1.0, 3.0])
         assert result == "done"
+
+    @pytest.mark.parametrize(
+        ("span", "zone", "expected"),
+        [
+            (WindowSpan(2, "hour"), ZoneInfo("America/New_York"), 7_200_000_000_000),
+            (WindowSpan(1, "day"), None, 86_400_000_000_000),
+            (WindowSpan(1, "week"), datetime.timezone(datetime.timedelta(hours=5, minutes=30)), 604_800_000_000_000),
+            (WindowSpan(1, "day"), ZoneInfo("Etc/GMT-5"), 86_400_000_000_000),
+            (WindowSpan(1, "day"), ZoneInfo("America/New_York"), None),
+            (WindowSpan(1, "month"), None, None),
+            (WindowSpan(1, "year"), datetime.UTC, None),
+        ],
+    )
+    def test_fixed_span_ns(self, span: WindowSpan, zone: datetime.tzinfo | None, expected: int | None) -> None:
+        assert TimeWindowFeatureGroup._fixed_span_ns(span, zone) == expected
 
     @pytest.mark.parametrize(
         ("impl", "data"),
@@ -497,14 +513,16 @@ def _pandas_window(window_function: str, columns: dict[str, list[float | None]],
     cells = {k: [np.nan if v is None else v for v in vs] for k, vs in columns.items()}
     times = [_START + _DAY * i for i in range(len(next(iter(columns.values()))))]
     frame = pd.DataFrame({**cells, "t": times})
-    result = PandasTimeWindow._perform_window_operation(frame, window_function, _DAY * span_days, list(columns), "t")
+    span = TimeWindowFeatureGroup._window_span(span_days, "day")
+    result = PandasTimeWindow._perform_window_operation(frame, window_function, span, list(columns), "t")
     return list(result.tolist())
 
 
 def _pyarrow_window(window_function: str, columns: dict[str, list[float | None]], span_days: int) -> list[Any]:
     times = [_START + _DAY * i for i in range(len(next(iter(columns.values()))))]
     table = pa.table({**{k: pa.array(vs, type=pa.float64()) for k, vs in columns.items()}, "t": pa.array(times)})
-    result = PyArrowTimeWindow._perform_window_operation(table, window_function, _DAY * span_days, list(columns), "t")
+    span = TimeWindowFeatureGroup._window_span(span_days, "day")
+    result = PyArrowTimeWindow._perform_window_operation(table, window_function, span, list(columns), "t")
     return list(result.to_pylist())
 
 

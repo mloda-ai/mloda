@@ -6,7 +6,9 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from datetime import datetime, timedelta
+from datetime import datetime
+
+from mloda_plugins.feature_group.experimental.calendar_shift import shift
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
@@ -192,25 +194,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         Returns:
             A list of future timestamps
         """
-        future_timestamps = []
-        for i in range(1, horizon + 1):
-            if time_unit == "second":
-                future_timestamps.append(last_timestamp + timedelta(seconds=i))
-            elif time_unit == "minute":
-                future_timestamps.append(last_timestamp + timedelta(minutes=i))
-            elif time_unit == "hour":
-                future_timestamps.append(last_timestamp + timedelta(hours=i))
-            elif time_unit == "day":
-                future_timestamps.append(last_timestamp + timedelta(days=i))
-            elif time_unit == "week":
-                future_timestamps.append(last_timestamp + timedelta(weeks=i))
-            elif time_unit == "month":
-                # Approximate a month as 30 days
-                future_timestamps.append(last_timestamp + timedelta(days=i * 30))
-            elif time_unit == "year":
-                # Approximate a year as 365 days
-                future_timestamps.append(last_timestamp + timedelta(days=i * 365))
-        return future_timestamps
+        return [shift(last_timestamp, i, time_unit) for i in range(1, horizon + 1)]
 
     @classmethod
     def _determine_lag_features(cls, horizon: int, time_unit: str, data_size: int) -> list[int]:

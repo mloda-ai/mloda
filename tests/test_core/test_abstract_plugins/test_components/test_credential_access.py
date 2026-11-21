@@ -296,6 +296,33 @@ class TestReadCredential:
         assert text.index("'a'") < text.index("'b'")
         assert _HMAC not in text
 
+    @pytest.mark.parametrize(
+        ("unset", "expected"),
+        [
+            (("x_handle",), ["'x_handle'", "unset"]),
+            (("b_handle", "a_handle"), ["'a_handle'", "'b_handle'"]),
+            ((), ["got None"]),
+            (None, [_WINDOW_TEXT]),
+        ],
+        ids=["one_unset", "several_unset", "none_unset", "outside_window"],
+    )
+    def test_reading_none_names_the_unset_options_not_a_credential_none(
+        self, unset: tuple[str, ...] | None, expected: list[str]
+    ) -> None:
+        with contextlib.ExitStack() as stack:
+            if unset is not None:
+                stack.enter_context(grant_scope(StaticGrant({"h": _credential()})))
+                stack.enter_context(readable_credentials(unset=unset))
+            with pytest.raises(CredentialReadRefused) as info:
+                read_credential(None)  # type: ignore[arg-type]
+
+        text = str(info.value)
+        for needle in expected:
+            assert needle in text
+        if unset is not None:
+            assert "Credential 'None'" not in text
+        assert _HMAC not in text
+
     def test_a_read_through_a_copied_context_after_the_scope_exited_is_refused(self) -> None:
         with _scope():
             captured = contextvars.copy_context()

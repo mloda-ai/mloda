@@ -1452,6 +1452,22 @@ class ChsRcUndeclaredFG(ChsSource):
         return pd.DataFrame({name: [1] for name in features.get_all_names()})
 
 
+class ChsRcUnsetOptionalFG(ChsSource):
+    PROPERTY_MAPPING = {
+        HANDLE_KEY: credential_handle_spec("Vault credential handle."),
+        "chs_rc_optional_handle": credential_handle_spec("Optional vault handle, left unset.", default=None),
+    }
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_unset_optional_a"}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        read_credential(features.get_options_key("chs_rc_optional_handle"))
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
+
+
 class ChsRcReadingArtifact(BaseArtifact):
     @classmethod
     def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
@@ -2026,6 +2042,19 @@ def test_an_undeclared_handle_is_refused_naming_the_declared_ones_in_every_mode(
 
     assert "not-declared" in str(excinfo.value)
     assert _E2E_HANDLE in str(excinfo.value)
+    assert _E2E_HMAC not in str(excinfo.value)
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("mode", _GRANT_MODES)
+def test_reading_an_unset_optional_handle_names_the_option_in_every_mode(
+    mode: ParallelizationMode, flight_server: Any
+) -> None:
+    with pytest.raises(CredentialReadRefused) as excinfo:
+        _grant_run(ChsRcUnsetOptionalFG, "chs_rc_unset_optional_a", mode, flight_server)
+
+    assert "chs_rc_optional_handle" in str(excinfo.value)
+    assert "Credential 'None'" not in str(excinfo.value)
     assert _E2E_HMAC not in str(excinfo.value)
 
 

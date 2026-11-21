@@ -243,10 +243,21 @@ def _shown(dac: DataAccessCollection, handle: str) -> str:
     return "<unnamed>" if handle in dac.auto_handles else handle
 
 
+def _held_handles(dac: DataAccessCollection, access: Any) -> list[str]:
+    """The registered handles whose entry is, by identity, access, one of its values or one of its attributes."""
+    candidates = [access]
+    if isinstance(access, Mapping):
+        candidates.extend(access.values())
+    if hasattr(access, "__dict__"):
+        candidates.extend(vars(access).values())
+    handles = (credential_handle_of(dac, candidate) for candidate in candidates)
+    return [handle for handle in handles if handle is not None]
+
+
 def _credential_dependencies(
     cls: type[SourceFeatureGroup], name: str, base: Options, dac: DataAccessCollection, match: Any
 ) -> list[str]:
-    """The registered handles whose removal changes or loses the match of name."""
+    """The registered handles whose removal changes or loses the match of name, or that its access holds."""
     found = []
     for handle in list(dac.credentials):
         reduced = dac.copy()
@@ -254,7 +265,7 @@ def _credential_dependencies(
         probe = _probe(cls, name, base, reduced)
         if not probe.matched or probe.written is None or probe.written[1].source != match.source:
             found.append(handle)
-    return found
+    return list(dict.fromkeys([*found, *_held_handles(dac, match.access)]))
 
 
 def _check_credentials(

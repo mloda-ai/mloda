@@ -69,10 +69,14 @@ _GRANT_HOLDER: ContextVar[CredentialLookup | None] = ContextVar("mloda_credentia
 class _ReadableWindow:
     """One readable window over a lookup; copied contexts hold it and see nothing once it closes."""
 
-    __slots__ = ("_lookup",)
+    __slots__ = ("_lookup", "_unset")
 
-    def __init__(self, lookup: CredentialLookup | None) -> None:
+    def __init__(self, lookup: CredentialLookup | None, unset: tuple[str, ...] = ()) -> None:
         self._lookup: CredentialLookup | None = lookup
+        self._unset = unset
+
+    def unset(self) -> tuple[str, ...]:
+        return self._unset
 
     def values(self) -> Mapping[str, Any] | None:
         lookup = self._lookup

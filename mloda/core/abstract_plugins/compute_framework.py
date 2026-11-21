@@ -16,6 +16,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
     hidden_credentials,
     readable,
 )
+from mloda.core.abstract_plugins.components.credential_handle import unset_credential_handle_options
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
@@ -1349,7 +1350,10 @@ class ComputeFramework(ABC):
         if isinstance(features, FeatureSet) and not features.prepared:
             features.materialize_option_defaults(feature_group)
 
-        method = readable(feature_group.calculate_feature)
+        unset: tuple[str, ...] = ()
+        if isinstance(features, FeatureSet) and features.options is not None:
+            unset = unset_credential_handle_options(feature_group, features.options)
+        method = readable(feature_group.calculate_feature, unset)
         if isinstance(features, FeatureSet):
             method = _timed(method, features)
         try:

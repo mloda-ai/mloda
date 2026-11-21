@@ -91,11 +91,17 @@ class FpartLiteralFG(DataCreatorFeatureGroup):
 class FpartRowsNumericFG(FpartRowsAnyFG):
     """Declares numeric parts, which the default set_feature_name would strip."""
 
-    OUTPUT_PARTS = ("0", "1")
+    OUTPUT_PARTS: ClassVar[tuple[str, ...] | None] = ("0", "1")
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {"fpart__rows~0": ["alice", "bob"], "fpart__rows~1": [1, 2]}
+
+
+class FpartRowsImplicitFG(FpartRowsNumericFG):
+    """Same numeric columns with no declared OUTPUT_PARTS, so `~N` parts are implicit."""
+
+    OUTPUT_PARTS = None
 
 
 class FpartRowsRenamingFG(FpartRowsAnyFG):
@@ -131,6 +137,7 @@ _PART_CASES = [
     pytest.param(FpartRowsAnyFG, "s", "t", "fpart__rows", id="any_part"),
     pytest.param(FpartRowsDeclaredFG, "s", "t", "fpart__rows", id="declared_parts"),
     pytest.param(FpartRowsNumericFG, "0", "1", "fpart__rows", id="numeric_parts"),
+    pytest.param(FpartRowsImplicitFG, "0", "1", "fpart__rows", id="implicit_numeric_parts"),
     pytest.param(FpartRowsRenamingFG, "s", "t", "fpart__rows_x", id="renaming_group"),
 ]
 

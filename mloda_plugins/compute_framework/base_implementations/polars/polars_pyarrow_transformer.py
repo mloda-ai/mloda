@@ -3,8 +3,6 @@ from typing import Any
 
 from mloda.provider import BaseTransformer
 
-_FIXED_OFFSET = re.compile(r"^[+-]\d{2}:?(\d{2})$")
-
 try:
     import polars as pl
 except ImportError:
@@ -14,6 +12,25 @@ try:
     import pyarrow as pa
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
+
+_FIXED_OFFSET = re.compile(r"[+-][0-9]{2}:?([0-9]{2})")
+
+
+def _sub_hour_zone(arrow_type: Any) -> str | None:
+    """Return a fixed-offset tz with non-zero minutes found in the type or its nested types."""
+    if pa.types.is_timestamp(arrow_type):
+        tz = arrow_type.tz
+        match = _FIXED_OFFSET.fullmatch(tz) if tz else None
+        return tz if match and match.group(1) != "00" else None
+    if pa.types.is_dictionary(arrow_type):
+        return _sub_hour_zone(arrow_type.value_type)
+    if isinstance(arrow_type, pa.ExtensionType):
+        return _sub_hour_zone(arrow_type.storage_type)
+    for i in range(arrow_type.num_fields):
+        found = _sub_hour_zone(arrow_type.field(i).type)
+        if found:
+            return found
+    return None
 
 
 class PolarsPyArrowTransformer(BaseTransformer):
@@ -70,11 +87,8 @@ class PolarsPyArrowTransformer(BaseTransformer):
     def _reject_sub_hour_offsets(cls, data: Any) -> None:
         """Raise ValueError for timestamp columns with fixed offsets that have non-zero minutes."""
         for field in data.schema:
-            if not pa.types.is_timestamp(field.type):
-                continue
-            tz = field.type.tz
-            match = _FIXED_OFFSET.match(tz) if tz else None
-            if match and match.group(1) != "00":
+            tz = _sub_hour_zone(field.type)
+            if tz:
                 raise ValueError(
                     f"Column '{field.name}' has time zone '{tz}', but Polars has no sub-hour fixed offset. "
                     "Convert it to UTC first."

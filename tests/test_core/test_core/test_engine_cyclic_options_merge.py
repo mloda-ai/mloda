@@ -243,3 +243,25 @@ class TestLinkKeyOnlyMerge:
         engine._merge_host_into(existing, host)
 
         assert existing.link_key_only is False
+
+    @pytest.mark.parametrize("survivor_has_entry", [False, True], ids=["survivor_no_entry", "survivor_own_entry"])
+    def test_merge_host_into_moves_declared_options_entry_only_to_entryless_survivor(
+        self, survivor_has_entry: bool
+    ) -> None:
+        engine = _intake_engine()
+        engine.specialized_from = {}
+        engine.resolved_input_feature_names = {}
+        engine.input_feature_columns = {}
+        existing = Feature(name="k")
+        host = Feature(name="k")
+        host_options = Options(group={"g": 1})
+        existing_options = Options(group={"g": 2})
+        engine._declared_options_by_uuid[host.uuid] = host_options
+        if survivor_has_entry:
+            engine._declared_options_by_uuid[existing.uuid] = existing_options
+
+        engine._merge_host_into(existing, host)
+
+        expected = existing_options if survivor_has_entry else host_options
+        assert list(engine._declared_options_by_uuid) == [existing.uuid]
+        assert engine._declared_options_by_uuid[existing.uuid] is expected

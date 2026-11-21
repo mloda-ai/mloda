@@ -110,7 +110,7 @@ class TestPolarsLazyPyArrowTransformer:
         with pytest.raises(ValueError, match=re.escape("'ts'")) as exc_info:
             PolarsLazyPyArrowTransformer.transform_other_fw_to_fw(table)
 
-        assert re.escape("+05:30") in re.escape(str(exc_info.value))
+        assert "'+05:30'" in str(exc_info.value)
 
 
 @pytest.mark.skipif(pl is None or pa is None, reason="Polars or PyArrow is not installed. Skipping this test.")

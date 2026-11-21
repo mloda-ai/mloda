@@ -142,9 +142,9 @@ class TestPolarsPyArrowTransformer:
         with pytest.raises(ValueError, match=re.escape("'ts'")) as exc_info:
             PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
 
-        assert re.escape(tz) in re.escape(str(exc_info.value))
+        assert f"'{tz}'" in str(exc_info.value)
 
-    @pytest.mark.parametrize("tz", ["+05:00", "+0500", "UTC", "Asia/Kolkata", None])
+    @pytest.mark.parametrize("tz", ["+05:00", "+0500", "+00:00", "UTC", "Asia/Kolkata", None])
     def test_whole_hour_named_and_naive_timestamps_transfer(self, tz: str | None) -> None:
         table = pa.table(
             {"id": [1], "ts": pa.array([datetime(2024, 1, 1, tzinfo=UTC)], type=pa.timestamp("us", tz=tz))}
@@ -153,4 +153,4 @@ class TestPolarsPyArrowTransformer:
         result = PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
 
         assert isinstance(result, pl.DataFrame)
-        assert "ts" in result.columns
+        assert isinstance(result.schema["ts"], pl.Datetime)

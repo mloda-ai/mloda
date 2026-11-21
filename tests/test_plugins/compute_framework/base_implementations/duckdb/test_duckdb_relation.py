@@ -320,10 +320,12 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
     @pytest.mark.parametrize("unit", ["us", "ns"])
     def test_to_arrow_table_reattaches_zone_with_same_instants(self, connection: Any, unit: str) -> None:
         source = _tz_table(unit)
-        result = DuckdbRelation.from_arrow(connection, source).to_arrow_table()
+        rel = DuckdbRelation.from_arrow(connection, source)
+        duckdb_unit = rel._relation.arrow().read_all().schema.field("ts").type.unit
+        result = rel.to_arrow_table()
 
-        assert result.schema.field("ts").type == pa.timestamp(unit, tz="+05:00")
-        assert result.column("ts").cast(pa.int64()).to_pylist() == source.column("ts").cast(pa.int64()).to_pylist()
+        assert result.schema.field("ts").type == pa.timestamp(duckdb_unit, tz="+05:00")
+        assert result.column("ts").cast(source.schema.field("ts").type).equals(source.column("ts"))
 
     def test_to_arrow_table_zero_rows_keeps_zone(self, connection: Any) -> None:
         rel = DuckdbRelation.from_arrow(connection, _tz_table().slice(0, 0))

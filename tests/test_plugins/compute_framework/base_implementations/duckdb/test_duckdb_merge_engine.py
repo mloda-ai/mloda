@@ -481,6 +481,16 @@ class TestDuckDBMergeEngineKeepsTimeZones:
         }
         return DuckdbRelation.from_arrow(connection, pa.table(columns))
 
+    def test_union_shared_column_without_left_zone_does_not_borrow_right_zone(self, connection: Any) -> None:
+        native = connection.sql("SELECT 1::BIGINT AS k, TIMESTAMPTZ '2021-01-01 01:30:00+00' AS ts")
+        left = DuckdbRelation(connection, native)
+        right = self._rel(connection, "+05:00")
+        idx = Index(("k",))
+
+        result = DuckDBMergeEngine(connection).merge_union(left, right, idx, idx)
+
+        assert result.time_zone("ts") is None
+
     @pytest.mark.parametrize("method", ["merge_union", "merge_append"])
     def test_union_left_zone_wins_for_shared_column(self, connection: Any, method: str) -> None:
         left = self._rel(connection, "+05:00")
@@ -519,6 +529,9 @@ class TestDuckDBMergeEngineKeepsTimeZones:
 
         assert result.time_zone("lts") == "+05:00"
         assert result.time_zone("rts") == "-03:30"
+        schema = result.to_arrow_table().schema
+        assert schema.field("lts").type == pa.timestamp("us", tz="+05:00")
+        assert schema.field("rts").type == pa.timestamp("us", tz="-03:30")
 
 
 class TestDuckDBMergeEngineMultiIndex(MergeEngineSuite):

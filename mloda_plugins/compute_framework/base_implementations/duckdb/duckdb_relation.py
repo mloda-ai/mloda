@@ -73,6 +73,12 @@ class DuckdbRelation(SqlBaseRelation):
     ) -> "DuckdbRelation":
         return DuckdbRelation(self._connection, new_rel, self._time_zones if time_zones is None else time_zones)
 
+    @staticmethod
+    def _kept_zones(primary: "DuckdbRelation", secondary: "DuckdbRelation") -> dict[str, str]:
+        """Zones of both sides; a shared column takes its zone only from ``primary``."""
+        extra = {c: z for c, z in secondary._time_zones.items() if c not in primary.columns}
+        return {**extra, **primary._time_zones}
+
     def time_zone(self, column: str) -> str | None:
         """Return the recorded source zone of a tz-aware column, else None."""
         self._require_columns(column)
@@ -119,7 +125,8 @@ class DuckdbRelation(SqlBaseRelation):
     def project(self, expression: str) -> "DuckdbRelation":
         """Project columns using a raw SQL projection string.
 
-        Bypasses identifier quoting; never pass user-controlled input.
+        Bypasses identifier quoting; never pass user-controlled input. The zone follows the output
+        column name, so use ``with_time_zone`` after re-deriving a column.
         """
         new_rel = self._relation.project(expression)
         return self._derive(new_rel)
@@ -179,10 +186,8 @@ class DuckdbRelation(SqlBaseRelation):
         projection = self._build_join_projection(self_alias, self_cols, other_alias, other_cols, shared, how)
         result = joined.project(projection)
 
-        zones = (
-            {**self._time_zones, **other._time_zones} if how == "right" else {**other._time_zones, **self._time_zones}
-        )
-        return self._derive(result, zones)
+        primary, secondary = (other, self) if how == "right" else (self, other)
+        return self._derive(result, self._kept_zones(primary, secondary))
 
     @staticmethod
     def _build_join_projection(
@@ -224,10 +229,12 @@ class DuckdbRelation(SqlBaseRelation):
 
     def to_arrow_table(self) -> pa.Table:
         table = self._relation.arrow().read_all()
-        for name, zone in self._time_zones.items():
-            idx = table.schema.get_field_index(name)
-            unit = table.schema.field(idx).type.unit
-            table = table.set_column(idx, name, table.column(idx).cast(pa.timestamp(unit, tz=zone)))
+        for idx, field in enumerate(table.schema):
+            zone = self._time_zones.get(field.name)
+            if zone is not None and pa.types.is_timestamp(field.type):
+                table = table.set_column(
+                    idx, field.name, table.column(idx).cast(pa.timestamp(field.type.unit, tz=zone))
+                )
         return table
 
     def df(self) -> Any:
@@ -265,9 +272,7 @@ class DuckdbRelation(SqlBaseRelation):
         keep = ", ".join(f'"__l__".{quote_ident(c)}' for c in self.columns)
         keep += "".join(f', "__r__".{quote_ident(n)}' for n in columns)
         # DuckDB 2.0 drops the join aliases once order() is applied, so project the row number first.
-        kept = self._derive(
-            joined.project(f'{keep}, "__l__".{qrn} AS {qrn}'), {**self._time_zones, **new_col_rel._time_zones}
-        )
+        kept = self._derive(joined.project(f'{keep}, "__l__".{qrn} AS {qrn}'), self._kept_zones(self, new_col_rel))
         return kept._select_ordered([*self.columns, *columns], rn)
 
     @classmethod

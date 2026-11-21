@@ -366,6 +366,43 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         assert joined.time_zone("rts") == "-03:30"
         assert joined.time_zone("ts") == ("-03:30" if how == "right" else "+05:00")
 
+    @pytest.mark.parametrize("how", ["inner", "left", "outer", "right"])
+    def test_join_shared_column_without_kept_side_zone_does_not_borrow_other_zone(
+        self, connection: Any, how: str
+    ) -> None:
+        native = connection.sql("SELECT 1::BIGINT AS k, TIMESTAMPTZ '2021-01-01 01:30:00+00' AS ts")
+        left = DuckdbRelation(connection, native).set_alias("l")
+        right = DuckdbRelation.from_arrow(
+            connection,
+            pa.table(
+                {
+                    "k": pa.array([1], type=pa.int64()),
+                    "ts": pa.array(_naive_ts(1), type=pa.timestamp("us", tz="+05:00")),
+                }
+            ),
+        ).set_alias("r")
+
+        joined = left.join(right, "l.k = r.k", how=how)
+
+        assert joined.time_zone("ts") == ("+05:00" if how == "right" else None)
+
+    @pytest.mark.parametrize("projection", ['"a", "b" AS "a"', '"b" AS "a", "a"'], ids=["ts_first", "ts_last"])
+    def test_duplicate_output_names_with_zoned_column_materialize(self, connection: Any, projection: str) -> None:
+        table = pa.table(
+            {
+                "a": pa.array(_naive_ts(1, 2), type=pa.timestamp("us", tz="+05:00")),
+                "b": pa.array([1, 2], type=pa.int64()),
+            }
+        )
+        rel = DuckdbRelation.from_arrow(connection, table).project(projection)
+
+        result = rel.to_arrow_table()
+
+        assert result.num_columns == 2
+        for field in result.schema:
+            if pa.types.is_timestamp(field.type):
+                assert field.type == pa.timestamp("us", tz="+05:00")
+
     def test_append_columns_keeps_existing_zones(self, connection: Any) -> None:
         rel = DuckdbRelation.from_arrow(connection, _tz_table())
 
@@ -374,17 +411,18 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         assert result.time_zone("ts") == "+05:00"
         assert result.to_arrow_table().schema.field("ts").type == pa.timestamp("us", tz="+05:00")
 
-    def test_time_zone_unknown_column_raises(self, connection: Any) -> None:
+    @pytest.mark.parametrize(
+        "call",
+        [
+            pytest.param(lambda r: r.time_zone("missing"), id="time_zone"),
+            pytest.param(lambda r: r.with_time_zone("missing", "UTC"), id="with_time_zone"),
+        ],
+    )
+    def test_zone_calls_on_unknown_column_raise(self, connection: Any, call: Callable[[DuckdbRelation], Any]) -> None:
         rel = DuckdbRelation.from_arrow(connection, _tz_table())
 
         with pytest.raises(ValueError):
-            rel.time_zone("missing")
-
-    def test_with_time_zone_unknown_column_raises(self, connection: Any) -> None:
-        rel = DuckdbRelation.from_arrow(connection, _tz_table())
-
-        with pytest.raises(ValueError):
-            rel.with_time_zone("missing", "UTC")
+            call(rel)
 
     def test_with_time_zone_on_non_tz_column_raises(self, connection: Any) -> None:
         rel = DuckdbRelation.from_arrow(connection, _tz_table())

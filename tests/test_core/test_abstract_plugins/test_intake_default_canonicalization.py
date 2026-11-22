@@ -704,7 +704,7 @@ def _run_filter_twin(
                 "two_filters",
             ]
         ],
-        *[(name, True) for name in ["key_only", "value_then_key", "key_then_value"]],
+        *[(name, True) for name in ["key_only", "value_then_key", "key_then_value", "two_filters"]],
     ],
     ids=lambda v: ("pinned" if v else "unpinned") if isinstance(v, bool) else str(v),
 )

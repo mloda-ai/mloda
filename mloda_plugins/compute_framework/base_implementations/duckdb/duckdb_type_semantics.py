@@ -13,6 +13,12 @@ _NUMERIC_TOKENS = ("int", "decimal", "float", "double", "real", "numeric", "huge
 _TEMPORAL_TOKENS = ("date", "time", "timestamp", "interval")
 
 
+def is_tz_aware_type(logical_type: Any) -> bool:
+    """Return True if the duckdb type is a timestamp with time zone."""
+    type_id = getattr(logical_type, "id", str(logical_type)).lower()
+    return "with time zone" in type_id or "timestamp_tz" in type_id or "timestamptz" in type_id
+
+
 def column_semantics(data: Any, column: str) -> ColumnSemantics:
     """Return the observed semantics of ``column`` in a duckdb relation."""
     logical_type = data.types[data.columns.index(column)]
@@ -22,7 +28,7 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
     is_numeric = any(token in type_id for token in _NUMERIC_TOKENS) and not is_temporal
     is_ordered = is_numeric or is_temporal
 
-    is_tz_aware = "with time zone" in type_id or "timestamp_tz" in type_id or "timestamptz" in type_id
+    is_tz_aware = is_tz_aware_type(logical_type)
 
     unit: str | None = None
     if "timestamp" in type_id:

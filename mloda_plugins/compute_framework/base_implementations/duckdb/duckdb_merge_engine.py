@@ -35,7 +35,7 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         unioned = left_rel.union(right_rel)
         if not union_all:
             unioned = unioned.distinct()
-        return DuckdbRelation(self.framework_connection, unioned)
+        return DuckdbRelation(self.framework_connection, unioned, DuckdbRelation._kept_zones(left_data, right_data))
 
     def merge_asof(
         self,
@@ -98,7 +98,7 @@ class DuckDBMergeEngine(SqlBaseMergeEngine):
         final_proj = [f"{quote_ident(c)} AS {quote_ident(c)}" for c in left_cols]
         final_proj += [f"{quote_ident(rmap[c])} AS {quote_ident(c)}" for c in right_extra]
         result = picked.project(", ".join(final_proj))
-        return DuckdbRelation(self.framework_connection, result)
+        return DuckdbRelation(self.framework_connection, result, DuckdbRelation._kept_zones(left_data, right_data))
 
     def _coerce_asof_time_column(self, data: Any, column: str) -> Any:
         qc = quote_ident(column)

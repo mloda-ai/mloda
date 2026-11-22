@@ -821,6 +821,10 @@ class Engine:
             host.framework_pinned = True
             collection.add(host)
             return host
+        declared = self._declared_options_by_uuid.get(host.uuid)
+        # An injected twin records no declaration; comparing a lone request with its options would warn falsely.
+        if declared is not None and existing.uuid in self._declared_options_by_uuid:
+            self._warn_on_default_equivalent_merge(host, declared, existing)
         self._merge_host_into(existing, host)
         existing.framework_pinned = True
         return existing

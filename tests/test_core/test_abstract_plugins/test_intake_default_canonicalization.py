@@ -20,6 +20,7 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import DataCreatorFeatureGroup, PropertySpec
 from mloda.user import FeatureName, GlobalFilter, Index, JoinSpec, Link, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_core.test_abstract_plugins.name_bound_fixtures import make_name_bound_fg, make_root_fg
 
 
@@ -637,9 +638,12 @@ def test_double_requested_link_index_still_warns_once(layout: str, caplog: pytes
     assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"
 
 
-def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> tuple[list[Any], list[str], GlobalFilter]:
+def _run_filter_twin(
+    layout: str, prefix: str, default_kind: str, pinned: bool = False
+) -> tuple[list[Any], list[str], GlobalFilter]:
     """Run a filtered-request layout end-to-end; return the frames, plain requested names and the filter."""
     key, value = f"{prefix}_key", f"{prefix}_val"
+    pin = "PythonDictFramework"
     if default_kind == "ctx":
         fg = _make_ctx_default_root_fg(key, value)
         explicit = Options(context={IDC_CTX_KEY: IDC_CTX_DEFAULT})
@@ -658,17 +662,26 @@ def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> tuple[list[
         "twin_before": [Feature(value), Feature(key), Feature(key, explicit)],
         "twin_after": [Feature(key), Feature(key, explicit), Feature(value)],
     }
+    cf = pin if pinned else None
+
+    def plain(name: str) -> str | Feature:
+        return Feature(name, compute_framework=cf) if pinned else name
+
+    def with_explicit(name: str) -> Feature:
+        return Feature(name, explicit, compute_framework=cf) if pinned else Feature(name, explicit)
+
     global_filter = GlobalFilter()
     if layout == "filter_explicit":
-        global_filter.add_filter(Feature(key, explicit), "equal", {"value": default})
+        global_filter.add_filter(with_explicit(key), "equal", {"value": default})
     elif layout == "two_filters":
-        global_filter.add_filter(key, "equal", {"value": default})
-        global_filter.add_filter(Feature(key, explicit), "equal", {"value": default})
+        global_filter.add_filter(plain(key), "equal", {"value": default})
+        global_filter.add_filter(with_explicit(key), "equal", {"value": default})
     else:
-        global_filter.add_filter(value if layout == "value_only" else key, "equal", {"value": default})
+        global_filter.add_filter(plain(value if layout == "value_only" else key), "equal", {"value": default})
+    frameworks = [PythonDictFramework, PyArrowTable] if pinned else [PythonDictFramework]
     results = mloda.run_all(
         requests[layout],
-        compute_frameworks=[PythonDictFramework],
+        compute_frameworks=frameworks,
         global_filter=global_filter,
         plugin_collector=PluginCollector.enabled_feature_groups({fg}),
     )
@@ -678,16 +691,31 @@ def _run_filter_twin(layout: str, prefix: str, default_kind: str) -> tuple[list[
 
 @pytest.mark.parametrize("default_kind", ["ctx", "grp"])
 @pytest.mark.parametrize(
-    "layout", ["key_only", "value_then_key", "key_then_value", "value_only", "filter_explicit", "two_filters"]
+    "layout, pinned",
+    [
+        *[
+            (name, False)
+            for name in [
+                "key_only",
+                "value_then_key",
+                "key_then_value",
+                "value_only",
+                "filter_explicit",
+                "two_filters",
+            ]
+        ],
+        *[(name, True) for name in ["key_only", "value_then_key", "key_then_value"]],
+    ],
+    ids=lambda v: ("pinned" if v else "unpinned") if isinstance(v, bool) else str(v),
 )
 def test_injected_filter_twin_merge_does_not_warn(
-    layout: str, default_kind: str, caplog: pytest.LogCaptureFixture
+    layout: str, pinned: bool, default_kind: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """A filter twin merging with the single request of its column is not a double request."""
     caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
-    prefix = f"idc_ftwin_{default_kind}_{layout}"
+    prefix = f"idc_ftwin_{default_kind}_{layout}_{'pin' if pinned else 'unpin'}"
     default = IDC_CTX_DEFAULT if default_kind == "ctx" else IDC_GRP_DEFAULT
-    frames, requested, global_filter = _run_filter_twin(layout, prefix, default_kind)
+    frames, requested, global_filter = _run_filter_twin(layout, prefix, default_kind, pinned)
     for column in requested:
         assert _single_row(_frame_with(frames, column), column) == default
     declared = {f.uuid for f in global_filter.filters}
@@ -697,14 +725,18 @@ def test_injected_filter_twin_merge_does_not_warn(
 
 
 @pytest.mark.parametrize("default_kind", ["ctx", "grp"])
+@pytest.mark.parametrize("pinned", [False, True], ids=["unpinned", "pinned"])
 @pytest.mark.parametrize("layout", ["twin_before", "twin_after"])
 def test_double_requested_filtered_column_still_warns_once(
-    layout: str, default_kind: str, caplog: pytest.LogCaptureFixture
+    layout: str, pinned: bool, default_kind: str, caplog: pytest.LogCaptureFixture
 ) -> None:
     """Two user requests of a filtered column differing only in an explicit default warn exactly once."""
     caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
-    prefix = f"idc_fdbl_{default_kind}_{layout}"
-    _frames, _names, _filter = _run_filter_twin(layout, prefix, default_kind)
+    prefix = f"idc_fdbl_{default_kind}_{layout}_{'pin' if pinned else 'unpin'}"
+    default = IDC_CTX_DEFAULT if default_kind == "ctx" else IDC_GRP_DEFAULT
+    frames, _names, _filter = _run_filter_twin(layout, prefix, default_kind, pinned)
+    for column in (f"{prefix}_key", f"{prefix}_val"):
+        assert _single_row(_frame_with(frames, column), column) == default
     warnings = _default_equivalent_warnings(caplog)
     assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
     assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"

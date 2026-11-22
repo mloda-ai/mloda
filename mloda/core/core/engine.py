@@ -766,15 +766,12 @@ class Engine:
             )
 
             for match in matched_filters:
-                if match.output_part is None:
-                    stored_name = feature_group.set_feature_name(
-                        match.filter_feature.options, match.filter_feature.name
-                    )
-                    match.filter_feature.name = stored_name
-                else:
-                    # The queue twin is named like host resolution; the stored filter keeps the part column name.
-                    self._set_feature_name(match.filter_feature, feature_group, match.output_part)
-                    stored_name = FeatureName(f"{match.filter_feature.name}{COLUMN_SEPARATOR}{match.output_part[1]}")
+                # The queue twin is named like host resolution; the stored filter keeps the part column name.
+                self._set_feature_name(match.filter_feature, feature_group, match.output_part)
+                stored_name = match.filter_feature.name
+                if match.filter_feature.requested_parts:
+                    (part,) = match.filter_feature.requested_parts
+                    stored_name = FeatureName(f"{stored_name}{COLUMN_SEPARATOR}{part}")
                 # We assign a new UUID to the filter feature to ensure
                 # it is treated as a separate instance from the original filter feature
                 match.filter_feature.uuid = uuid.uuid4()

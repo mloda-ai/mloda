@@ -9,7 +9,6 @@ from typing import Any
 import pytest
 
 from mloda._testing.framework_adapter import PandasAdapter, PythonDictAdapter
-
 from mloda._testing.subclass_scope import (
     assert_sibling_scope,
     assert_subclass_scope,
@@ -22,9 +21,9 @@ from mloda.core.abstract_plugins.components.default_options_key import DefaultOp
 from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
-from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -276,7 +275,7 @@ def _claims_option_or_variant(options: Options) -> bool:
 
 
 def _not_variant_y(options: Options) -> bool:
-    return options.get("variant") != "y"
+    return bool(options.get("variant") != "y")
 
 
 Family = tuple[type[FeatureGroup], dict[type[FeatureGroup], dict[Any, str]]]
@@ -292,13 +291,15 @@ def make_backend_family(
     ungated_second: bool = False,
     needs: str | None = None,
     aborts: Callable[[Any, Options], bool] | None = None,
+    parent_ungated: bool = False,
+    spec: PropertySpec | None = None,
 ) -> Family:
     """Inert parent and two siblings; a sibling matches the bare name only with its own BACKENDS value."""
 
     class BackendParent(FeatureGroup):
         BACKENDS: dict[Any, str] = dict.fromkeys(parent_backends, "")
-        if declared:
-            PROPERTY_MAPPING = {key: PropertySpec("Backend.", default=None)}
+        if declared or spec is not None:
+            PROPERTY_MAPPING = {key: spec or PropertySpec("Backend.", default=None)}
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
@@ -314,6 +315,8 @@ def make_backend_family(
                 return False
             if needs is not None and options.get(needs) is None:
                 return False
+            if parent_ungated and cls is BackendParent:
+                return True
             section = options.context if declared else options.group
             if key in section and section[key] in cls.BACKENDS:
                 return True
@@ -1124,6 +1127,21 @@ def test_name_path_scaling_parent_values_path_passes_for_a_non_first_scaler() ->
             True,
             id="deferred_skips_optional_probes",
         ),
+        pytest.param(
+            functools.partial(
+                make_keyed_pair,
+                {"variant": DEFERRED},
+                {
+                    "variant": PropertySpec(
+                        "Variant.", allowed_values=("x",), strict_validation=True, default="x", deferred_binding=True
+                    )
+                },
+            ),
+            SELECTING,
+            "without ['variant']",
+            False,
+            id="deferred_with_default_still_steals",
+        ),
     ],
 )
 def test_deferred_selecting_keys_note_the_bare_steal(
@@ -1153,6 +1171,7 @@ def test_deferred_selecting_keys_note_the_bare_steal(
         pytest.param({"declared": True}, False, id="context_key"),
         pytest.param({}, True, id="bare_str_value"),
         pytest.param({"values": (1, 2)}, False, id="non_str_values"),
+        pytest.param({"spec": PropertySpec("Backend.", context=False)}, False, id="required_group_key"),
     ],
 )
 def test_well_scoped_inert_family_passes(kwargs: dict[str, Any], as_str: bool) -> None:
@@ -1207,6 +1226,12 @@ def _missing_own_value() -> tuple[Family, Any]:
             "inert:",
             ("records a rejection",),
             id="parent_records_rejection",
+        ),
+        pytest.param(
+            lambda: (make_backend_family(parent_ungated=True), None),
+            "inert:",
+            ("matches",),
+            id="parent_matches_unclaimed",
         ),
     ],
 )

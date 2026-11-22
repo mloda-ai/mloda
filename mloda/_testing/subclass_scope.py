@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable, Collection, Mapping, Sequence
-from typing import Any
+from typing import Any, TypeVar
 
 from mloda._testing.feature_group_shape import (
     _UNKNOWN_VALUE,
@@ -30,6 +30,7 @@ from mloda._testing.suite import assert_passed
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind, allowed_variants
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
@@ -38,6 +39,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
+
+_G = TypeVar("_G", bound=FeatureGroup)
 
 __all__ = ["assert_sibling_scope", "assert_subclass_scope", "check_sibling_scope", "check_subclass_scope"]
 
@@ -185,15 +188,22 @@ def _scope_failures(
     reserved = {k.value for k in DefaultOptionKeys}
     counted = keys - reserved - bound
     specs = [(subclass.PROPERTY_MAPPING or {}).get(k) for k in counted]
-    deferred = bool(counted) and all(isinstance(s, PropertySpec) and s.deferred_binding for s in specs)
+    deferred = bool(counted) and all(
+        isinstance(s, PropertySpec) and s.deferred_binding and not FeatureChainParser._can_skip_required_check(s)
+        for s in specs
+    )
     for name in names:
+        bare_deferred = False
         for key, options in probes:
             failure = _plain_failure(name, options, f"with option '{key}'" if key else label, mapping, parent, subclass)
             if failure is not None and deferred and not key and failure.startswith("steals:"):
                 notes.append(
                     f"scope: {failure.removeprefix('steals: ')}: deferred_binding keys are exempt on the name path"
                 )
-                break
+                bare_deferred = True
+                continue
+            if failure is not None and bare_deferred and failure.startswith("steals:"):
+                continue
             if failure is not None:
                 failures.append(failure)
         for key, value, make in value_probes:
@@ -451,7 +461,7 @@ def _sibling_setup(
 
 def check_sibling_scope(
     parent: type[FeatureGroup],
-    siblings: Mapping[type[FeatureGroup], Collection[Any] | str],
+    siblings: Mapping[type[_G], Collection[Any] | str],
     key: str,
     requests: Sequence[str] | None = None,
     *,
@@ -463,7 +473,7 @@ def check_sibling_scope(
     """
     base = base_options or Options()
     names = list(requests) if requests is not None else sorted(parent.feature_names_supported())
-    claimed = {
+    claimed: dict[type[FeatureGroup], list[Any]] = {
         s: sorted({repr(v): v for v in ([vals] if isinstance(vals, str) else vals)}.values(), key=repr)
         for s, vals in siblings.items()
     }
@@ -491,18 +501,18 @@ def check_sibling_scope(
     probes.append((f"with '{key}'={_UNKNOWN_VALUE!r}", _keyed(base, section, key, _UNKNOWN_VALUE), None))
     probes.append((f"without '{key}'", base, None))
     for name in names:
-        for label, options, sibling in probes:
+        for label, options, owner in probes:
             result, message, aborted = _evaluate(Feature(name, options), mapping)
             if aborted is not None:
                 failures.append(f"setup: matching '{name}' {label} aborted: {aborted}")
                 continue
-            found = set(result.identified)
-            if sibling is not None and sibling not in found:
+            found = set(result.identified) - {parent}
+            if owner is not None and owner not in found:
                 shown_found = message or ", ".join(sorted(c.__name__ for c in found))
                 failures.append(f"misses: '{name}' {label} resolves to {shown_found}")
             failures += [
                 f"steals: '{name}' {label} resolves to {c.__name__}"
-                for c in sorted(found - {sibling}, key=lambda c: c.__name__)
+                for c in sorted(found - {owner}, key=lambda c: c.__name__)
             ]
             alone = _probe(parent, name, options)
             if alone.matched:
@@ -514,7 +524,7 @@ def check_sibling_scope(
 
 def assert_sibling_scope(
     parent: type[FeatureGroup],
-    siblings: Mapping[type[FeatureGroup], Collection[Any] | str],
+    siblings: Mapping[type[_G], Collection[Any] | str],
     key: str,
     requests: Sequence[str] | None = None,
     *,

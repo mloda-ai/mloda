@@ -54,6 +54,7 @@ from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution imp
     MultiColumnTestDataCreator,
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.credential_handle import handle_option_keys
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
@@ -1066,6 +1067,7 @@ class TestRunResultFrameFor:
         assert "'***'" in str(unregistered.value)
 
     def test_frame_for_miss_masks_a_raw_secret_under_a_key_another_group_declares_as_handle(self) -> None:
+        assert HANDLE_KEY in handle_option_keys()
         raw = "sk-raw-secret-value-5555"  # nosec B105
         results = mlodaAPI.run_all(
             [Feature("chs_raw_a", options={HANDLE_KEY: raw, "chs_other": 5})],

@@ -1113,6 +1113,17 @@ def test_name_path_scaling_parent_values_path_passes_for_a_non_first_scaler() ->
             False,
             id="optional_option_steal_without_bare_steal",
         ),
+        pytest.param(
+            functools.partial(
+                make_keyed_pair,
+                {"variant": DEFERRED, "opt": OPT},
+                {"variant": NARROWED, "opt": OPT},
+            ),
+            SELECTING,
+            None,
+            True,
+            id="deferred_skips_optional_probes",
+        ),
     ],
 )
 def test_deferred_selecting_keys_note_the_bare_steal(
@@ -1182,7 +1193,7 @@ def _missing_own_value() -> tuple[Family, Any]:
         pytest.param(
             lambda: (make_backend_family(ungated_second=True), None),
             "steals:",
-            ("without 'backend'", "'backend'='conformance_unknown_value'"),
+            ("without 'backend'", "'backend'='conformance_unknown_value'", "'backend'='a'"),
             id="ungated_sibling",
         ),
         pytest.param(
@@ -1210,7 +1221,9 @@ def test_broken_family_fails_only_its_prefix(
         assert phrase in " ".join(result.failures), result.failures
 
 
-@pytest.mark.parametrize("case", ["non_subclass", "no_siblings", "no_values", "no_names", "key_in_base", "aborts"])
+@pytest.mark.parametrize(
+    "case", ["non_subclass", "no_siblings", "no_values", "no_names", "key_in_base", "aborts", "is_parent"]
+)
 def test_sibling_setup_failures(case: str) -> None:
     aborts = _aborts_always if case == "aborts" else None
     parent, siblings = make_backend_family(aborts=aborts)
@@ -1220,6 +1233,8 @@ def test_sibling_setup_failures(case: str) -> None:
     base: Options | None = None
     if case == "non_subclass":
         claims = {make_parent(): ["a"]}
+    elif case == "is_parent":
+        claims = {parent: ["a"]}
     elif case == "no_siblings":
         claims = {}
     elif case == "no_values":

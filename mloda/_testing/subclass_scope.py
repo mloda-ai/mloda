@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import functools
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from typing import Any
 
 from mloda._testing.feature_group_shape import (
@@ -39,16 +39,14 @@ from mloda.core.abstract_plugins.implementation import Implementation
 from mloda.core.prepare.accessible_plugins import FeatureGroupEnvironmentMapping, PreFilterPlugins
 from mloda.core.prepare.identify_feature_group import evaluate_and_render
 
-__all__ = ["assert_subclass_scope", "check_subclass_scope"]
+__all__ = ["assert_sibling_scope", "assert_subclass_scope", "check_sibling_scope", "check_subclass_scope"]
 
 
-def _mapping(
-    parent: type[FeatureGroup], subclass: type[FeatureGroup]
-) -> tuple[FeatureGroupEnvironmentMapping, list[str]]:
+def _mapping(*classes: type[FeatureGroup]) -> tuple[FeatureGroupEnvironmentMapping, list[str]]:
     loaded = PreFilterPlugins.get_cfw_subclasses()
     mapping: FeatureGroupEnvironmentMapping = {}
     failures: list[str] = []
-    for cls in (parent, subclass):
+    for cls in classes:
         mapping[cls] = {cfw for cfw in cls.compute_framework_definition() if cfw in loaded}
         if not mapping[cls]:
             failures.append(f"setup: no compute framework of {cls.__name__} is loaded")
@@ -173,6 +171,7 @@ def _scope_failures(
     names: list[str],
     base: Options,
     selecting: Options,
+    notes: list[str],
     bound: frozenset[str] = frozenset(),
     free: frozenset[str] = frozenset(),
 ) -> list[str]:
@@ -183,9 +182,18 @@ def _scope_failures(
     label = f"without {sorted(keys)}"
     probes = [("", base), *_optional_probes(parent, base, keys, bound)]
     value_probes = _value_probes(subclass, parent, base, selecting, bound)
+    reserved = {k.value for k in DefaultOptionKeys}
+    counted = keys - reserved - bound
+    specs = [(subclass.PROPERTY_MAPPING or {}).get(k) for k in counted]
+    deferred = bool(counted) and all(isinstance(s, PropertySpec) and s.deferred_binding for s in specs)
     for name in names:
         for key, options in probes:
             failure = _plain_failure(name, options, f"with option '{key}'" if key else label, mapping, parent, subclass)
+            if failure is not None and deferred and not key and failure.startswith("steals:"):
+                notes.append(
+                    f"scope: {failure.removeprefix('steals: ')}: deferred_binding keys are exempt on the name path"
+                )
+                break
             if failure is not None:
                 failures.append(failure)
         for key, value, make in value_probes:
@@ -325,8 +333,8 @@ def check_subclass_scope(
     With require_run, a rule exclusion, a missing serving Implementation, a route block or no rows is a failure.
     """
     free_keys = frozenset((free,) if isinstance(free, str) else free)
-    failures = _run(subclass, parent, selecting, requests, free_keys)
     notes: list[str] = []
+    failures = _run(subclass, parent, selecting, requests, notes, free_keys)
     if free_keys and not any(f.startswith(("setup:", "names:")) for f in failures):
         notes.append(f"scope: {sorted(free_keys)} set but not probed with other values")
     if input_data is None:
@@ -355,6 +363,7 @@ def _run(
     parent: type[FeatureGroup],
     selecting: Options,
     requests: Sequence[str] | None,
+    notes: list[str],
     free: frozenset[str] = frozenset(),
 ) -> list[str]:
     if not is_nominal_subclass(subclass, parent) or subclass is parent:
@@ -381,7 +390,7 @@ def _run(
     reserved = {k.value for k in DefaultOptionKeys}
     if free and not selecting_keys - free - reserved - name_bound:
         return ["setup: free leaves no selecting key to probe"]
-    return _scope_failures(subclass, parent, names, base, selecting, name_bound | free, free)
+    return _scope_failures(subclass, parent, names, base, selecting, notes, name_bound | free, free)
 
 
 def assert_subclass_scope(
@@ -407,3 +416,109 @@ def assert_subclass_scope(
         free=free,
     )
     assert_passed(result)
+
+
+def _keyed(base: Options, section: str, key: str, value: Any) -> Options:
+    sections = {"group": dict(base.group), "context": dict(base.context)}
+    sections[section][key] = value
+    return Options(group=sections["group"], context=sections["context"])
+
+
+def _sibling_setup(
+    parent: type[FeatureGroup],
+    claimed: dict[type[FeatureGroup], list[Any]],
+    names: list[str],
+    key: str,
+    base: Options,
+    requested: bool,
+) -> list[str]:
+    bad = [s.__name__ for s in claimed if not is_nominal_subclass(s, parent) or s is parent]
+    if bad:
+        return [f"setup: {', '.join(bad)} not a proper subclass of {parent.__name__}"]
+    if not claimed:
+        return ["setup: no siblings to check"]
+    empty = [s.__name__ for s, v in claimed.items() if not v]
+    if empty:
+        return [f"setup: {', '.join(empty)} claims no '{key}' values"]
+    if not names:
+        return [
+            "names: no requests to check" if requested else "names: parent declares no feature names; pass requests="
+        ]
+    if key in base.group or key in base.context:
+        return [f"setup: '{key}' is already in the base options and would mask a steal"]
+    return []
+
+
+def check_sibling_scope(
+    parent: type[FeatureGroup],
+    siblings: Mapping[type[FeatureGroup], Collection[Any] | str],
+    key: str,
+    requests: Sequence[str] | None = None,
+    *,
+    base_options: Options | None = None,
+) -> CheckResult:
+    """Check each sibling of an inert parent resolves exactly its own key values and nothing else does.
+
+    siblings maps a sibling to the key values it claims; base_options is merged into every probe.
+    """
+    base = base_options or Options()
+    names = list(requests) if requests is not None else sorted(parent.feature_names_supported())
+    claimed = {
+        s: sorted({repr(v): v for v in ([vals] if isinstance(vals, str) else vals)}.values(), key=repr)
+        for s, vals in siblings.items()
+    }
+    failures = _sibling_setup(parent, claimed, names, key, base, requests is not None)
+    mapping, unloaded = _mapping(parent, *claimed)
+    failures += unloaded
+    if failures:
+        return CheckResult(check="sibling_scope", subject=parent.__name__, failures=tuple(failures))
+    spec = (parent.PROPERTY_MAPPING or {}).get(key)
+    section = "context" if isinstance(spec, PropertySpec) and spec.context else "group"
+    owners: dict[str, list[type[FeatureGroup]]] = {}
+    values: dict[str, Any] = {}
+    for sibling, vals in claimed.items():
+        for value in vals:
+            owners.setdefault(repr(value), []).append(sibling)
+            values[repr(value)] = value
+    probes: list[tuple[str, Options, type[FeatureGroup] | None]] = []
+    for shown in sorted(owners):
+        classes = sorted(c.__name__ for c in owners[shown])
+        if len(classes) > 1:
+            failures.append(f"overlap: {shown} claimed by {', '.join(classes)}")
+        else:
+            options = _keyed(base, section, key, values[shown])
+            probes.append((f"with '{key}'={shown}", options, owners[shown][0]))
+    probes.append((f"with '{key}'={_UNKNOWN_VALUE!r}", _keyed(base, section, key, _UNKNOWN_VALUE), None))
+    probes.append((f"without '{key}'", base, None))
+    for name in names:
+        for label, options, sibling in probes:
+            result, message, aborted = _evaluate(Feature(name, options), mapping)
+            if aborted is not None:
+                failures.append(f"setup: matching '{name}' {label} aborted: {aborted}")
+                continue
+            found = set(result.identified)
+            if sibling is not None and sibling not in found:
+                shown_found = message or ", ".join(sorted(c.__name__ for c in found))
+                failures.append(f"misses: '{name}' {label} resolves to {shown_found}")
+            failures += [
+                f"steals: '{name}' {label} resolves to {c.__name__}"
+                for c in sorted(found - {sibling}, key=lambda c: c.__name__)
+            ]
+            alone = _probe(parent, name, options)
+            if alone.matched:
+                failures.append(f"inert: {parent.__name__} matches '{name}' {label}")
+            elif alone.rejection is not None:
+                failures.append(f"inert: {parent.__name__} records a rejection for '{name}' {label}")
+    return CheckResult(check="sibling_scope", subject=parent.__name__, failures=tuple(failures))
+
+
+def assert_sibling_scope(
+    parent: type[FeatureGroup],
+    siblings: Mapping[type[FeatureGroup], Collection[Any] | str],
+    key: str,
+    requests: Sequence[str] | None = None,
+    *,
+    base_options: Options | None = None,
+) -> None:
+    """Fail the running pytest test if the sibling scope check reports failures."""
+    assert_passed(check_sibling_scope(parent, siblings, key, requests, base_options=base_options))

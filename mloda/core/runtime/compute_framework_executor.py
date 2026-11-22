@@ -28,6 +28,7 @@ from mloda.core.abstract_plugins.components.credential_leaves import (
 )
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
 from mloda.core.abstract_plugins.components.input_data.read_db_fg import DBQuery, DBTable
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef
@@ -370,7 +371,7 @@ class ComputeFrameworkExecutor:
             elif step.connection_explicit and cfw.framework_connection_object is not conn:
                 raise ValueError(
                     f"{cfw.__class__.__name__} is already bound to another connection than the one selected by "
-                    f"connection_handle '{step.connection_handle}' in the DataAccessCollection."
+                    f"{CONNECTION_HANDLE_OPTION} '{step.connection_handle}' in the DataAccessCollection."
                 )
         else:
             cfw.fallback_connection_object = conn

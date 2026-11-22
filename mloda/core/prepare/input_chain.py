@@ -11,6 +11,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.input_data.reader_probe import current_reader_probe_scope
@@ -274,7 +275,7 @@ def input_features_collection(
         if isinstance(entry, Feature) and entry.connection is not None:
             raise ValueError(
                 f"{feature_group.get_class_name()}.input_features returned '{entry.name}' with a "
-                "connection; register it in the DataAccessCollection and set the 'connection_handle' option."
+                f"connection; register it in the DataAccessCollection and set the '{CONNECTION_HANDLE_OPTION}' option."
             )
     return Features(
         list(entries),

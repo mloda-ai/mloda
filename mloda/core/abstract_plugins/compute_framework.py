@@ -18,6 +18,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
 )
 from mloda.core.abstract_plugins.components.credential_handle import unset_credential_handle_options
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import (
     ComputeFrameworkTransformer,
 )
@@ -610,7 +611,7 @@ class ComputeFramework(ABC):
         elif carried is not self.framework_connection_object:
             raise ValueError(
                 f"{self.__class__.__name__} received data on another connection than the bound one. The data must "
-                "live on the connection selected by the step's connection_handle in the DataAccessCollection."
+                f"live on the connection selected by the step's {CONNECTION_HANDLE_OPTION} in the DataAccessCollection."
             )
 
     @final

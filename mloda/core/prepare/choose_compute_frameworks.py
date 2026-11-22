@@ -13,6 +13,7 @@ from uuid import UUID
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.divergence import DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.framework_transformer.cfw_transformer import ComputeFrameworkTransformer
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.link import JoinType, Link
@@ -493,7 +494,7 @@ class ChooseComputeFrameworks:
                     raise ValueError(
                         f"Features {', '.join(_names(block.features))} can only run on {framework.get_class_name()}, "
                         f"but their parents deliver different connections: {labels}. "
-                        "Select one with 'connection_handle' or choose another framework."
+                        f"Select one with '{CONNECTION_HANDLE_OPTION}' or choose another framework."
                     )
                 domains[index].discard(framework)
                 if not domains[index]:
@@ -501,7 +502,7 @@ class ChooseComputeFrameworks:
                     raise ValueError(
                         f"Features {', '.join(_names(block.features))} can run on none of {names}, "
                         "because their parents deliver different connections to each. "
-                        "Select one with 'connection_handle' or choose another framework."
+                        f"Select one with '{CONNECTION_HANDLE_OPTION}' or choose another framework."
                     )
         return domains
 

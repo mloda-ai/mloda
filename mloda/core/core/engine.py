@@ -72,7 +72,7 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION, HANDLE_OPTION_NAMES
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys, unforwarded_keys
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
@@ -1393,7 +1393,7 @@ class Engine:
             if isinstance(entry, Feature) and entry.connection is not None:
                 raise ValueError(
                     f"{feature_group_class.get_class_name()}.input_features returned '{entry.name}' with a "
-                    "connection; register it in the DataAccessCollection and set the 'connection_handle' option."
+                    f"connection; register it in the DataAccessCollection and set the '{CONNECTION_HANDLE_OPTION}' option."
                 )
 
         ordered: list[Feature | str] = list(input_features)
@@ -1500,7 +1500,7 @@ class Engine:
                     if cfw._connection_matches(value):
                         raise ValueError(
                             f"Option '{key}' of feature '{feature.name}' holds a {cfw.get_class_name()} connection. "
-                            "Put it in the DataAccessCollection and select it with the 'connection_handle' option."
+                            f"Put it in the DataAccessCollection and select it with the '{CONNECTION_HANDLE_OPTION}' option."
                         )
 
     def _resolve_handle(self, framework: type[ComputeFramework], options: Any) -> tuple[str | None, bool]:

@@ -14,7 +14,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import DataAc
 from mloda.core.abstract_plugins.components.input_data.claim_route import ClaimRoute, NamePolicy, SourceMatch
 from mloda.core.abstract_plugins.components.input_data.file_source import FileSource
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG, not_a_file_reason
-from mloda.core.abstract_plugins.components.input_data.source_feature_group import REASON_DETAIL
+from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION, REASON_DETAIL
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_cached
 from mloda.core.abstract_plugins.components.match_rejection import (
     INPUT_DATA_STAGE,
@@ -60,7 +60,7 @@ class ReadFileFG(_FileSourceFG):
         if handles:
             return (
                 f"pin one source with a column_to_file entry, point {name} at one file with "
-                f"options={{{name!r}: <path>}}, or select one with data_access_handle "
+                f"options={{{name!r}: <path>}}, or select one with {HANDLE_OPTION} "
                 f"(file handles: {', '.join(repr(h) for h in handles)})."
             )
         return (

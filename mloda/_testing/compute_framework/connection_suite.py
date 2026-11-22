@@ -170,7 +170,7 @@ class ConnectionPickSuite(ComputeFrameworkSuite, suite_base=True):
         fw = framework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         fw.set_framework_connection_object(adapter.connection)
         foreign = self.data_on_connection(second_adapter)
-        with pytest.raises(ValueError, match=f"{framework.__name__}.*connection_handle"):
+        with pytest.raises(ValueError, match=f"{framework.__name__}.*{CONNECTION_HANDLE_OPTION}"):
             fw._adopt_connection(foreign)
 
     def test_adopt_connection_accepts_the_bound_connection_and_adopts_when_unbound(
@@ -186,7 +186,7 @@ class ConnectionPickSuite(ComputeFrameworkSuite, suite_base=True):
     def test_missing_connection_error_names_the_dac_and_connection_handle(self, framework: Any) -> None:
         fw = framework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         with pytest.raises(
-            ValueError, match=f"{self.missing_connection_prefix}.*DataAccessCollection.*connection_handle"
+            ValueError, match=f"{self.missing_connection_prefix}.*DataAccessCollection.*{CONNECTION_HANDLE_OPTION}"
         ):
             fw.set_framework_connection_object(None)
 

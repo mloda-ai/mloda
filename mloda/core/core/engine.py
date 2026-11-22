@@ -164,7 +164,7 @@ class Engine:
         # Intake materialization memo: the strong source reference keeps its id stable, so features
         # sharing one pre-default Options share one effective Options.
         self._intake_options_memo: dict[tuple[type[FeatureGroup], int, Any], tuple[Options, Options]] = {}
-        # Declared (pre-default) options per uuid for the default-equivalent merge warning; index twins record none.
+        # Declared (pre-default) options per uuid for the default-equivalent merge warning; injected twins record none.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
@@ -780,7 +780,9 @@ class Engine:
                 match.filter_feature.uuid = uuid.uuid4()
                 # Intake may materialize declared defaults into the filter feature's options: group fills shift
                 # SingleFilter's hash, context fills shift its equality, so intake must run before it is stored.
-                self.add_feature_to_collection(feature_group_class, match.filter_feature, features.child_uuid)
+                self.add_feature_to_collection(
+                    feature_group_class, match.filter_feature, features.child_uuid, engine_injected=True
+                )
                 declared = next((f for f in self.global_filter.filters if f.uuid == match.uuid), None)
                 if declared is None:
                     raise ValueError(f"Matched filter on {feature.name} is not declared in the global filter.")
@@ -1198,6 +1200,7 @@ class Engine:
         specialized_from: tuple[type[FeatureGroup], ...] = (),
         *,
         check_cascade: bool = False,
+        engine_injected: bool = False,
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
         # via the duplicate path below; name-bound values fill too (into context); identity no-op otherwise.
@@ -1253,7 +1256,7 @@ class Engine:
 
             self.feature_link_parents[feature.uuid] = set()
             feature_collection.add(feature)
-            if not if_index_feature:
+            if not (if_index_feature or engine_injected):
                 self._declared_options_by_uuid[feature.uuid] = declared_options
             if specialized_from:
                 self.specialized_from[feature.uuid] = specialized_from
@@ -1289,8 +1292,8 @@ class Engine:
             existing_feature.absorb_result_index_columns(feature)
             for name, keys in feature.consumer_attributions:
                 existing_feature.add_consumer_attribution(name, keys)
-            if not if_index_feature:
-                # The first request to reach an injected index twin becomes its declaration.
+            if not (if_index_feature or engine_injected):
+                # The first request to reach an engine-injected index or filter twin becomes its declaration.
                 self._declared_options_by_uuid.setdefault(existing_feature.uuid, declared_options)
                 self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).

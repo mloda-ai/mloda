@@ -350,7 +350,10 @@ class TestConnectionHandleResolver:
         assert files, "no source files found; the repo root anchor is wrong"
         hits: list[str] = []
         for p in files:
-            tree = ast.parse(p.read_text(encoding="utf-8"))
+            text = p.read_text(encoding="utf-8")
+            if not word.search(text):
+                continue
+            tree = ast.parse(text)
             docs: set[int] = set()
             for n in ast.walk(tree):
                 if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.body:

@@ -643,7 +643,6 @@ def _run_filter_twin(
 ) -> tuple[list[Any], list[str], GlobalFilter]:
     """Run a filtered-request layout end-to-end; return the frames, plain requested names and the filter."""
     key, value = f"{prefix}_key", f"{prefix}_val"
-    pin = "PythonDictFramework"
     if default_kind == "ctx":
         fg = _make_ctx_default_root_fg(key, value)
         explicit = Options(context={IDC_CTX_KEY: IDC_CTX_DEFAULT})
@@ -662,13 +661,13 @@ def _run_filter_twin(
         "twin_before": [Feature(value), Feature(key), Feature(key, explicit)],
         "twin_after": [Feature(key), Feature(key, explicit), Feature(value)],
     }
-    cf = pin if pinned else None
+    cf = "PythonDictFramework" if pinned else None
 
     def plain(name: str) -> str | Feature:
         return Feature(name, compute_framework=cf) if pinned else name
 
     def with_explicit(name: str) -> Feature:
-        return Feature(name, explicit, compute_framework=cf) if pinned else Feature(name, explicit)
+        return Feature(name, explicit, compute_framework=cf)
 
     global_filter = GlobalFilter()
     if layout == "filter_explicit":
@@ -690,23 +689,9 @@ def _run_filter_twin(
 
 
 @pytest.mark.parametrize("default_kind", ["ctx", "grp"])
+@pytest.mark.parametrize("pinned", [False, True], ids=["unpinned", "pinned"])
 @pytest.mark.parametrize(
-    "layout, pinned",
-    [
-        *[
-            (name, False)
-            for name in [
-                "key_only",
-                "value_then_key",
-                "key_then_value",
-                "value_only",
-                "filter_explicit",
-                "two_filters",
-            ]
-        ],
-        *[(name, True) for name in ["key_only", "value_then_key", "key_then_value", "two_filters"]],
-    ],
-    ids=lambda v: ("pinned" if v else "unpinned") if isinstance(v, bool) else str(v),
+    "layout", ["key_only", "value_then_key", "key_then_value", "value_only", "filter_explicit", "two_filters"]
 )
 def test_injected_filter_twin_merge_does_not_warn(
     layout: str, pinned: bool, default_kind: str, caplog: pytest.LogCaptureFixture

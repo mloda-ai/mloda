@@ -9,6 +9,8 @@ import pytest
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.user import Feature
 from mloda.provider import FeatureSet
+from mloda._testing.framework_adapter import PyArrowAdapter
+from mloda._testing.compute_framework.time_window_suite import TimeWindowRuleSuite
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
@@ -166,3 +168,8 @@ class TestPyArrowTimeWindow:
 
 class TestPyArrowTimeWindowZeroRow(PyArrowZeroRowAdapter, TimeWindowZeroRowTestMixin):
     feature_group_class = PyArrowTimeWindow
+
+
+class TestPyArrowTimeWindowRule(TimeWindowRuleSuite):
+    adapter_class = PyArrowAdapter
+    implementation = PyArrowTimeWindow

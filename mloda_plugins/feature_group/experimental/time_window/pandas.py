@@ -10,7 +10,6 @@ from pandas.api.indexers import BaseIndexer
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
-from mloda_plugins.feature_group.experimental.calendar_shift import shift_ns
 from mloda_plugins.feature_group.experimental.time_window.base import (
     TimeWindowFeatureGroup,
     WindowSpan,
@@ -180,12 +179,15 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         # Window start per sorted row; the window ends at the current row (duplicates included).
         zone = times.dt.tz
         ns = sorted_index.as_unit("ns").asi8
-        width = TimeWindowFeatureGroup._fixed_span_ns(span, zone)
+        width = span.fixed_ns(zone)
         if width is not None:
-            lower = np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
+            if width > np.iinfo(np.int64).max:
+                lower = np.full(len(ns), _INT64_MIN, dtype=np.int64)
+            else:
+                lower = np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
         else:
             lower = np.fromiter(
-                (max(shift_ns(int(v), -span.size, span.unit, zone), _INT64_MIN) for v in ns),
+                (max(span.lower_ns(int(v), zone), _INT64_MIN) for v in ns),
                 dtype=np.int64,
                 count=len(ns),
             )

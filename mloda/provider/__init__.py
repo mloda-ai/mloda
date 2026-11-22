@@ -111,6 +111,9 @@ from mloda.core.abstract_plugins.components.property_spec import (
     is_positive_int,
     property_spec,
 )
+
+# Time zone computation rule
+from mloda.core.abstract_plugins.components.contract.time_rule import DEFAULT_TIME_RULE, TimeRule
 from mloda.core.abstract_plugins.components.property_values_validation import (
     PropertyValidationError,
     validate_property_values,
@@ -240,6 +243,8 @@ __all__ = [
     "is_no_default",
     "is_positive_int",
     "property_spec",
+    "TimeRule",
+    "DEFAULT_TIME_RULE",
     "credential_handle_spec",
     "is_credential_handle_spec",
     "read_credential",

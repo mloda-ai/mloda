@@ -8,7 +8,13 @@ import pandas as pd
 import numpy as np
 from datetime import datetime, timedelta
 from typing import Any
+from unittest.mock import Mock
 import pytest
+
+from mloda._testing.time_rule import SHIFT_CASES, ShiftCase, assert_time_rule
+from mloda.provider import DEFAULT_TIME_RULE, TimeRule
+from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
@@ -20,6 +26,17 @@ from mloda_plugins.feature_group.experimental.forecasting.base import Forecastin
 from mloda_plugins.feature_group.experimental.forecasting.pandas import PandasForecasting
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
+
+
+# The stepwise walk equals the single shift only when no earlier step raises; keep it short too.
+FORWARD_CASES = tuple(
+    c for c in SHIFT_CASES if 0 < c.amount <= 1440 and (c.amount == 1 or "raise" not in c.rule.as_option().values())
+)
+
+
+def _last_horizon_step(value: datetime, amount: int, unit: str, rule: TimeRule) -> datetime:
+    """The last of `amount` forecast steps after value."""
+    return PandasForecasting._generate_future_timestamps(pd.Timestamp(value), amount, unit, rule)[-1]
 
 
 class TestForecastingFeatureGroup:
@@ -187,26 +204,53 @@ class TestForecastingFeatureGroup:
             ForecastingFeatureGroup().input_features(self.options, FeatureName(name))
         assert str(exc_info.value) == reason
 
+    @pytest.mark.parametrize("case", FORWARD_CASES, ids=[c.id for c in FORWARD_CASES])
+    def test_generate_future_timestamps_follow_the_zone_rule(self, case: ShiftCase) -> None:
+        assert_time_rule(shift=_last_horizon_step, cases=[case])
+        if case.expected is not None:
+            steps = PandasForecasting._generate_future_timestamps(
+                pd.Timestamp(case.value), case.amount, case.unit, case.rule
+            )
+            assert len(steps) == case.amount
+
+    def test_month_end_raise_fails_on_a_later_missing_step(self) -> None:
+        rule = TimeRule(month_end="raise")
+        with pytest.raises(ValueError):
+            PandasForecasting._generate_future_timestamps(pd.Timestamp(datetime(2023, 12, 31)), 2, "month", rule)
+
     @pytest.mark.parametrize(
-        ("last", "horizon", "unit", "expected_tail"),
-        [
-            (pd.Timestamp("2023-01-31 12:00"), 2, "month", ["2023-02-28T12:00:00", "2023-03-31T12:00:00"]),
-            (pd.Timestamp("2024-02-29"), 1, "year", ["2025-02-28T00:00:00"]),
-            (
-                pd.Timestamp("2023-03-11 12:00", tz="America/New_York"),
-                2,
-                "day",
-                ["2023-03-12T12:00:00-04:00", "2023-03-13T12:00:00-04:00"],
-            ),
-            (pd.Timestamp("2023-03-11 12:00", tz="America/New_York"), 24, "hour", ["2023-03-12T13:00:00-04:00"]),
-        ],
+        ("option", "rule"),
+        [(None, DEFAULT_TIME_RULE), ({"calendar_units": "fixed_length"}, TimeRule(calendar_units="fixed_length"))],
+        ids=["default", "fixed_length"],
     )
-    def test_generate_future_timestamps_follow_the_zone_rule(
-        self, last: pd.Timestamp, horizon: int, unit: str, expected_tail: list[str]
+    @pytest.mark.parametrize("confidence", [False, True], ids=["perform", "perform_with_confidence"])
+    def test_forecast_passes_the_rule_to_perform(
+        self, option: dict[str, str] | None, rule: TimeRule, confidence: bool
     ) -> None:
-        result = PandasForecasting._generate_future_timestamps(last, horizon, unit)
-        assert len(result) == horizon
-        assert [t.isoformat() for t in result][-len(expected_tail) :] == expected_tail
+        group: dict[str, Any] = {DefaultOptionKeys.reference_time: "time_filter"}
+        if option is not None:
+            group["time_rule"] = option
+        if confidence:
+            group[ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS] = True
+        feature_set = FeatureSet()
+        feature_set.add(Feature("sales__linear_forecast_7day", Options(group=group)))
+        series = pd.Series([1.0])
+        perform = Mock(return_value=(series, None))
+        perform_with_confidence = Mock(return_value=(series, series, series, None))
+
+        ForecastingFeatureGroup.forecast(
+            self.df,
+            feature_set,
+            perform=perform,
+            perform_with_confidence=perform_with_confidence,
+            add_column=Mock(return_value="done"),
+            columns=PandasDataFrame.extract_column_names,
+            column_semantics=pandas_type_semantics.column_semantics,
+        )
+
+        called = perform_with_confidence if confidence else perform
+        called.assert_called_once_with(self.df, "linear", 7, "day", "sales", "time_filter", None, rule)
+        assert (perform if confidence else perform_with_confidence).call_count == 0
 
     def test_pandas_forecasting(self) -> None:
         """Test forecasting with the Pandas implementation."""

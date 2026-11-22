@@ -18,26 +18,26 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec, is_positive_int
+from mloda.provider import DEFAULT_TIME_RULE, PropertySpec, TimeRule, is_positive_int
 from mloda_plugins.feature_group.experimental.key_features import with_key_features
-from mloda_plugins.feature_group.experimental.calendar_shift import is_fixed_zone
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
-
-_UNIT_NS = {
-    "second": 1_000_000_000,
-    "minute": 60_000_000_000,
-    "hour": 3_600_000_000_000,
-    "day": 86_400_000_000_000,
-    "week": 604_800_000_000_000,
-}
 
 
 @dataclass(frozen=True)
 class WindowSpan:
-    """A window width: size units of unit."""
+    """A window width: size units of unit, computed under rule."""
 
     size: int
     unit: str
+    rule: TimeRule = DEFAULT_TIME_RULE
+
+    def fixed_ns(self, zone: tzinfo | None) -> int | None:
+        """The width as constant nanoseconds, or None when it depends on the calendar."""
+        return self.rule.fixed_ns(self.size, self.unit, zone)
+
+    def lower_ns(self, instant_ns: int, zone: tzinfo | None) -> int:
+        """The window's lower bound for an instant."""
+        return self.rule.shift_ns(instant_ns, -self.size, self.unit, zone)
 
 
 class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, OperationFeatureGroup):
@@ -84,6 +84,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
 
     - `second`, `minute`, `hour`: elapsed time
     - `day`, `week`, `month`, `year`: calendar units on the reference column's own wall clock
+    - the `time_rule` group option (a mapping of `TimeRule` knobs) changes the rule for the feature carrying it
 
     ## Requirements
     - The input data must have a datetime column that can be used for time-based operations
@@ -142,6 +143,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             strict_validation=False,
         ),
         DefaultOptionKeys.reference_time: TimeReferenceMixin.REFERENCE_TIME_SPEC,
+        TimeReferenceMixin.TIME_RULE: TimeReferenceMixin.TIME_RULE_SPEC,
     }
 
     # Named captures bind window_function/window_size/time_unit; core validates them at match time.
@@ -261,18 +263,10 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
         return cls.parse_time_window_prefix(feature_name)[2]
 
     @classmethod
-    def _window_span(cls, window_size: int, time_unit: str) -> WindowSpan:
+    def _window_span(cls, window_size: int, time_unit: str, rule: TimeRule = DEFAULT_TIME_RULE) -> WindowSpan:
         """Validate the unit and return the window span, shared by both backends."""
-        if time_unit not in _UNIT_NS and time_unit not in ("month", "year"):
-            raise ValueError(f"Unsupported time unit: {time_unit}")
-        return WindowSpan(window_size, time_unit)
-
-    @classmethod
-    def _fixed_span_ns(cls, span: WindowSpan, zone: tzinfo | None) -> int | None:
-        """The span as constant nanoseconds, or None when it depends on the calendar."""
-        if span.unit in _UNIT_NS and (span.unit in ("second", "minute", "hour") or is_fixed_zone(zone)):
-            return span.size * _UNIT_NS[span.unit]
-        return None
+        rule.clock(time_unit)
+        return WindowSpan(window_size, time_unit, rule)
 
     # match_feature_group_criteria() inherited from FeatureChainParserMixin
 
@@ -296,6 +290,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             _options = feature.options
 
         reference_time_column = cls.get_reference_time_column(_options)
+        rule = cls.get_time_rule(_options)
 
         cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
@@ -305,7 +300,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             )
             available = columns(data)
             resolved = cls.resolve_multi_column_feature(in_features, available)
-            span = cls._window_span(window_size, time_unit)
+            span = cls._window_span(window_size, time_unit, rule)
             result = perform(data, window_function, span, resolved, reference_time_column)
             data = add_column(data, feature.name, result)
 

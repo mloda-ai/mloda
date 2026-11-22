@@ -17,8 +17,6 @@ Defects pinned:
 from __future__ import annotations
 
 import datetime
-import math
-import statistics
 from typing import Any, Callable
 from zoneinfo import ZoneInfo
 
@@ -26,6 +24,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from mloda.core.abstract_plugins.components.contract.time_rule import DEFAULT_TIME_RULE, TimeRule
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
@@ -168,94 +167,6 @@ def test_dst_transition_uses_absolute_time() -> None:
     assert pandas_result == pytest.approx(pyarrow_result)
 
 
-_NY = "America/New_York"
-
-
-def _zoned_frame(instants: list[str], zone: str, values: list[int]) -> pd.DataFrame:
-    times = pd.to_datetime(instants, utc=True).tz_convert(zone)
-    return pd.DataFrame({"value": values, REFERENCE_TIME: times})
-
-
-@pytest.mark.parametrize(
-    ("zone", "instants", "values", "size", "unit", "expected"),
-    [
-        (_NY, ["2023-03-11 16:30", "2023-03-12 16:00"], [1, 10], 1, "day", [1, 10]),
-        (_NY, ["2023-03-11 16:30", "2023-03-12 16:00"], [1, 10], 24, "hour", [1, 11]),
-        (_NY, ["2023-11-04 16:30", "2023-11-05 17:00"], [1, 10], 1, "day", [1, 11]),
-        (_NY, ["2023-11-04 16:30", "2023-11-05 17:00"], [1, 10], 24, "hour", [1, 10]),
-        (_NY, ["2023-11-05 05:40", "2023-11-05 06:40", "2023-11-06 06:30"], [1, 10, 100], 1, "day", [1, 11, 110]),
-        (_NY, ["2023-03-12 07:15", "2023-03-12 07:45", "2023-03-13 06:30"], [1, 10, 100], 1, "day", [1, 11, 110]),
-        (
-            "+05:30",
-            ["2023-01-31 06:30", "2023-02-28 12:30", "2023-03-01 06:30"],
-            [1, 10, 100],
-            1,
-            "month",
-            [1, 11, 110],
-        ),
-        ("+05:30", ["2023-01-31 06:30", "2023-02-28 12:30", "2023-03-01 06:30"], [1, 10, 100], 1, "day", [1, 10, 110]),
-    ],
-    ids=[
-        "dst_short_day_calendar",
-        "dst_short_day_elapsed",
-        "dst_long_day_calendar",
-        "dst_long_day_elapsed",
-        "bound_in_repeated_hour",
-        "bound_in_gap",
-        "fixed_offset_month",
-        "fixed_offset_day",
-    ],
-)
-def test_zoned_window_follows_the_column_wall_clock(
-    zone: str, instants: list[str], values: list[int], size: int, unit: str, expected: list[int]
-) -> None:
-    frame = _zoned_frame(instants, zone, values)
-    span = TimeWindowFeatureGroup._window_span(size, unit)
-
-    pandas_result = _as_floats(
-        PandasTimeWindow._perform_window_operation(frame.copy(), "sum", span, ["value"], REFERENCE_TIME)
-    )
-    pyarrow_result = _as_floats(
-        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(frame), "sum", span, ["value"], REFERENCE_TIME)
-    )
-
-    assert pandas_result == [float(v) for v in expected]
-    assert pyarrow_result == [float(v) for v in expected]
-
-
-@pytest.mark.parametrize(
-    ("size", "unit", "times", "expected"),
-    [
-        (
-            1,
-            "month",
-            ["2023-01-31 12:00", "2023-02-28 12:00", "2023-03-01 12:00", "2023-03-31 12:00"],
-            [1, 11, 110, 1100],
-        ),
-        (
-            1,
-            "year",
-            ["2023-02-28 12:00", "2024-02-28 18:00", "2024-02-29 12:00", "2025-02-28 12:00"],
-            [1, 10, 110, 1110],
-        ),
-    ],
-)
-def test_month_and_year_window_values(size: int, unit: str, times: list[str], expected: list[int]) -> None:
-    """Month and year windows are calendar months with the month-end clamp, not 30 and 365 days."""
-    df = pd.DataFrame({"value": [1, 10, 100, 1000], REFERENCE_TIME: pd.to_datetime(times)})
-    span = TimeWindowFeatureGroup._window_span(size, unit)
-
-    pandas_result = _as_floats(
-        PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)
-    )
-    pyarrow_result = _as_floats(
-        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(df), "sum", span, ["value"], REFERENCE_TIME)
-    )
-
-    assert pandas_result == [float(v) for v in expected]
-    assert pyarrow_result == [float(v) for v in expected]
-
-
 # --------------------------------------------------------------------------- #
 # 4. PyArrow narrow window value (mirrors the pandas-only narrow test).        #
 # --------------------------------------------------------------------------- #
@@ -327,68 +238,29 @@ def test_pyarrow_date_reference_column_uses_calendar_months() -> None:
     assert _as_floats(result) == [1.0, 11.0, 110.0, 1100.0]
 
 
-_MEMBERS = {
-    "bound_in_gap": (
-        ["2023-03-12 07:10", "2023-03-12 07:40", "2023-03-13 06:30", "2023-03-13 07:00"],
-        [[1], [1, 10], [10, 100], [1, 10, 100, 1000]],
-    ),
-    "source_in_repeated_hour": (
-        ["2023-11-04 05:20", "2023-11-04 05:40", "2023-11-05 05:50", "2023-11-05 06:30"],
-        [[1], [1, 10], [100], [10, 100, 1000]],
-    ),
-}
-
-
-def _from_members(function: str, members: list[int]) -> float:
-    if function == "count":
-        return float(len(members))
-    if function == "sum":
-        return float(sum(members))
-    if function == "min":
-        return float(min(members))
-    if function == "max":
-        return float(max(members))
-    if function in ("avg", "mean"):
-        return statistics.fmean(members)
-    if function == "median":
-        return float(statistics.median(members))
-    if function == "first":
-        return float(members[0])
-    if function == "last":
-        return float(members[-1])
-    if len(members) < 2:
-        return math.nan
-    return statistics.stdev(members) if function == "std" else statistics.variance(members)
-
-
-def _nan_for_none(result: Any) -> list[float]:
-    values = result.to_pylist() if hasattr(result, "to_pylist") else list(result)
-    return [math.nan if v is None else float(v) for v in values]
-
-
-@pytest.mark.parametrize("dataset", list(_MEMBERS))
-@pytest.mark.parametrize(
-    "function", ["sum", "min", "max", "avg", "mean", "count", "std", "var", "median", "first", "last"]
-)
-def test_window_starts_that_go_back_keep_every_function_right(dataset: str, function: str) -> None:
-    instants, members = _MEMBERS[dataset]
-    frame = _zoned_frame(instants, _NY, [1, 10, 100, 1000])
-    span = TimeWindowFeatureGroup._window_span(1, "day")
-    expected = [_from_members(function, m) for m in members]
-
-    pandas_result = PandasTimeWindow._perform_window_operation(frame.copy(), function, span, ["value"], REFERENCE_TIME)
-    pyarrow_result = PyArrowTimeWindow._perform_window_operation(
-        pa.Table.from_pandas(frame), function, span, ["value"], REFERENCE_TIME
-    )
-
-    assert _nan_for_none(pandas_result) == pytest.approx(expected, nan_ok=True)
-    assert _nan_for_none(pyarrow_result) == pytest.approx(expected, nan_ok=True)
-
-
 @pytest.mark.parametrize(("size", "unit"), [(30, "day"), (1, "month")])
 def test_window_reaching_before_the_earliest_instant(size: int, unit: str) -> None:
     df = pd.DataFrame({"value": [1, 10], REFERENCE_TIME: pd.to_datetime(["1677-10-01", "1677-10-20"])})
     span = TimeWindowFeatureGroup._window_span(size, unit)
+
+    pandas_result = _as_floats(
+        PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)
+    )
+    pyarrow_result = _as_floats(
+        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(df), "sum", span, ["value"], REFERENCE_TIME)
+    )
+
+    assert pandas_result == [1.0, 11.0]
+    assert pyarrow_result == [1.0, 11.0]
+
+
+@pytest.mark.parametrize(
+    ("size", "unit", "rule"),
+    [(110000, "day", DEFAULT_TIME_RULE), (300, "year", TimeRule(calendar_units="fixed_length"))],
+)
+def test_window_wider_than_the_nanosecond_range_covers_every_earlier_row(size: int, unit: str, rule: TimeRule) -> None:
+    df = pd.DataFrame({"value": [1, 10], REFERENCE_TIME: pd.to_datetime(["2023-01-01", "2023-01-02"])})
+    span = TimeWindowFeatureGroup._window_span(size, unit, rule)
 
     pandas_result = _as_floats(
         PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)

@@ -13,7 +13,6 @@ from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
-from mloda_plugins.feature_group.experimental.calendar_shift import shift_ns
 from mloda_plugins.feature_group.experimental.time_window.base import (
     TimeWindowFeatureGroup,
     WindowSpan,
@@ -108,15 +107,14 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
             ]
 
         # Time-based (not row-count) window: include rows in (t - span, t].
-        # Rows are ordered and window membership is decided on absolute instants (int64 ns since the epoch);
-        # the lower bound follows the unit's clock (elapsed or wall).
+        # Membership is decided on absolute instants (int64 ns since the epoch).
         sorted_times_ns = pc.take(time_column, sorted_indices).cast(pa.timestamp("ns")).cast(pa.int64()).to_pylist()
         zone = (
             pa.lib.string_to_tzinfo(time_column.type.tz)
             if pa.types.is_timestamp(time_column.type) and time_column.type.tz
             else None
         )
-        width = TimeWindowFeatureGroup._fixed_span_ns(span, zone)
+        width = span.fixed_ns(zone)
 
         # Create a list to store the results
         results = []
@@ -129,7 +127,7 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
             # ending at i. bisect_right of (t_i - span) gives the first index strictly
             # greater than the lower bound, implementing the left-open boundary.
             t = sorted_times_ns[i]
-            lower = t - width if width is not None else shift_ns(t, -span.size, span.unit, zone)
+            lower = t - width if width is not None else span.lower_ns(t, zone)
             start_idx = bisect.bisect_right(sorted_times_ns, lower)
             length = i - start_idx + 1
 

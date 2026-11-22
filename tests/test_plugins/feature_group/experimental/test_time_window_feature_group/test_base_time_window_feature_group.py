@@ -8,7 +8,6 @@ import statistics
 from collections.abc import Callable
 from typing import Any
 from unittest.mock import Mock
-from zoneinfo import ZoneInfo
 
 import numpy as np
 import pandas as pd
@@ -17,17 +16,18 @@ import pytest
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.implementation import Implementation
-from mloda.provider import Divergence, FeatureSet, SubtypeDeclaration
+from mloda.provider import DEFAULT_TIME_RULE, Divergence, FeatureSet, SubtypeDeclaration, TimeRule
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda._testing.time_rule import WINDOW_FUNCTIONS
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, WindowSpan
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 from mloda.provider import FeatureChainParser
@@ -271,10 +271,20 @@ class TestTimeWindowFeatureGroup:
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.get_reference_time_column(options)
 
-    def test_window_hands_the_group_span_to_perform(self) -> None:
+    @pytest.mark.parametrize(
+        ("option", "rule"),
+        [
+            (None, DEFAULT_TIME_RULE),
+            ({"calendar_units": "fixed_length"}, TimeRule(calendar_units="fixed_length")),
+            ({"gap": "raise", "month_end": "raise"}, TimeRule(gap="raise", month_end="raise")),
+        ],
+        ids=["default", "fixed_length", "two_knobs"],
+    )
+    def test_window_hands_the_group_span_to_perform(self, option: dict[str, str] | None, rule: TimeRule) -> None:
         df = pd.DataFrame({"x": [1.0, 2.0], DefaultOptionKeys.reference_time: pd.date_range("2023-01-01", periods=2)})
         feature_set = FeatureSet()
-        feature_set.add(Feature("x__sum_2_hour_window"))
+        options = Options() if option is None else Options(group={"time_rule": option})
+        feature_set.add(Feature("x__sum_2_hour_window", options))
         perform = Mock(return_value=[1.0, 3.0])
         add_column = Mock(return_value="done")
 
@@ -287,25 +297,11 @@ class TestTimeWindowFeatureGroup:
             column_semantics=pandas_type_semantics.column_semantics,
         )
 
-        span = TimeWindowFeatureGroup._window_span(2, "hour")
+        span = TimeWindowFeatureGroup._window_span(2, "hour", rule)
+        assert span.rule == rule
         perform.assert_called_once_with(df, "sum", span, ["x"], DefaultOptionKeys.reference_time)
         add_column.assert_called_once_with(df, "x__sum_2_hour_window", [1.0, 3.0])
         assert result == "done"
-
-    @pytest.mark.parametrize(
-        ("span", "zone", "expected"),
-        [
-            (WindowSpan(2, "hour"), ZoneInfo("America/New_York"), 7_200_000_000_000),
-            (WindowSpan(1, "day"), None, 86_400_000_000_000),
-            (WindowSpan(1, "week"), datetime.timezone(datetime.timedelta(hours=5, minutes=30)), 604_800_000_000_000),
-            (WindowSpan(1, "day"), ZoneInfo("Etc/GMT-5"), 86_400_000_000_000),
-            (WindowSpan(1, "day"), ZoneInfo("America/New_York"), None),
-            (WindowSpan(1, "month"), None, None),
-            (WindowSpan(1, "year"), datetime.UTC, None),
-        ],
-    )
-    def test_fixed_span_ns(self, span: WindowSpan, zone: datetime.tzinfo | None, expected: int | None) -> None:
-        assert TimeWindowFeatureGroup._fixed_span_ns(span, zone) == expected
 
     @pytest.mark.parametrize(
         ("impl", "data"),
@@ -421,6 +417,10 @@ class TestTimeWindowBehaviorNeutral:
                 f"temperature__{window_function}_3_day_window", Options(), framework
             )
             assert supported is True, f"'{window_function}' must stay supported on {framework.__name__}"
+
+    def test_the_kit_window_functions_equal_the_group_window_functions(self) -> None:
+        assert len(WINDOW_FUNCTIONS) == len(set(WINDOW_FUNCTIONS))
+        assert set(WINDOW_FUNCTIONS) == set(TimeWindowFeatureGroup.WINDOW_FUNCTIONS)
 
 
 _NAN = float("nan")

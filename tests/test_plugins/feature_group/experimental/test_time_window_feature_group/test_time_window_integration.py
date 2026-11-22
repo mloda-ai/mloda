@@ -228,6 +228,18 @@ def test_zoned_column_day_is_calendar_and_24_hours_is_elapsed(
     assert column_values(results, name) == expected
 
 
+@pytest.mark.parametrize("framework", [PandasDataFrame, PyArrowTable], ids=lambda fw: fw.__name__)
+def test_one_request_holds_the_same_window_under_two_rules(framework: type[ComputeFramework]) -> None:
+    name = "tw_zoned_x__sum_1_day_window"
+    default_rule = Feature(name)
+    fixed_rule = Feature(name, Options(group={"time_rule": {"calendar_units": "fixed_length"}}))
+    plugins = PluginCollector.enabled_feature_groups({TimeWindowZonedSourceCreator, TimeWindowFeatureGroup})
+    results = mloda.run_all([default_rule, fixed_rule], compute_frameworks=[framework], plugin_collector=plugins)
+    assert len(results) == 2
+    assert column_values([results.frame_for(default_rule)], name) == [1, 10]
+    assert column_values([results.frame_for(fixed_rule)], name) == [1, 11]
+
+
 _NAN_WINDOW = "tw_nan_x__sum_3_day_window"
 _PANDAS_ONLY_WINDOW = "tw_nan_p__sum_3_day_window"
 _WINDOW_PLUGINS_OF = {

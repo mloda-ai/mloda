@@ -14,7 +14,10 @@ from typing import Any
 
 import pytest
 
+from mloda.core.abstract_plugins.components.contract.time_rule import TimeRule
+from mloda.core.abstract_plugins.components.match_rejection import MatchRejection
 from mloda.provider import DefaultOptionKeys
+from mloda.user import Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
@@ -280,6 +283,55 @@ class TestDiscriminatorSpacesDoNotCollide:
             f"{name}.{group.TIME_UNIT} does not use TimeReferenceMixin.TIME_UNITS. "
             "A private copy drifts silently; reference the shared mapping instead."
         )
+
+    def test_the_time_rule_spec_is_a_group_option_without_a_default(self) -> None:
+        spec = TimeReferenceMixin.TIME_RULE_SPEC
+        assert spec.context is False
+        assert spec.default is None
+
+    @pytest.mark.parametrize(
+        "name,group,feature_name",
+        [
+            ("ForecastingFeatureGroup", ForecastingFeatureGroup, "x__linear_forecast_7day"),
+            ("TimeWindowFeatureGroup", TimeWindowFeatureGroup, "x__sum_2_day_window"),
+        ],
+    )
+    class TestTimeRuleSpec:
+        def test_the_spec_is_the_shared_one(self, name: str, group: Any, feature_name: str) -> None:
+            assert group.PROPERTY_MAPPING[TimeReferenceMixin.TIME_RULE] is TimeReferenceMixin.TIME_RULE_SPEC
+            assert TimeReferenceMixin.TIME_RULE == TimeRule.OPTION_KEY
+
+        def test_a_rule_in_context_is_refused(self, name: str, group: Any, feature_name: str) -> None:
+            with pytest.raises(ValueError) as exc_info:
+                group.get_time_rule(Options(context={TimeReferenceMixin.TIME_RULE: {"gap": "raise"}}))
+            message = str(exc_info.value)
+            assert TimeReferenceMixin.TIME_RULE in message
+            assert "group" in message
+
+        @pytest.mark.parametrize(
+            "value",
+            [{"gap": "raise"}, {"calendar_units": "fixed_length", "month_end": "raise"}, {}],
+            ids=["one_knob", "two_knobs", "empty"],
+        )
+        def test_a_good_value_matches(self, name: str, group: Any, feature_name: str, value: Any) -> None:
+            options = Options(group={TimeReferenceMixin.TIME_RULE: value})
+            assert group.match_feature_group_criteria(feature_name, options) is True
+
+        @pytest.mark.parametrize(
+            "value",
+            [{"nonsense": "x"}, {"gap": "sideways"}, "fixed_length", ["gap"], 3],
+            ids=["unknown_knob", "unknown_value", "string", "list", "int"],
+        )
+        def test_a_bad_value_is_a_recorded_rejection_naming_what_is_accepted(
+            self, name: str, group: Any, feature_name: str, value: Any, rejection_window: dict[str, MatchRejection]
+        ) -> None:
+            options = Options(group={TimeReferenceMixin.TIME_RULE: value})
+
+            assert group.match_feature_group_criteria(feature_name, options) is False
+
+            reason = rejection_window[name].reason
+            assert TimeReferenceMixin.TIME_RULE in reason
+            assert all(knob in reason for knob in ("calendar_units", "gap", "repeated", "month_end")), reason
 
 
 # ---------------------------------------------------------------------------

@@ -130,6 +130,8 @@ REQUIRED_SAMPLES: dict[tuple[type[Any], str], Any] = {
     (DimensionalityReductionFeatureGroup, DimensionalityReductionFeatureGroup.DIMENSION): 2,
     (ForecastingFeatureGroup, ForecastingFeatureGroup.HORIZON): 3,
     (TimeWindowFeatureGroup, TimeWindowFeatureGroup.WINDOW_SIZE): 3,
+    (ForecastingFeatureGroup, "time_rule"): {"calendar_units": "fixed_length"},
+    (TimeWindowFeatureGroup, "time_rule"): {"calendar_units": "fixed_length"},
 }
 
 # What each plugin declares UNCONDITIONALLY optional today. This pin is an INPUT to the builder
@@ -151,7 +153,7 @@ EXPECTED_OPTIONAL_KEYS: dict[type[Any], frozenset[str]] = {
         }
     ),
     ForecastingFeatureGroup: frozenset(
-        {ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, DefaultOptionKeys.reference_time}
+        {ForecastingFeatureGroup.OUTPUT_CONFIDENCE_INTERVALS, DefaultOptionKeys.reference_time, "time_rule"}
     ),
     GeoDistanceFeatureGroup: frozenset(),
     NodeCentralityFeatureGroup: frozenset(
@@ -161,7 +163,7 @@ EXPECTED_OPTIONAL_KEYS: dict[type[Any], frozenset[str]] = {
     SklearnPipelineFeatureGroup: frozenset({SklearnPipelineFeatureGroup.PIPELINE_PARAMS, "artifact_storage_path"}),
     ScalingFeatureGroup: frozenset({"artifact_storage_path"}),
     TextCleaningFeatureGroup: frozenset(),
-    TimeWindowFeatureGroup: frozenset({DefaultOptionKeys.reference_time}),
+    TimeWindowFeatureGroup: frozenset({DefaultOptionKeys.reference_time, "time_rule"}),
 }
 
 

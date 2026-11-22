@@ -9,21 +9,23 @@ from mloda.core.abstract_plugins.components.contract.comparison_contract import 
     SemanticDimension,
 )
 from mloda.user import Options
-from mloda.provider import DefaultOptionKeys, property_spec
+from mloda.provider import DefaultOptionKeys, TimeRule, property_spec
 
 
 class TimeReferenceMixin:
     """Provides the reference-time column resolver and time-unit mapping shared by time-based feature groups."""
 
-    TIME_UNITS = {
-        "second": "Seconds",
-        "minute": "Minutes",
-        "hour": "Hours",
-        "day": "Days",
-        "week": "Weeks",
-        "month": "Months",
-        "year": "Years",
-    }
+    TIME_UNITS = TimeRule.UNITS
+    TIME_RULE = "time_rule"
+
+    TIME_RULE_SPEC = property_spec(
+        "Time zone computation rule knobs as a mapping; applies to the feature that carries it, not its inputs.",
+        default=None,
+        context=False,
+        forward_to_inputs=False,
+        match_guard=TimeRule.from_option,
+        expected=f"a mapping of the knobs {', '.join(TimeRule.KNOBS)} to allowed values",
+    )
 
     REFERENCE_TIME_SPEC = property_spec(
         "Options key naming the reference-time column for time alignment; owned by TimeReferenceMixin, exposed by each concrete time-based feature group.",
@@ -50,6 +52,15 @@ class TimeReferenceMixin:
                 )
             return reference_time
         return DefaultOptionKeys.reference_time
+
+    @classmethod
+    def get_time_rule(cls, options: Options | None = None) -> TimeRule:
+        """The time rule carried by the options, the default rule when absent."""
+        if options and cls.TIME_RULE in options.context:
+            raise ValueError(
+                f"The {cls.TIME_RULE} option must be a group option: only group options are part of a feature's identity."
+            )
+        return TimeRule.from_option(options.get(cls.TIME_RULE) if options else None)
 
     @classmethod
     def _validate_reference_time_column(cls, semantics: ColumnSemantics, reference_time_column: str) -> None:

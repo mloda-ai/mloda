@@ -2,6 +2,9 @@
 
 from __future__ import annotations
 
+import datetime
+import zoneinfo
+from datetime import tzinfo
 from typing import Any
 
 import numpy as np
@@ -24,6 +27,21 @@ except ImportError:
 
 
 _INT64_MIN = int(np.iinfo(np.int64).min)
+_INT64_MAX = int(np.iinfo(np.int64).max)
+_DAY_NS = 86_400_000_000_000
+_EDGE_NS = 3 * _DAY_NS  # margin for the +-1 day probes plus slack near the int64 limits
+_FLOOR_DAYS = _INT64_MIN // _DAY_NS + 3  # earliest day count whose ns value cannot overflow, with slack
+_NS_RANGE_DAYS = 213_504  # days spanned by the int64 ns range (about 584.5 years)
+_PANDAS_TZ_RULES_END_NS = 4_102_444_800_000_000_000  # pandas tz_convert follows a zone's DST rules only before 2100
+_MAX_DAYS_PER_UNIT = {"day": 1, "week": 7, "month": 31, "year": 366}
+
+
+def _wall_ns(utc_ns: np.ndarray, zone: tzinfo) -> np.ndarray:
+    """Wall clock reading of each instant in zone, as ns."""
+    wall: np.ndarray = (
+        pd.DatetimeIndex(utc_ns.view("M8[ns]")).tz_localize("UTC").tz_convert(zone).tz_localize(None).asi8
+    )
+    return wall
 
 
 class _SpanIndexer(BaseIndexer):  # type: ignore[misc]
@@ -126,6 +144,65 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         return pd.Series(fixed, index=col.index)
 
     @classmethod
+    def _lower_bounds(cls, ns: np.ndarray, span: WindowSpan, zone: tzinfo | None) -> np.ndarray:
+        """Window start per sorted instant; calendar spans are vectorized (mirrors TimeRule._resolve)."""
+        width = span.fixed_ns(zone)
+        if width is not None:
+            if width > _INT64_MAX:
+                return np.full(len(ns), _INT64_MIN, dtype=np.int64)
+            return np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
+
+        def per_row(i: int) -> int:
+            return max(span.lower_ns(int(ns[i]), zone), _INT64_MIN)
+
+        vectorizable = zone is None or isinstance(zone, (datetime.timezone, zoneinfo.ZoneInfo))
+        if not vectorizable or span.size * _MAX_DAYS_PER_UNIT[span.unit] > _NS_RANGE_DAYS:
+            return np.fromiter((per_row(i) for i in range(len(ns))), dtype=np.int64, count=len(ns))
+
+        rule = span.rule
+        slow = (ns < _INT64_MIN + _EDGE_NS) | (ns > _INT64_MAX - _EDGE_NS)
+        if isinstance(zone, zoneinfo.ZoneInfo):
+            slow = slow | (ns >= _PANDAS_TZ_RULES_END_NS - _EDGE_NS)
+        safe = np.where(slow, 0, ns)
+        wall = safe if zone is None else _wall_ns(safe, zone)
+        days, time_of_day = np.divmod(wall, _DAY_NS)
+        if span.unit in ("day", "week"):
+            new_days = days - span.size * (7 if span.unit == "week" else 1)
+        else:
+            day = days.astype("M8[D]")
+            month = day.astype("M8[M]")
+            day_of_month = (day - month.astype("M8[D]")).astype(np.int64)
+            target = month - np.timedelta64(span.size * (12 if span.unit == "year" else 1), "M")
+            first = target.astype("M8[D]")
+            length = ((target + 1).astype("M8[D]") - first).astype(np.int64)
+            new_days = first.astype(np.int64) + np.minimum(day_of_month, length - 1)
+            if rule.month_end == "raise":
+                slow = slow | (day_of_month >= length)
+        slow = slow | (new_days < _FLOOR_DAYS)
+        guess = np.maximum(new_days, _FLOOR_DAYS) * _DAY_NS + time_of_day
+        if zone is None:
+            lower = guess
+        else:
+            offset_before = _wall_ns(guess - _DAY_NS, zone) - (guess - _DAY_NS)
+            offset_after = _wall_ns(guess + _DAY_NS, zone) - (guess + _DAY_NS)
+            before = guess - offset_before
+            after = guess - offset_after
+            before_valid = _wall_ns(before, zone) - before == offset_before
+            after_valid = _wall_ns(after, zone) - after == offset_after
+            gap = ~before_valid & ~after_valid
+            repeated = before_valid & after_valid & (offset_before != offset_after)
+            prefer_after = (rule.repeated == "later") | ((rule.repeated == "source") & (wall - safe == offset_after))
+            lower = np.where(np.where(repeated, prefer_after, after_valid & ~before_valid), after, before)
+            if rule.gap == "raise":
+                slow = slow | gap
+            if rule.repeated == "raise":
+                slow = slow | repeated
+        lower = np.asarray(lower, dtype=np.int64)
+        for i in np.flatnonzero(slow):
+            lower[i] = per_row(int(i))
+        return lower
+
+    @classmethod
     def _perform_window_operation(
         cls,
         data: pd.DataFrame,
@@ -160,9 +237,11 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
 
         # Sort STABLY by absolute time, remembering original positions, so the
         # rolled result can be scattered back to the ORIGINAL (possibly unsorted)
-        # row order. to_numpy() on a tz-aware column yields absolute UTC instants.
-        order = np.argsort(times.to_numpy(), kind="stable")
-        sorted_index = pd.DatetimeIndex(times.to_numpy()[order])
+        # row order. asi8 holds UTC instants (tz-aware) or wall clock (naive).
+        instants = pd.DatetimeIndex(times).as_unit("ns").asi8
+        order = np.argsort(instants, kind="stable")
+        ns = instants[order]
+        sorted_index = pd.DatetimeIndex(ns.view("M8[ns]"))
 
         # Select the columns to perform window operation on, in time-sorted order.
         if len(in_features) == 1:
@@ -178,19 +257,7 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
 
         # Window start per sorted row; the window ends at the current row (duplicates included).
         zone = times.dt.tz
-        ns = sorted_index.as_unit("ns").asi8
-        width = span.fixed_ns(zone)
-        if width is not None:
-            if width > np.iinfo(np.int64).max:
-                lower = np.full(len(ns), _INT64_MIN, dtype=np.int64)
-            else:
-                lower = np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
-        else:
-            lower = np.fromiter(
-                (max(span.lower_ns(int(v), zone), _INT64_MIN) for v in ns),
-                dtype=np.int64,
-                count=len(ns),
-            )
+        lower = cls._lower_bounds(ns, span, zone)
         starts = np.searchsorted(ns, lower, side="right")
 
         if isinstance(selected_data, pd.Series):

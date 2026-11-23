@@ -1227,7 +1227,8 @@ class Engine:
                         f"Option '{key}' is a runtime parameter of {feature_group_class.__name__} and must be a "
                         f"context option, or passed per run with run(parameters=...), not a group option."
                     )
-            for key in group_only_keys(feature_group_class):
+            # an index twin carries the host's resolved options, already checked at the host's intake
+            for key in () if if_index_feature else group_only_keys(feature_group_class):
                 if key in declared_options.context:
                     raise ValueError(
                         f"Option '{key}' of feature '{feature.name}' is group-only for "

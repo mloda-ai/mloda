@@ -1540,7 +1540,7 @@ class TestRuntimeParametersAreValidatedBeforeTheRun:
     def test_a_group_only_key_in_the_context_is_refused_at_prepare(self) -> None:
         feature = Feature("go_key_col", Options(context={"go_key": "x"}))
 
-        with pytest.raises(ValueError, match="go_key") as caught:
+        with pytest.raises(ValueError, match=r"Option 'go_key' .*group-only") as caught:
             mloda.prepare(
                 [feature],
                 compute_frameworks=["PythonDictFramework"],

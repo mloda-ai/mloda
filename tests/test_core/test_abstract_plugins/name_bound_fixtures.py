@@ -33,6 +33,7 @@ def make_name_bound_fg(
     replaces_rows: bool = False,
     *,
     input_compute_framework: str | None = None,
+    group_only: tuple[str, ...] = (),
 ) -> type[FeatureGroup]:
     """Pattern group binding ``bound_keys`` from ``<name>__<tag>_<x>_<y>``; records option tuples in ``seen``.
 
@@ -50,6 +51,9 @@ def make_name_bound_fg(
     for key in keys:
         context = bound_context if key in bound_keys else True
         extra: dict[str, Any] = {}
+        if key in group_only:
+            context = False
+            extra["group_only"] = True
         if converters is not None and key in converters:
             extra["name_converter"] = converters[key]
         if defaults is None:

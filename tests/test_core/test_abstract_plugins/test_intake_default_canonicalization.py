@@ -725,3 +725,43 @@ def test_double_requested_filtered_column_still_warns_once(
     warnings = _default_equivalent_warnings(caplog)
     assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
     assert f"{prefix}_key" in warnings[0], f"the warning must name the key column: {warnings[0]!r}"
+
+
+IDC_GO_KEY = "idc_go_bound"
+IDC_GO_SRC = "idc_go_src"
+
+
+def test_a_name_bound_group_only_key_is_not_refused() -> None:
+    """A group-only key bound from the feature name is not a caller's context placement, so it is not refused."""
+    seen: dict[str, Any] = {}
+    host = make_name_bound_fg(
+        "IdcGo", __name__, "idcgo", (IDC_GO_KEY,), seen=seen, input_column=IDC_GO_SRC, group_only=(IDC_GO_KEY,)
+    )
+    src = make_root_fg("IdcGoSrc", __name__, IDC_GO_SRC, [1])
+    name = f"{IDC_GO_SRC}__idcgo_q"
+    results = mloda.run_all(
+        [Feature(name)],
+        compute_frameworks=[PythonDictFramework],
+        plugin_collector=PluginCollector.enabled_feature_groups({host, src}),
+    )
+    assert results
+    assert seen[name] == ("q",)
+
+
+IDC_GO_ID = "idc_go_id"
+
+
+def test_a_group_only_name_bound_key_is_not_refused_on_the_index_twin() -> None:
+    """An index twin carries the host's name-bound group-only value; it is not refused again."""
+    host = make_name_bound_fg(
+        "IdcGoTwin", __name__, "idcgo", (IDC_GO_KEY,), input_column=IDC_GO_SRC, group_only=(IDC_GO_KEY,)
+    )
+    src = make_root_fg("IdcGoTwinSrc", __name__, IDC_GO_SRC, [1])
+    left = make_root_fg("IdcGoTwinLeft", __name__, IDC_GO_ID, [1])
+    link = Link.inner(JoinSpec(left, IDC_GO_ID), JoinSpec(host, IDC_GO_ID))
+    mloda.prepare(
+        [Feature(IDC_GO_ID), Feature(f"{IDC_GO_SRC}__idcgo_q")],
+        compute_frameworks=[PythonDictFramework],
+        links={link},
+        plugin_collector=PluginCollector.enabled_feature_groups({host, src, left}),
+    )

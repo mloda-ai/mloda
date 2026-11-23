@@ -245,7 +245,7 @@ def test_a_time_rule_in_the_context_is_refused_at_prepare() -> None:
         "tw_zoned_x__sum_1_day_window", Options(context={"time_rule": {"calendar_units": "fixed_length"}})
     )
     plugins = PluginCollector.enabled_feature_groups({TimeWindowZonedSourceCreator, TimeWindowFeatureGroup})
-    with pytest.raises(ValueError, match="time_rule"):
+    with pytest.raises(ValueError, match=r"Option 'time_rule' .*group-only"):
         mloda.prepare([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugins)
 
 

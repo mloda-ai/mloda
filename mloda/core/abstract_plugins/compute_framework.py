@@ -114,6 +114,21 @@ def _timed(method: Callable[..., Any], features: Any) -> Callable[..., Any]:
     return wrapper
 
 
+def _then_save(
+    method: Callable[..., Any], after_calculate: Callable[[], None], saving: list[bool]
+) -> Callable[..., Any]:
+    """Wrap ``method`` to run ``after_calculate`` right after it returns, flagging ``saving`` first."""
+
+    @functools.wraps(method)
+    def wrapper(*args: Any, **kwargs: Any) -> Any:
+        result = method(*args, **kwargs)
+        saving[0] = True
+        after_calculate()
+        return result
+
+    return wrapper
+
+
 def framework_rank_key(
     positions: Mapping[type["ComputeFramework"], int],
 ) -> Callable[[type["ComputeFramework"]], tuple[int, int, str, str, str]]:
@@ -524,7 +539,12 @@ class ComputeFramework(ABC):
 
     @final
     def run_calculation(
-        self, feature_group: Any, features: Any, location: str | None, data: Any | None = None
+        self,
+        feature_group: Any,
+        features: Any,
+        location: str | None,
+        data: Any | None = None,
+        after_calculate: Callable[[], None] | None = None,
     ) -> Any | None:
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
@@ -544,8 +564,11 @@ class ComputeFramework(ABC):
         features = self.set_mask_engine(features)
         self._adopt_connection(self.data)
         # spans to set_column_names: a lazy frame may first resolve its schema in filter validation or there
+        saving = [False]
         try:
-            data = self.run_calculate_feature(feature_group, features, facts)
+            data = self.run_calculate_feature(
+                feature_group, features, facts, after_calculate=after_calculate, saving=saving
+            )
             data = self._append_dict_to_frame(feature_group, data)
 
             names = features.get_all_names()
@@ -579,7 +602,7 @@ class ComputeFramework(ABC):
                 for col in self.column_names:
                     self._dropped_by.pop(col, None)
         except Exception as e:
-            if not self.is_missing_column_error(e):
+            if saving[0] or not self.is_missing_column_error(e):
                 raise
             self._raise_helpful_missing_column_error(feature_group, e)
 
@@ -1343,7 +1366,14 @@ class ComputeFramework(ABC):
         return result
 
     @final
-    def run_calculate_feature(self, feature_group: Any, features: Any, facts: _StepFacts | None = None) -> Any:
+    def run_calculate_feature(
+        self,
+        feature_group: Any,
+        features: Any,
+        facts: _StepFacts | None = None,
+        after_calculate: Callable[[], None] | None = None,
+        saving: list[bool] | None = None,
+    ) -> Any:
         # Local import: feature_set -> feature -> compute_framework would cycle at module level.
         from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 
@@ -1357,6 +1387,9 @@ class ComputeFramework(ABC):
         method = readable(feature_group.calculate_feature, unset)
         if isinstance(features, FeatureSet):
             method = _timed(method, features)
+        if after_calculate is not None:
+            saving = [False] if saving is None else saving
+            method = _then_save(method, after_calculate, saving)
         try:
             return self._run_hook(
                 ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE,
@@ -1368,6 +1401,8 @@ class ComputeFramework(ABC):
         except (CredentialReadRefused, CredentialFieldMissing):
             raise
         except KeyError as e:
+            if saving is not None and saving[0]:
+                raise
             # Provide helpful error message for missing columns
             self._raise_helpful_missing_column_error(feature_group, e)
 

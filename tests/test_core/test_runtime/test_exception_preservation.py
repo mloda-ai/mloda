@@ -1586,6 +1586,7 @@ class _ReadProbeExtender(Extender):
         self.hooks = hooks
         self.contexts: list[tuple[str, str | None, str]] = []
         self.kept: list[HookContext] = []
+        self.at_return: list[tuple[tuple[str, ...], str | None]] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return set(self.hooks)
@@ -1598,8 +1599,11 @@ class _ReadProbeExtender(Extender):
         self.contexts.append((context.hook.value, context.feature_group_class, repr(context)))
         _try_read(key)
         try:
-            return func(*args, **kwargs)
+            result = func(*args, **kwargs)
+            self.at_return.append((context.credentials_read, context.status))
+            return result
         except Exception as exc:
+            self.at_return.append((context.credentials_read, context.status))
             _WINDOW_EVENTS.append((key, f"raised:{type(exc).__name__}"))
             raise
 
@@ -1923,6 +1927,8 @@ def test_a_saver_read_shows_on_the_calculate_context_after_the_run(
     api.run(parallelization_modes={mode}, flight_server=flight_server)
 
     assert [context.credentials_read for context in probe.kept] == [expected]
+    # MULTIPROCESSING is not parametrized: the probe instance is pickled into the worker.
+    assert probe.at_return == [(expected, "success")]
 
 
 class ChsRcRaisingArtifact(BaseArtifact):
@@ -1961,6 +1967,119 @@ def test_a_saver_that_reads_then_raises_still_shows_the_read_on_the_calculate_co
         api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
 
     assert [context.credentials_read for context in probe.kept] == [(_VAULT_A, _VAULT_B)]
+    # MULTIPROCESSING is not parametrized: the probe instance is pickled into the worker.
+    assert probe.at_return == [((_VAULT_A, _VAULT_B), "error")]
+
+
+class ChsRcKeyErrorArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        raise KeyError("saver_key")
+
+
+class ChsRcKeyErrorSaverFG(ChsRcCalcAndSaverFG):
+    """Its saver raises a KeyError."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_key_error_saver_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcKeyErrorArtifact
+
+
+@pytest.mark.timeout(15)
+@pytest.mark.parametrize("with_probe", [True, False])
+def test_a_saver_key_error_keeps_its_type_and_message(with_probe: bool, flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    extenders: set[Extender] | None = (
+        {_ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})} if with_probe else None
+    )
+    api = mloda_api(
+        [Feature("chs_rc_key_error_saver_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcKeyErrorSaverFG}),
+        function_extender=extenders,
+    )
+    with pytest.raises(KeyError) as excinfo:
+        api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert "saver_key" in str(excinfo.value)
+    assert "input_features" not in str(excinfo.value)
+
+
+class _ChsRcSkipCalculateExtender(Extender):
+    """Returns a frame without calling the wrapped calculate."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return pd.DataFrame({name: [1] for name in args[1].get_all_names()})
+
+
+@pytest.mark.timeout(15)
+def test_an_extender_skipping_calculate_still_reports_the_missing_artifact(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    api = mloda_api(
+        [Feature("chs_rc_artifact_a", options={HANDLE_KEY: _E2E_HANDLE})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcArtifactFG}),
+        function_extender={_ChsRcSkipCalculateExtender()},
+    )
+    with pytest.raises(ValueError, match="No artifact to save although it was requested"):
+        api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+
+_ORDERING_SAVES: list[str] = []
+
+
+class ChsRcOrderingArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _ORDERING_SAVES.append("saved")
+        return {"saved": True}
+
+
+class ChsRcInvalidOutputSaverFG(ChsRcCalcAndSaverFG):
+    """Saves an artifact, then fails output validation."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_invalid_output_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcOrderingArtifact
+
+    @classmethod
+    def validate_output_features(cls, data: Any, features: FeatureSet) -> None:
+        raise ValueError("output invalid")
+
+
+@pytest.mark.timeout(15)
+def test_the_saver_runs_before_output_validation(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    _ORDERING_SAVES.clear()
+    api = mloda_api(
+        [Feature("chs_rc_invalid_output_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcInvalidOutputSaverFG}),
+    )
+    with pytest.raises(ValueError, match="output invalid"):
+        api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert _ORDERING_SAVES == ["saved"]
 
 
 class ChsRcFrozenArtifact(BaseArtifact):

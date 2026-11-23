@@ -52,7 +52,7 @@ class BaseExampleArtifactFeature(DataCreatorFeatureGroup):
         return {cls.get_class_name(): [1, 2, 3]}
 ```
 
-Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact.
+Now, we run the query to the feature group to save the artifact. This example is very basic, but could be a much more complex artifact. The saver runs right after `calculate_feature` returns, before output validation, so a step whose output validation fails has already saved.
 
 ```python
 from mloda.user import mloda

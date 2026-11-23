@@ -990,14 +990,14 @@ def _checker(which: str) -> Callable[..., Any]:
 
 
 def _unresolved_case(case: str) -> tuple[type[FeatureGroup], Any]:
-    _require_backend(PandasAdapter if case == "object_date" else PyArrowAdapter)
-    if case == "object_date":
-        return make_run_group("object_date"), PandasAdapter()
+    _require_backend(PandasAdapter if case in ("object_date", "object_string") else PyArrowAdapter)
+    if case in ("object_date", "object_string"):
+        return make_run_group(case), PandasAdapter()
     return make_run_group("ok"), _NoNativeInt64Adapter()
 
 
 @pytest.mark.parametrize("which", ["shape", "result_types"])
-@pytest.mark.parametrize("case", ["object_date", "no_native_type"])
+@pytest.mark.parametrize("case", ["object_date", "object_string", "no_native_type"])
 @pytest.mark.parametrize("record", [None, DivergenceKind.GAP, DivergenceKind.TYPE], ids=["none", "gap", "type"])
 def test_unresolved_type_fails_unless_a_gap_record_covers_it(
     which: str, case: str, record: DivergenceKind | None
@@ -1617,6 +1617,8 @@ def test_result_type_check_error_paths_carry_its_check_name(case: str, require_r
         assert any(f.startswith("run:") for f in result.failures) is require_run, result.failures
     else:
         assert result.failures, result
+    if case == "string_requests":
+        assert any("requests must be a sequence of names, not a string" in f for f in result.failures), result.failures
     if case == "empty_requests":
         assert any(f.startswith("names:") for f in result.failures), result.failures
     if case == "malformed_rule":

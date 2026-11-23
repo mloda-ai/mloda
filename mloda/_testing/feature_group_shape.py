@@ -586,6 +586,7 @@ def _check_types(
         else:
             notes.append(note)
 
+    readback = adapter._exact_instance(result) is not None
     for name, data_type in expected.items():
         if name not in adapter.column_names(result):
             continue
@@ -600,8 +601,11 @@ def _check_types(
             continue
         if not all(value_fits(data_type, v) for v in adapter.column_values(result, name)):
             fail(name, f"'{name}' holds values that do not fit {data_type.name}")
-        if adapter._exact_instance(result) is not None:
-            text = f"'{name}' has no exact {data_type.name} type on {type(adapter).__name__}, checked by value only"
+        if readback:
+            text = (
+                f"'{name}' does not resolve to an exact {data_type.name} type on {type(adapter).__name__}, "
+                "checked by value only"
+            )
             fail(name, text, DivergenceKind.GAP)
         elif adapter.capabilities.typed_columns:
             notes.append(
@@ -952,7 +956,7 @@ def check_feature_group_result_types(
     require_run: bool = False,
     requests: Sequence[str] | None = None,
 ) -> CheckResult:
-    """Run once and check only the run, outputs and result types."""
+    """Run once and check only the run, outputs and result types; no stale-record check."""
     check = "feature_group_result_types"
     if not isinstance(cls, type) or not is_nominal_subclass(cls, FeatureGroup):
         name = getattr(cls, "__name__", repr(cls))

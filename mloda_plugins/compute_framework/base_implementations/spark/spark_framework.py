@@ -1,4 +1,5 @@
 import logging
+from datetime import datetime
 from collections.abc import Sequence
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -14,11 +15,20 @@ from mloda.provider import OutputSchema
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
+from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import with_zone_metadata
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import pick_helper_column_name
 
 try:
     from pyspark.sql import SparkSession, DataFrame
-    from pyspark.sql.types import StructType, StructField, StringType, IntegerType, DoubleType, BooleanType
+    from pyspark.sql.types import (
+        StructType,
+        StructField,
+        StringType,
+        IntegerType,
+        DoubleType,
+        BooleanType,
+        TimestampType,
+    )
     import pyspark.sql.functions as F
     from pyspark.errors import AnalysisException
     from pyspark.errors import PySparkAttributeError
@@ -33,12 +43,23 @@ except ImportError:
     IntegerType = None
     DoubleType = None
     BooleanType = None
+    TimestampType = None
     F = None
 
 logger = logging.getLogger(__name__)
 
 _SPARK_MISSING_COLUMN_CONDITION = "UNRESOLVED_COLUMN"
 _SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
+
+
+def _aware_zone(values: Sequence[Any]) -> str | None:
+    """Return the zone name when every non-None value is a tz-aware datetime, else None."""
+    import pyarrow as pa
+
+    present = [v for v in values if v is not None]
+    if present and all(isinstance(v, datetime) and v.tzinfo is not None for v in present):
+        return str(pa.lib.tzinfo_to_string(present[0].tzinfo))
+    return None
 
 
 class SparkFramework(ComputeFramework):
@@ -258,8 +279,13 @@ class SparkFramework(ComputeFramework):
 
             # Create schema based on first values
             schema_fields = []
+            zones: dict[str, str] = {}
             for col_name, col_values in data.items():
-                if col_values:
+                zone = _aware_zone(col_values)
+                if zone:
+                    zones[col_name] = zone
+                    schema_fields.append(StructField(col_name, TimestampType(), True))
+                elif col_values:
                     spark_type = self._infer_spark_type(col_values[0])
                     schema_fields.append(StructField(col_name, spark_type, True))
                 else:
@@ -274,7 +300,7 @@ class SparkFramework(ComputeFramework):
                 for i in range(num_rows):
                     row = tuple(data[col][i] for col in data.keys())
                     rows.append(row)
-                return spark.createDataFrame(rows, schema)  # type: ignore[union-attr]
+                return with_zone_metadata(spark.createDataFrame(rows, schema), zones)  # type: ignore[union-attr]
             else:
                 return spark.createDataFrame([], schema)  # type: ignore[union-attr]
 
@@ -311,12 +337,20 @@ class SparkFramework(ComputeFramework):
 
         values = list(columns.values())
         fields = [StructField(rn, IntegerType(), False)]
+        zones: dict[str, str] = {}
         for name, column_values in columns.items():
-            fields.append(StructField(name, self._infer_spark_type(column_values[0] if column_values else ""), True))
+            zone = _aware_zone(column_values)
+            if zone:
+                zones[name] = zone
+                fields.append(StructField(name, TimestampType(), True))
+            else:
+                fields.append(
+                    StructField(name, self._infer_spark_type(column_values[0] if column_values else ""), True)
+                )
         new_data_df = spark.createDataFrame(
             [(i + 1, *(column[i] for column in values)) for i in range(len(values[0]))], StructType(fields)
         )
-        return existing_with_row_num.join(new_data_df, rn).orderBy(rn).drop(rn)
+        return with_zone_metadata(existing_with_row_num.join(new_data_df, rn).orderBy(rn).drop(rn), zones)
 
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, DataFrame):

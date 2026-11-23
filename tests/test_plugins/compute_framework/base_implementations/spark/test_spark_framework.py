@@ -22,6 +22,8 @@ ensure proper resource management across all test methods.
 
 import os
 from collections.abc import Iterator
+from datetime import UTC, datetime, timedelta, timezone
+from zoneinfo import ZoneInfo
 from types import SimpleNamespace
 from typing import Any
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
@@ -49,6 +51,10 @@ from mloda._testing.compute_framework.merge_suite import make_merge_link
 import logging
 
 logger = logging.getLogger(__name__)
+
+_NY = ZoneInfo("America/New_York")
+_PLUS_0530 = timezone(timedelta(hours=5, minutes=30))
+_NY_START = datetime(2023, 3, 12, 6, 30, tzinfo=UTC)
 
 # Import PySpark types for type checking (only if available)
 if PYSPARK_AVAILABLE:
@@ -126,6 +132,86 @@ class TestSparkFrameworkComputeFramework:
         # Compare the data (order might be different)
         assert len(result_data) == len(expected_data_collected)
         assert set(result.columns) == set(expected_data.columns)
+
+    @pytest.mark.parametrize(
+        ("values", "zone"),
+        [
+            pytest.param(
+                [_NY_START.astimezone(_NY), None, _NY_START.astimezone(_NY) + timedelta(hours=1)],
+                "America/New_York",
+                id="ny_middle_none",
+            ),
+            pytest.param(
+                [_NY_START.astimezone(_PLUS_0530), _NY_START.astimezone(_PLUS_0530) + timedelta(hours=1), None],
+                "+05:30",
+                id="fixed_offset",
+            ),
+            pytest.param(
+                [None, _NY_START.astimezone(_NY), _NY_START.astimezone(_NY) + timedelta(hours=1)],
+                "America/New_York",
+                id="ny_leading_none",
+            ),
+        ],
+    )
+    def test_transform_dict_with_aware_datetimes_keeps_instants_and_zone(
+        self, spark_session: Any, values: list[Any], zone: str
+    ) -> None:
+        framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        framework.set_framework_connection_object(spark_session)
+
+        frame = framework.transform({"id": [1, 2, 3], "t": values}, ["id", "t"])
+
+        self._assert_column(frame, "t", zone, values)
+
+    def test_transform_dict_with_aware_datetimes_in_non_utc_session(
+        self, spark_session: Any, spark_non_utc_timezone: Any
+    ) -> None:
+        framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        framework.set_framework_connection_object(spark_session)
+        values = [_NY_START.astimezone(_NY), None, _NY_START.astimezone(_NY) + timedelta(hours=1)]
+
+        frame = framework.transform({"id": [1, 2, 3], "t": values}, ["id", "t"])
+
+        self._assert_column(frame, "t", "America/New_York", values)
+
+    @pytest.mark.parametrize("route", ["append_columns", "positional"])
+    def test_append_aware_column_onto_zoned_frame_keeps_both_zones(self, spark_session: Any, route: str) -> None:
+        import pyarrow as pa
+
+        kolkata = pa.timestamp("us", tz="Asia/Kolkata")
+        base_values = [_NY_START, _NY_START + timedelta(hours=2), _NY_START + timedelta(hours=3)]
+        table = pa.table({"id": pa.array([1, 2, 3], pa.int64()), "base": pa.array(base_values, kolkata)})
+        values = [_NY_START.astimezone(_NY), None, _NY_START.astimezone(_NY) + timedelta(hours=1)]
+
+        with SparkAdapter() as adapter:
+            framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+            framework.set_framework_connection_object(adapter.connection)
+            base = adapter.from_arrow(table)
+            if route == "append_columns":
+                frame = framework._append_columns(base, {"t": values})
+            else:
+                framework.data = framework._pinned_frame = base
+                frame = framework.transform(values, ["t"])
+
+        self._assert_column(frame, "base", "Asia/Kolkata", base_values)
+        self._assert_column(frame, "t", "America/New_York", values)
+
+    @staticmethod
+    def _assert_column(frame: Any, name: str, zone: str, expected: list[Any]) -> None:
+        import pyarrow as pa
+
+        from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import (
+            SparkPyArrowTransformer,
+        )
+
+        result = SparkPyArrowTransformer.transform_fw_to_other_fw(frame)
+        order = result.column("id").to_pylist() if "id" in result.column_names else None
+        column = result.column(name)
+        assert result.schema.field(name).type == pa.timestamp("us", tz=zone)
+        instants = column.cast(pa.timestamp("us", tz="UTC")).to_pylist()
+        if order is not None:
+            instants = [instants[order.index(i)] for i in sorted(order)]
+        assert instants == [None if v is None else v.astimezone(UTC) for v in expected]
 
     def test_transform_invalid_data(self, spark_session: Any) -> None:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())

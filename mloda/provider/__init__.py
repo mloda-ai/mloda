@@ -54,7 +54,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
     credentials_scope,
     read_credential,
 )
-from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
+from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials, source_identity
 
 # Feature set (internal computation container)
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
@@ -191,6 +191,7 @@ __all__ = [
     "HashableDict",
     "get_all_subclasses",
     "scrub_credentials",
+    "source_identity",
     # Feature set
     "FeatureSet",
     # Input data

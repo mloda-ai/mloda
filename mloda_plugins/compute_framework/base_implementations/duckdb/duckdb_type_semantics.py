@@ -32,11 +32,15 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
 
     unit: str | None = None
     if "timestamp" in type_id:
-        if "timestamp_ns" in type_id:
+        # Match the unit on the type-id suffix rather than a ``timestamp_*``
+        # substring: a time-zone type such as ``timestamptz_ns`` carries the
+        # ``tz`` infix, so ``"timestamp_ns" in type_id`` is false and the unit
+        # used to fall through to the microsecond default.
+        if type_id.endswith("_ns"):
             unit = "ns"
-        elif "timestamp_ms" in type_id:
+        elif type_id.endswith("_ms"):
             unit = "ms"
-        elif "timestamp_s" in type_id:
+        elif type_id.endswith("_s"):
             unit = "s"
         else:
             unit = "us"

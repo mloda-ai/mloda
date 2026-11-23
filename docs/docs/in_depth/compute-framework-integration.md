@@ -284,6 +284,28 @@ An `Implementation[G]` serves both operation groups (`data` is the input frame) 
 - **Loading**: an operation group's implementations are found by import, so call `PluginLoader.all()` (or import the implementation modules) before running.
 - **Contract**: the loop's keyword-only callables are the group's contract and mypy checks the `aggregate`, `window`, `impute`, `clean`, `measure`, `scale`, `encode`, `run_pipeline`, `cluster`, `reduce`, `centrality` or `forecast` call inside each implementation's `calculate`.
 
+### Input conditions in divergence records
+
+Input conditions stay in `reason`: for example, "non-UTC input zone", "skips NaN"
+or "returns NULL on divide by zero". The design choice is to keep records as
+static plan metadata, scoped only by `subtypes` or `outputs`. Input rows are not
+available when implementations are ranked, and a condition name without a
+shared evaluator would imply a narrower guarantee than the planner and test kit
+provide. `applies_to` does not evaluate input conditions; `divergence_dicts`
+exports the reason as text, without a runtime predicate. A report's `(all)` scope
+therefore covers every subtype or output, even if the reason describes only
+certain inputs.
+
+The tradeoff also affects `check_feature_group_shape`: a matching `TYPE` or `GAP`
+record can turn type failures into notes outside the input condition described
+in its reason. For example, an unscoped record explaining a non-UTC zone
+difference can also cover type failures on naive and UTC inputs. The reason does
+not narrow this coverage or the implementation ranking described above.
+
+Use the narrowest applicable subtype or output scope, and add focused regression
+tests that assert values and types both inside and outside the stated input
+condition. A passing shape check alone does not verify that condition boundary.
+
 ### Choosing among implementations
 
 When several frameworks can run a step, the choice order is: frameworks the step must run on (pins, a single allowed framework), then an implementation that matches the reference contract before one that differs, then fewer conversions, then converting later, then the run's `compute_frameworks` list order, then the default order. The recorded reason says what happened:

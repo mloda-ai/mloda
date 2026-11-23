@@ -197,6 +197,7 @@ class TestSklearnArtifact:
         assert "feature_names" in loaded_artifact
         assert loaded_artifact["feature_names"] == ["feature1", "feature2"]
 
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX owner and mode check")
     def test_default_storage_is_private_user_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         """Default storage is a private per-user dir and never reads the shared temp dir."""
         import joblib
@@ -221,8 +222,8 @@ class TestSklearnArtifact:
 
         loaded = SklearnArtifact.custom_loader(features)
         assert loaded == {"private_key": {"value": 1}}
-        assert "planted" not in loaded
 
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX owner and mode check")
     def test_default_storage_refuses_shared_or_foreign_dir(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -241,8 +242,8 @@ class TestSklearnArtifact:
             SklearnArtifact.custom_saver(features, {"refuse_key": {"value": 2}})
 
         default_dir.chmod(0o700)
-        real_uid = os.getuid()
-        monkeypatch.setattr(os, "getuid", lambda: real_uid + 1)
+        real_uid = os.geteuid()
+        monkeypatch.setattr(os, "geteuid", lambda: real_uid + 1)
         with pytest.raises(PermissionError, match="not shared"):
             SklearnArtifact.custom_loader(features)
 

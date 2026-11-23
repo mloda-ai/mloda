@@ -44,7 +44,7 @@ class SklearnArtifact(BaseArtifact):
 
     ARTIFACT_STORAGE_PATH = "artifact_storage_path"
     ARTIFACT_STORAGE_PATH_SPEC = property_spec(
-        "Filesystem directory for persisting fitted sklearn artifacts; owned by SklearnArtifact, exposed by each sklearn feature group. Defaults to a private per-user cache dir ($XDG_CACHE_HOME or ~/.cache); set it where HOME is not writable.",
+        "Filesystem directory for persisting fitted sklearn artifacts; owned by SklearnArtifact, exposed by each sklearn feature group. Defaults to a private per-user cache dir ($XDG_CACHE_HOME or ~/.cache); set it where HOME is not writable. An explicit dir must be trusted and not shared, since every sklearn_artifact_*.joblib in it is loaded.",
         default=None,
     )
 
@@ -158,6 +158,7 @@ class SklearnArtifact(BaseArtifact):
         try:
             for key, artifact_data in artifact.items():
                 joblib.dump(artifact_data, temp_paths[key])
+            # Each file is replaced atomically; the set of keys is not.
             for key, temp_path in temp_paths.items():
                 os.replace(temp_path, final_paths[key])
         finally:
@@ -184,7 +185,7 @@ class SklearnArtifact(BaseArtifact):
         # POSIX only: Windows guards the per-user profile with ACLs.
         if os.name == "posix" and storage_dir.exists():
             dir_stat = storage_dir.stat()
-            if dir_stat.st_uid != os.getuid() or stat.S_IMODE(dir_stat.st_mode) & 0o077:
+            if dir_stat.st_uid != os.geteuid() or stat.S_IMODE(dir_stat.st_mode) & 0o077:
                 raise PermissionError(
                     f"Default sklearn artifact dir {storage_dir} must be owned by the current user and not shared; "
                     "fix its permissions or set artifact_storage_path"

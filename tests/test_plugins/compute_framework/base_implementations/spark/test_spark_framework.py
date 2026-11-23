@@ -723,3 +723,25 @@ def test_exact_column_data_type_jvm_free() -> None:
     frame = _jvm_free_spark_frame(_spark_types().TimestampType())
     assert framework._exact_column_data_type(frame, "c") == DataType.TIMESTAMP_MICROS_TZ
     assert framework._exact_column_data_type(frame, "nope") is None
+
+
+_NAIVE = datetime(2023, 3, 12, 6, 30)
+
+
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        pytest.param([None, _NY_START.astimezone(_NY), None], "America/New_York", id="ny"),
+        pytest.param([_NY_START.astimezone(_PLUS_0530)], "+05:30", id="fixed_offset"),
+        pytest.param([_NY_START, None], "UTC", id="utc"),
+        pytest.param([_NY_START, _NAIVE], None, id="mixed_aware_naive"),
+        pytest.param([_NAIVE, _NAIVE], None, id="naive"),
+        pytest.param([None, None], None, id="all_none"),
+        pytest.param([], None, id="empty"),
+        pytest.param([1, 2], None, id="ints"),
+    ],
+)
+def test_aware_zone(values: list[Any], expected: str | None) -> None:
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _aware_zone
+
+    assert _aware_zone(values) == expected

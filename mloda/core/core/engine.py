@@ -1028,6 +1028,9 @@ class Engine:
                 collection = {promoted if f is survivor else f for f in collection}
                 live[promoted.uuid] = survivor = promoted
             self.feature_group_collection[group_class] = {f for f in collection if f.uuid != host.uuid}
+            declared = self._declared_options_by_uuid.get(host.uuid)
+            if declared is not None and survivor.uuid in self._declared_options_by_uuid:
+                self._warn_on_default_equivalent_merge(host, declared, survivor)
             self._merge_host_into(survivor, host)
             survivor.framework_pinned = survivor.framework_pinned or host.framework_pinned
             if self.global_filter is not None:

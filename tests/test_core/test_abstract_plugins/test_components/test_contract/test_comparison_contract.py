@@ -337,6 +337,7 @@ class TestZoneName:
             (UTC, "UTC"),
             (timezone(timedelta(hours=5, minutes=30)), "+05:30"),
             (timezone(timedelta(hours=-8)), "-08:00"),
+            (timezone(-timedelta(hours=5, minutes=30, seconds=30)), "-05:30"),
             (_OddTz(), "odd-zone"),
         ],
     )
@@ -344,3 +345,9 @@ class TestZoneName:
         from mloda.core.abstract_plugins.components.contract.comparison_contract import zone_name
 
         assert zone_name(tz) == expected
+
+    def test_dateutil_tzutc_is_utc(self) -> None:
+        tz = pytest.importorskip("dateutil.tz")
+        from mloda.core.abstract_plugins.components.contract.comparison_contract import zone_name
+
+        assert zone_name(tz.tzutc()) == "UTC"

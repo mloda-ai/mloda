@@ -17,9 +17,9 @@ timezone-aware column (which clock applies, daylight saving lengths, the zone of
   `tz_policy`.
 - `ColumnSemantics` is the framework-neutral view of one column: `is_ordered`, `is_temporal`,
   `is_numeric`, `unit`, `is_tz_aware`, `tz`. `tz` is the zone name; giving it makes the column aware,
-  and `is_tz_aware=True` with `tz=None` means aware in an unknown zone. Each merge and filter engine (`BaseMergeEngine` /
-  `BaseFilterEngine` subclass) derives it from its framework's native schema via the
-  `_column_semantics(data, column)` hook.
+  and `is_tz_aware=True` with `tz=None` means aware in an unknown zone. Each merge and filter engine
+  (`BaseMergeEngine` / `BaseFilterEngine` subclass) derives it from its framework's native schema via
+  the `_column_semantics(data, column)` hook.
 - `ComparisonContract.validate(semantics, column)` checks a single column against the required
   dimensions. `require_compatible(left, right, ...)` checks two columns are comparable, using a
   **strict timezone model**: mixing timezone-aware and timezone-naive temporal columns is an error,
@@ -54,7 +54,7 @@ validation. All built-in backends below opt in.
 | duckdb | yes | yes (`TIMESTAMP WITH TIME ZONE`) | recorded zone, else unknown | partial |
 | sqlite | yes | only for native timestamp columns | native (Arrow type) | only for native timestamp columns |
 | spark | yes | only with a recorded zone | recorded zone from the transfer, else not reported | no |
-| python_dict | yes (value scan) | yes (value scan) | tzinfo of the first value | no |
+| python_dict | yes (value scan) | yes (value scan) | tzinfo of the first non-null value | no |
 
 ## Deferred
 

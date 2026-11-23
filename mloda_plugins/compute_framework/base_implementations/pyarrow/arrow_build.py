@@ -18,10 +18,14 @@ except ImportError:
 def arrow_array(values: Any, type: pa.DataType | None = None) -> pa.Array:
     """Build an array; a list of aware datetimes keeps its instants and the first value's zone."""
     if isinstance(values, (list, tuple)):
-        present = [v for v in values if v is not None]
-        if present and all(isinstance(v, datetime) and v.tzinfo is not None for v in present):
+        first = next((v for v in values if v is not None), None)
+        if (
+            isinstance(first, datetime)
+            and first.tzinfo is not None
+            and all(isinstance(v, datetime) and v.tzinfo is not None for v in values if v is not None)
+        ):
             if type is None:
-                type = pa.timestamp("us", tz=pa.lib.tzinfo_to_string(present[0].tzinfo))
+                type = pa.timestamp("us", tz=pa.lib.tzinfo_to_string(first.tzinfo))
             utc_values = [None if v is None else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
     return pa.array(values, type=type)

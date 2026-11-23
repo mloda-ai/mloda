@@ -29,8 +29,8 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
     is_ordered = is_numeric or is_temporal
 
     is_tz_aware = is_tz_aware_type(logical_type)
-    time_zone = getattr(data, "time_zone", None)
-    tz = time_zone(column) if is_tz_aware and time_zone is not None else None
+    time_zone = getattr(type(data), "time_zone", None)
+    tz = time_zone(data, column) if is_tz_aware and time_zone is not None else None
 
     unit: str | None = None
     if "timestamp" in type_id:

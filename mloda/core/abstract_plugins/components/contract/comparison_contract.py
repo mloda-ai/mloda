@@ -46,9 +46,11 @@ def zone_name(tz: tzinfo) -> str:
         return "UTC"
     offset = tz.utcoffset(None)
     if offset is not None:
-        minutes = int(offset.total_seconds() // 60)
-        sign = "+" if minutes >= 0 else "-"
-        hours, mins = divmod(abs(minutes), 60)
+        total = int(offset.total_seconds())
+        if total == 0 and tz.tzname(None) == "UTC":
+            return "UTC"
+        sign = "+" if total >= 0 else "-"
+        hours, mins = divmod(abs(total) // 60, 60)
         return f"{sign}{hours:02d}:{mins:02d}"
     return str(tz)
 

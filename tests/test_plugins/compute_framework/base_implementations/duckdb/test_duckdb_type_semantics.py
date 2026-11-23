@@ -70,3 +70,9 @@ class TestDuckdbZoneSemantics:
         sem = column_semantics(connection.sql("SELECT TIMESTAMP '2021-01-01 01:30:00' AS ts"), "ts")
         assert sem.is_tz_aware is False
         assert sem.tz is None
+
+    def test_column_named_time_zone_does_not_shadow_relation_attribute(self, connection: Any) -> None:
+        rel = connection.sql("SELECT TIMESTAMPTZ '2021-01-01 01:30:00+00' AS ts, 'x' AS time_zone")
+        sem = column_semantics(rel, "ts")
+        assert sem.is_tz_aware is True
+        assert sem.tz is None

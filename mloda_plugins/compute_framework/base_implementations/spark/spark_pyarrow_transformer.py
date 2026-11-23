@@ -1,10 +1,7 @@
 from typing import Any
 
 from mloda.provider import BaseTransformer
-from mloda_plugins.compute_framework.base_implementations.spark.spark_type_semantics import (
-    TIME_ZONE_METADATA_KEY,
-    time_zone,
-)
+from mloda_plugins.compute_framework.base_implementations.spark.spark_type_semantics import TIME_ZONE_METADATA_KEY
 
 try:
     from pyspark.sql import DataFrame, SparkSession
@@ -24,6 +21,8 @@ def with_time_zones(sdf: Any, schema: Any) -> Any:
     from pyspark.sql.types import TimestampType
 
     zones = {f.name: f.type.tz for f in schema if pa.types.is_timestamp(f.type) and f.type.tz}
+    if not zones:
+        return sdf
     columns = []
     for field in sdf.schema.fields:
         column = F.col("`" + field.name.replace("`", "``") + "`")
@@ -71,8 +70,8 @@ class SparkPyArrowTransformer(BaseTransformer):
         for efficient conversion.
         """
         table = data.toArrow()
-        for index, field in enumerate(table.schema):
-            zone = time_zone(data, field.name)
+        for index, (field, spark_field) in enumerate(zip(table.schema, data.schema.fields)):
+            zone = spark_field.metadata.get(TIME_ZONE_METADATA_KEY)
             if zone is not None and pa.types.is_timestamp(field.type):
                 table = table.set_column(
                     index, field.name, table.column(index).cast(pa.timestamp(field.type.unit, tz=zone))

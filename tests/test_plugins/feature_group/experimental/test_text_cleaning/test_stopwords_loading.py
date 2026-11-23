@@ -1,4 +1,4 @@
-"""Stopword loading preserves offline text cleaning in both backends."""
+"""Stopword loading keeps offline text cleaning in both backends and stays off plugin import."""
 
 import subprocess  # nosec B404
 import sys
@@ -80,7 +80,7 @@ def test_importing_the_backends_does_not_import_nltk() -> None:
         [sys.executable, "-c", _IMPORT_SCRIPT],
         capture_output=True,
         text=True,
-        timeout=60,
+        timeout=25,
     )
 
     assert result.returncode == 0, f"nltk must be imported lazily by the backends.\nstderr:\n{result.stderr}"

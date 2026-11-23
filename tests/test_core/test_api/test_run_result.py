@@ -54,10 +54,11 @@ from tests.test_core.test_abstract_plugins.test_multi_column_auto_resolution imp
     MultiColumnTestDataCreator,
 )
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
+from mloda.core.abstract_plugins.components.credential_handle import handle_option_keys
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
-from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsVaultFG
+from tests.helpers.credential_handle_stubs import HANDLE_KEY, ChsRawSecretFG, ChsVaultFG
 from tests.test_core.test_api.test_plan_info import PlanInfoPandasSource
 
 _PLUGINS = PluginCollector.enabled_feature_groups({PlanInfoPandasSource, AggregatedFeatureGroup})
@@ -1057,6 +1058,28 @@ class TestRunResultFrameFor:
             results.frame_for(feature(6))
         assert "chs_other" in str(no_match.value)
         assert secret not in str(no_match.value)
+        assert "'vault-main'" in str(no_match.value)
+
+        pasted = "sk-pasted-unregistered-9876"  # nosec B105
+        with pytest.raises(ValueError) as unregistered:
+            results.frame_for(Feature("chs_vault_a", options={HANDLE_KEY: pasted, "chs_other": 7}))
+        assert pasted not in str(unregistered.value)
+        assert "'***'" in str(unregistered.value)
+
+    def test_frame_for_miss_masks_a_raw_secret_under_a_key_another_group_declares_as_handle(self) -> None:
+        assert HANDLE_KEY in handle_option_keys()
+        raw = "sk-raw-secret-value-5555"  # nosec B105
+        results = mlodaAPI.run_all(
+            [Feature("chs_raw_a", options={HANDLE_KEY: raw, "chs_other": 5})],
+            compute_frameworks=[PandasDataFrame],
+            parallelization_modes={ParallelizationMode.SYNC},
+            plugin_collector=PluginCollector.enabled_feature_groups({ChsRawSecretFG}),
+        )
+
+        with pytest.raises(ValueError) as no_match:
+            results.frame_for(Feature("chs_raw_a", options={HANDLE_KEY: raw, "chs_other": 6}))
+        assert raw not in str(no_match.value)
+        assert "'***'" in str(no_match.value)
 
     def test_multi_output_feature_is_found_by_its_base_name(self) -> None:
         results = mlodaAPI.run_all(

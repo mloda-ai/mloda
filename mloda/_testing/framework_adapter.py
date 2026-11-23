@@ -6,6 +6,7 @@ import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
 from dataclasses import dataclass
+from datetime import UTC
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, ClassVar, Self
 
@@ -58,13 +59,18 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
     arrays = []
     for name, data_type in data.types.items():
         values = columns[name]
-        if name in overrides:
+        if data_type == DataType.TIMESTAMP_MICROS_TZ:
+            arrow_type = overrides.get(name)
+            if arrow_type is None:
+                arrow_type = (
+                    pa.infer_type(values) if any(v is not None for v in values) else pa.timestamp("us", tz="UTC")
+                )
+            if pa.types.is_timestamp(arrow_type):
+                # PYARROW_IGNORE_TIMEZONE ignores Python offsets, so give Arrow UTC instants with the original type.
+                values = [value.astimezone(UTC) if value is not None else None for value in values]
+            arrays.append(pa.array(values, type=arrow_type))
+        elif name in overrides:
             arrays.append(pa.array(values, type=overrides[name]))
-        elif data_type == DataType.TIMESTAMP_MICROS_TZ:
-            if all(v is None for v in values):
-                arrays.append(pa.array(values, type=pa.timestamp("us", tz="UTC")))
-            else:
-                arrays.append(pa.array(values))
         elif data_type == DataType.LIST:
             array = pa.array(values)
             if pa.types.is_null(array.type) or (

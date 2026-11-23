@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -383,6 +384,29 @@ def test_to_arrow_table_fixed_offset_timezone() -> None:
     assert field_type.unit == "us"
     assert field_type.tz == "+02:00"
     assert pa.types.is_timestamp(field_type)
+
+
+@pytest.mark.parametrize("ignore_timezone", [False, True], ids=["timezone-respected", "timezone-ignored"])
+@pytest.mark.parametrize("zone_name", ["America/New_York", "+05:30"], ids=["dst-zone", "subhour-offset"])
+@pytest.mark.parametrize("unit", [None, "ns"], ids=["inferred-type", "type-override"])
+def test_to_arrow_table_preserves_aware_instants_and_zone(
+    monkeypatch: pytest.MonkeyPatch, ignore_timezone: bool, zone_name: str, unit: str | None
+) -> None:
+    pa = pytest.importorskip("pyarrow")
+    from mloda._testing.framework_adapter import to_arrow_table
+
+    if ignore_timezone:
+        monkeypatch.setenv("PYARROW_IGNORE_TIMEZONE", "1")
+    else:
+        monkeypatch.delenv("PYARROW_IGNORE_TIMEZONE", raising=False)
+    zone = ZoneInfo(zone_name) if zone_name == "America/New_York" else timezone(timedelta(hours=5, minutes=30))
+    values = [None, datetime(2023, 3, 11, 12, tzinfo=zone), datetime(2023, 3, 12, 12, tzinfo=zone)]
+    arrow_types = {} if unit is None else {"t": pa.timestamp(unit, tz=zone_name)}
+
+    table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, values)}), arrow_types=arrow_types)
+
+    assert table.schema.field("t").type == pa.timestamp(unit or "us", tz=zone_name)
+    assert table["t"].to_pylist() == values
 
 
 def test_to_arrow_table_zero_row_timezone_is_utc() -> None:

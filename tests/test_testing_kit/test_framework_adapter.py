@@ -7,6 +7,7 @@ import sys
 from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -371,18 +372,42 @@ def test_pandas_object_date_has_no_exact_type() -> None:
     assert adapter.has_type(result, "d", DataType.DATE) is None
 
 
-def test_to_arrow_table_fixed_offset_timezone() -> None:
+@pytest.mark.parametrize("ignore_timezone", [None, "1"], ids=["unset", "pyarrow_ignore_timezone"])
+@pytest.mark.parametrize(
+    ("tz", "zone"),
+    [
+        (timezone(timedelta(hours=2)), "+02:00"),
+        (ZoneInfo("America/New_York"), "America/New_York"),
+        (timezone(timedelta(hours=5, minutes=30)), "+05:30"),
+    ],
+    ids=["+02:00", "new_york", "+05:30"],
+)
+@pytest.mark.parametrize("override", [False, True], ids=["inferred", "arrow_types_override"])
+def test_to_arrow_table_keeps_instants_and_zone(
+    monkeypatch: pytest.MonkeyPatch, tz: Any, zone: str, ignore_timezone: str | None, override: bool
+) -> None:
     pa = pytest.importorskip("pyarrow")
     from mloda._testing.framework_adapter import to_arrow_table
 
-    tz = timezone(timedelta(hours=2))
-    values = [datetime(2024, 1, 1, 12, 0, tzinfo=tz), None]
-    table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, values)}))
+    if ignore_timezone is None:
+        monkeypatch.delenv("PYARROW_IGNORE_TIMEZONE", raising=False)
+    else:
+        monkeypatch.setenv("PYARROW_IGNORE_TIMEZONE", ignore_timezone)
+    values = [datetime(2023, 3, 11, 12, 0, tzinfo=tz), datetime(2023, 3, 12, 12, 0, tzinfo=tz), None]
+    arrow_types = {"t": pa.timestamp("ns", tz=zone)} if override else None
+    table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, values)}), arrow_types=arrow_types)
 
     field_type = table.schema.field("t").type
-    assert field_type.unit == "us"
-    assert field_type.tz == "+02:00"
     assert pa.types.is_timestamp(field_type)
+    assert field_type.unit == ("ns" if override else "us")
+    assert field_type.tz == zone
+    if override:
+        assert field_type == arrow_types["t"]  # type: ignore[index]
+    read = table.column("t").to_pylist()
+    assert read[2] is None
+    for got, want in zip(read[:2], values[:2]):
+        assert got == want
+        assert got.utcoffset() == want.utcoffset()
 
 
 def test_to_arrow_table_zero_row_timezone_is_utc() -> None:

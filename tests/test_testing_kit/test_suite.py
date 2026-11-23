@@ -830,3 +830,51 @@ def test_unsupported_cases_are_validated_at_class_creation() -> None:
         class _BadReason(DataTypeValidatorSuite):
             adapter_class = PandasAdapter
             unsupported_cases = {"int8_col": (Cause.BACKEND, 5)}  # type: ignore[dict-item]
+
+
+ZONED_INNER = """
+import pyarrow as pa
+
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite
+from mloda._testing.framework_adapter import PyArrowAdapter
+
+
+class _UtcAdapter(PyArrowAdapter):
+    def from_arrow(self, table):
+        fields = [pa.field(f.name, pa.timestamp("us", tz="UTC")) if pa.types.is_timestamp(f.type) else f for f in table.schema]
+        return table.cast(pa.schema(fields))
+
+
+class _BoomAdapter(PyArrowAdapter):
+    def from_arrow(self, table):
+        raise ValueError("boom")
+
+
+class TestFaithful(DataTypeValidatorSuite):
+    adapter_class = PyArrowAdapter
+
+
+class TestUtcOnly(DataTypeValidatorSuite):
+    adapter_class = _UtcAdapter
+
+
+class TestBoom(DataTypeValidatorSuite):
+    adapter_class = _BoomAdapter
+"""
+
+
+def test_zoned_column_test_fails_hosts_that_lose_the_zone_or_raise_without_naming_it(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(test_inner=ZONED_INNER)
+
+    result = pytester.runpytest_inprocess(
+        "-p", "no:cacheprovider", "-p", "no:randomly", "--tb=short", "-rf", "-k", "zoned"
+    )
+
+    failed = [line for line in result.stdout.str().splitlines() if line.startswith("FAILED ")]
+    assert failed
+    assert all("TestFaithful" not in line for line in failed), failed
+    assert any("TestUtcOnly" in line for line in failed), failed
+    assert any("TestBoom" in line for line in failed), failed
+    assert result.parseoutcomes().get("passed", 0) > 0

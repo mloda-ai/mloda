@@ -133,6 +133,8 @@ Handing the same instants back under another zone is not one of them. Every cale
 gives a valid but different answer that nothing downstream can detect, so a
 [divergence record](divergence-records.md) does not cover it.
 
+`DataTypeValidatorSuite` checks this with a DST zone and a sub-hour offset.
+
 ## Core feature groups
 
 | Group | Application |

@@ -4,9 +4,9 @@ from __future__ import annotations
 
 import math
 import statistics
-from collections.abc import Callable, Mapping
+from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone, tzinfo
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
 import pytest
@@ -16,12 +16,8 @@ from mloda._testing.framework_adapter import FrameworkAdapter
 from mloda._testing.time_rule import WINDOW_CASES, WINDOW_FUNCTIONS, WindowCase
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
-from mloda.core.optional_dependency import require
 from mloda.provider import DefaultOptionKeys, FeatureSet, TimeRule
 from mloda.user import DataType, Feature, Options
-
-if TYPE_CHECKING:
-    import pyarrow as pa
 
 __all__ = ["TimeWindowRuleSuite"]
 
@@ -73,22 +69,14 @@ class TimeWindowRuleSuite(ComputeFrameworkSuite, suite_base=True):
     def _serves(self, adapter: FrameworkAdapter, framework: type[ComputeFramework]) -> bool:
         return True
 
-    def arrow_types(self, name: str) -> Mapping[str, pa.DataType] | None:
-        case = _CASES_BY_ID.get(name)
-        if case is not None and case.zone is not None:
-            return {_REFERENCE_TIME: require("pyarrow", "building Arrow test tables").timestamp("us", tz=case.zone)}
-        return super().arrow_types(name)
-
     @staticmethod
-    def _data(case: WindowCase, typed_columns: bool) -> TypedTestData:
+    def _data(case: WindowCase) -> TypedTestData:
         if case.zone is None:
             times = [datetime.fromisoformat(i) for i in case.instants]
             time_type = DataType.TIMESTAMP_MICROS
         else:
-            times = [datetime.fromisoformat(i).replace(tzinfo=UTC) for i in case.instants]
-            if not typed_columns:
-                zone = _zone_of(case.zone)
-                times = [t.astimezone(zone) for t in times]
+            zone = _zone_of(case.zone)
+            times = [datetime.fromisoformat(i).replace(tzinfo=UTC).astimezone(zone) for i in case.instants]
             time_type = DataType.TIMESTAMP_MICROS_TZ
         values = [10**i for i in range(len(times))]
         return TypedTestData({"value": (DataType.INT64, values), _REFERENCE_TIME: (time_type, times)})
@@ -97,8 +85,7 @@ class TimeWindowRuleSuite(ComputeFrameworkSuite, suite_base=True):
     @pytest.mark.parametrize("case", [pytest.param(c, id=c.id) for c in WINDOW_CASES])
     def test_window_follows_the_time_rule(self, adapter: FrameworkAdapter, case: WindowCase, function: str) -> None:
         self.skip_unsupported_case(case.id)
-        # UTC values: PYARROW_IGNORE_TIMEZONE drops tzinfo, and a UTC wall time cannot move; arrow_types pins the zone.
-        frame = self.frame(adapter, case.id, self._data(case, adapter.capabilities.typed_columns))
+        frame = self.frame(adapter, case.id, self._data(case))
         name = f"value__{function}_{case.size}_{case.unit}_window"
         rule_option = case.rule.as_option()
         options = Options(group={TimeRule.OPTION_KEY: rule_option}) if rule_option else Options()

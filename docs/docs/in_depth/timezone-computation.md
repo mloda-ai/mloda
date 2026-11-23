@@ -129,6 +129,8 @@ A transfer into or out of a compute framework keeps the instant and the zone. A 
   that zone and re-attach the zone on the way out;
 - reject the column with a `ValueError` that names the column and the zone.
 
+`DataTypeValidatorSuite` checks this with a DST zone and a sub-hour offset.
+
 Handing the same instants back under another zone is not one of them. Every calendar operation then
 gives a valid but different answer that nothing downstream can detect, so a
 [divergence record](divergence-records.md) does not cover it.

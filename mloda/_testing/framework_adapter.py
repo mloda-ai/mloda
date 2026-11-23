@@ -64,7 +64,11 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
             if all(v is None for v in values):
                 arrays.append(pa.array(values, type=pa.timestamp("us", tz="UTC")))
             else:
-                arrays.append(pa.array(values))
+                from datetime import UTC
+
+                zone = pa.lib.tzinfo_to_string(next(v for v in values if v is not None).tzinfo)
+                utc_values = [None if v is None else v.astimezone(UTC) for v in values]
+                arrays.append(pa.array(utc_values, type=pa.timestamp("us", tz=zone)))
         elif data_type == DataType.LIST:
             array = pa.array(values)
             if pa.types.is_null(array.type) or (
@@ -403,10 +407,13 @@ class PolarsAdapter(FrameworkAdapter):
         return PolarsDataFrame
 
     def from_arrow(self, table: pa.Table) -> Any:
-        pl = require("polars", "building polars test frames")
+        require("polars", "building polars test frames")
         require("pyarrow", "building polars test frames")
+        from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
+            PolarsPyArrowTransformer,
+        )
 
-        return pl.from_arrow(table)
+        return PolarsPyArrowTransformer.transform_other_fw_to_fw(table)
 
     def duplicate_column_frame(self, first_type: DataType, second_type: DataType) -> Any:
         raise self._cannot_hold("a frame with duplicate column names")

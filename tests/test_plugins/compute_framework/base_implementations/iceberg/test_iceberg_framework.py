@@ -295,6 +295,7 @@ class TestIcebergDtypeExtractionPyArrowSuite(DtypeExtractionSuite):
 _NO_UNSIGNED = (Cause.BACKEND, "Iceberg has no unsigned integer types")
 _NO_SMALL_INT = (Cause.BACKEND, "Iceberg has no 8-bit or 16-bit integer type")
 _NO_NS = (Cause.BACKEND, "Iceberg does not support nanosecond timestamp precision")
+_UTC_ONLY = (Cause.BACKEND, "Iceberg timestamptz holds UTC only; pyiceberg rejects other zones at write")
 _ONE_TIMESTAMP = "Iceberg has only one TimestampType (microseconds per spec); millisecond cannot be expressed"
 
 
@@ -309,6 +310,8 @@ class TestIcebergDataTypeValidatorSuite(DataTypeValidatorSuite):
         "uint32_col": _NO_UNSIGNED,
         "timestamp_ns_col": _NO_NS,
         "timestamp_ns_tz_col": _NO_NS,
+        "timestamp_us_dst_col": _UTC_ONLY,
+        "timestamp_us_sub_hour_col": _UTC_ONLY,
     }
     switched_off = {
         "test_timestamp_ms_column_strict_ms_passes": Cause.BACKEND,

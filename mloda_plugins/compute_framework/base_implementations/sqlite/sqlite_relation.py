@@ -118,7 +118,13 @@ def _values_for_arrow_type(values: list[Any], arrow_type: pa.DataType) -> list[A
     if pa.types.is_boolean(arrow_type):
         return [None if value is None else bool(value) for value in values]
     if pa.types.is_timestamp(arrow_type):
-        return [datetime.datetime.fromisoformat(value) if isinstance(value, str) else value for value in values]
+        parsed = [datetime.datetime.fromisoformat(value) if isinstance(value, str) else value for value in values]
+        if arrow_type.tz is None:
+            return parsed
+        return [
+            value.astimezone(datetime.UTC) if isinstance(value, datetime.datetime) and value.tzinfo else value
+            for value in parsed
+        ]
     if pa.types.is_date(arrow_type):
         return [datetime.date.fromisoformat(value) if isinstance(value, str) else value for value in values]
     return values

@@ -3,9 +3,10 @@
 from __future__ import annotations
 
 from collections.abc import Callable, Mapping
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from decimal import Decimal
 from typing import TYPE_CHECKING, Any
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -63,6 +64,13 @@ _CASES: dict[str, tuple[DataType, tuple[Any, ...]]] = {
     "list_str_col": (DataType.LIST, (["a"], ["b", "c"], [])),
     "list_struct_col": (DataType.LIST, ([{"x": 1}], [{"x": 2}, {"x": 3}], [])),
     "list_fixed_col": (DataType.LIST, ([1, 2], [3, 4], [5, 6])),
+}
+
+# Zoned case id -> (zone, zone string, expected instants); the aware values are built in that zone, no Arrow override.
+_INSTANTS_UTC: tuple[datetime, ...] = (datetime(2023, 3, 11, 17, tzinfo=UTC), datetime(2023, 3, 12, 16, tzinfo=UTC))
+_ZONED_CASES: dict[str, tuple[tzinfo, str, tuple[datetime | None, ...]]] = {
+    "timestamp_us_dst_col": (ZoneInfo("America/New_York"), "America/New_York", (*_INSTANTS_UTC, None)),
+    "timestamp_us_sub_hour_col": (timezone(timedelta(hours=5, minutes=30)), "+05:30", (*_INSTANTS_UTC, None)),
 }
 
 # Cases whose Arrow type differs from the declared type's own; the others get a type readback.
@@ -203,7 +211,7 @@ class DataTypeValidatorSuite(ComputeFrameworkSuite, suite_base=True):
     """Contract tests of DataTypeValidator on framework-native frames; every available framework is served."""
 
     aspect = "datatype validator"
-    case_ids = frozenset(_CASES)
+    case_ids = frozenset(_CASES) | frozenset(_ZONED_CASES)
 
     def _serves(self, adapter: FrameworkAdapter, framework: type[ComputeFramework]) -> bool:
         return True
@@ -327,3 +335,38 @@ class DataTypeValidatorSuite(ComputeFrameworkSuite, suite_base=True):
                 Feature.timestamp_millis_of("timestamp_us_col"),
                 strict=True,
             )
+
+    @pytest.mark.parametrize("ignore_timezone", [None, "1"], ids=["unset", "pyarrow_ignore_timezone"])
+    @pytest.mark.parametrize("case_id", list(_ZONED_CASES))
+    def test_zoned_column_keeps_instants_and_zone(
+        self,
+        adapter: FrameworkAdapter,
+        framework_instance: Any,
+        monkeypatch: pytest.MonkeyPatch,
+        case_id: str,
+        ignore_timezone: str | None,
+    ) -> None:
+        """Instants and zone survive, or the build raises a ValueError naming the column and the zone."""
+        self.skip_unsupported_case(case_id)
+        if ignore_timezone is None:
+            monkeypatch.delenv("PYARROW_IGNORE_TIMEZONE", raising=False)
+        else:
+            monkeypatch.setenv("PYARROW_IGNORE_TIMEZONE", ignore_timezone)
+        zone, zone_name, instants = _ZONED_CASES[case_id]
+        values = [None if v is None else v.astimezone(zone) for v in instants]
+        data = TypedTestData({case_id: (DataType.TIMESTAMP_MICROS_TZ, values)})
+        try:
+            frame = self.frame(adapter, case_id, data)
+        except ValueError as error:
+            assert case_id in str(error)
+            assert zone_name in str(error)
+            return
+        read = self.column_values(adapter, frame, case_id)
+        assert len(read) == len(values)
+        for got, want in zip(read, values):
+            if want is None:
+                assert got is None
+            else:
+                assert got == want
+                assert got.utcoffset() == want.utcoffset()
+        assert framework_instance._extract_column_data_type(frame, case_id) == DataType.TIMESTAMP_MICROS_TZ

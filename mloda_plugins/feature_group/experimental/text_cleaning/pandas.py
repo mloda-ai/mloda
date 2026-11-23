@@ -6,14 +6,6 @@ import string
 
 import unicodedata
 
-try:
-    import nltk
-
-    nltk_available = True
-except ImportError:
-    nltk = None
-    nltk_available = False
-
 
 try:
     import pandas as pd
@@ -144,11 +136,9 @@ class PandasTextCleaning(Implementation[TextCleaningFeatureGroup]):
         Returns:
             The text with stopwords removed
         """
-        if not nltk_available:
-            # If NLTK is not available, return the original text
-            return text
-
         try:
+            import nltk  # imported here: nltk pulls in scipy, which plugin import should not pay
+
             stop_words = TextCleaningFeatureGroup._load_english_stopwords(nltk)
 
             def remove_stopwords_from_text(input_str: str) -> str:

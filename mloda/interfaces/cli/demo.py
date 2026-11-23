@@ -1,10 +1,13 @@
-"""The bundled ``mloda demo``: the README first example on in-memory data, with its resolved plan."""
+"""The bundled ``mloda demo``: the README first example on in-memory data, with its resolved plan.
+
+Data, result and plan print as Markdown pipe tables.
+"""
 
 from collections.abc import Mapping, Sequence
 from typing import Any, TextIO
 
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
-from mloda.core.api.text_summary import plan_detail, result_and_plan, step_lines, table_lines
+from mloda.core.api.text_summary import plan_cells, plan_table, result_and_plan, table_lines
 from mloda.interfaces.service.config import Settings
 from mloda.user import PluginCollector
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -24,9 +27,8 @@ COLLECTOR = PluginCollector.enabled_feature_groups({ApiDataFG, AggregatedFeature
 README_URL = "https://github.com/mloda-ai/mloda#run-it"
 
 
-def _step_line(step: Mapping[str, Any]) -> tuple[int, str, str]:
-    label = step["feature_group"] if step["kind"] == "compute" else step["kind"]
-    detail = plan_detail(
+def _step_cells(step: Mapping[str, Any]) -> tuple[int, tuple[str, str, str]]:
+    cells = plan_cells(
         step["kind"],
         step["feature_group"],
         step["source_feature_group"],
@@ -35,12 +37,12 @@ def _step_line(step: Mapping[str, Any]) -> tuple[int, str, str]:
         step["source"],
         step["inputs"],
     )
-    return step["step"], label, detail
+    return step["step"], cells
 
 
 def plan_lines(steps: Sequence[Mapping[str, Any]]) -> list[str]:
-    """One aligned line per plan step."""
-    return step_lines(_step_line(step) for step in steps)
+    """The plan as one pipe table; empty for an empty plan."""
+    return plan_table(_step_cells(step) for step in steps)
 
 
 def _table_text(table: Mapping[str, Any]) -> str:
@@ -48,9 +50,18 @@ def _table_text(table: Mapping[str, Any]) -> str:
     return "\n".join(table_lines(names, ([row.get(name) for name in names] for row in table["rows"])))
 
 
+def _request_text() -> str:
+    data = [
+        f"Data ({alias})\n" + "\n".join(table_lines(list(columns), zip(*columns.values())))
+        for alias, columns in REQUEST["data"].items()
+    ]
+    return "\n\n".join([*data, "Request\n" + ", ".join(REQUEST["features"])])
+
+
 def write_demo(explained: Mapping[str, Any], ran: Mapping[str, Any], out: TextIO) -> None:
-    """Print the run result tables, the resolved plan and the onward lines."""
+    """Print the input data and request, the run result tables, the resolved plan and the onward lines."""
     tables = [_table_text(table) for table in ran["tables"]]
+    out.write(_request_text() + "\n\n")
     out.write(result_and_plan(tables, plan_lines(explained["steps"])) + "\n\nNext\n")
     out.write(f"Edit the README example: {README_URL}\n")
     out.write('DataFrames: pip install "mloda[pandas]"\n')

@@ -9,7 +9,13 @@
 
 [Documentation](https://mloda-ai.github.io/mloda/) · [Plugin guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) · [Website](https://mloda.ai)
 
-You name the features you want. mloda finds the plugins that produce them, orders them, runs them, and shows you the plan it used. The same request runs on plain Python, pandas, Polars, PyArrow and more.
+## Why it exists
+
+You look after the customer data at your company. A churn model needs each customer's income, the total income and the average age. The weekly report needs the same numbers. Now your team is building an agent that answers questions about customers, and it needs them too.
+
+Each of them ends up with its own copy of the logic: a pandas cell in the notebook, a loop in the service, a SQL snippet in the agent's prompt. The copies drift apart, and when a number looks wrong, nobody can say which code produced it.
+
+With mloda the logic lives in one place, a plugin. Every consumer asks for the result by name, for example `age__avg_aggr`. mloda finds the plugins that produce it, runs them in the right order on the backend you choose, and shows the plan it used. The notebook, the service and the agent send the same request and get the same answer.
 
 ## See it
 
@@ -19,13 +25,13 @@ Needs [uv](https://docs.astral.sh/uv/). Nothing is added to your project: `uvx` 
 uvx mloda@latest demo
 ```
 
-![mloda demo: the result tables and the two-step plan mloda resolved](https://raw.githubusercontent.com/mloda-ai/mloda/main/docs/assets/mloda-demo.gif)
+![mloda demo: the customer data, the request, the result tables and the two-step plan mloda resolved](https://raw.githubusercontent.com/mloda-ai/mloda/main/docs/assets/mloda-demo.gif)
 
-It prints the result, then the plan: the two steps mloda chose to make the features you named.
+It runs the story above on five customers: the data you have, the four features you ask for, the tables mloda returns, and the plan it used to make them.
 
 ## Run it
 
-Install mloda, paste the example into a file and run it. Then change the feature names or the data and run it again.
+The same request in your own code. Install mloda, paste the example into a file and run it. Then change the feature names or the data and run it again.
 
 ```bash
 pip install mloda
@@ -49,23 +55,27 @@ print(result.summary())
 
 ```text
 Result
-customer_id  income
-C001         50000
-C002         75000
-C003         None
-C004         60000
-C005         85000
+| customer_id | income |
+|-------------|--------|
+| C001        | 50000  |
+| C002        | 75000  |
+| C003        | None   |
+| C004        | 60000  |
+| C005        | 85000  |
 
-age__avg_aggr  income__sum_aggr
-37.5           270000
-37.5           270000
-37.5           270000
-37.5           270000
-37.5           270000
+| age__avg_aggr | income__sum_aggr |
+|---------------|------------------|
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
 
 Plan
-step 1  ApiDataFG               age, customer_id, income  (source SampleData)
-step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
+| step | plugin                 | features                        | from              |
+|------|------------------------|---------------------------------|-------------------|
+| 1    | ApiDataFG              | age, customer_id, income        | source SampleData |
+| 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |
 ```
 
 Two of the four features do not exist in the data. The plan shows how mloda made them:
@@ -79,14 +89,14 @@ Change a name and run again: `income__max_aggr` gives the maximum, `age__count_a
 
 ## Using an agent?
 
-Claude Code, Claude Desktop, Cursor, Codex, or an agent you build: give it these rules before it writes mloda code. Paste them into `AGENTS.md`, `CLAUDE.md` or your agent's system prompt.
+The agent in the story should not carry its own copy of the logic either. It asks mloda by name, like every other consumer. Claude Code, Claude Desktop, Cursor, Codex, or an agent you build: give it these rules before it writes mloda code. Paste them into `AGENTS.md`, `CLAUDE.md` or your agent's system prompt.
 
 ```markdown
 mloda rules
 - Import from `mloda.user`, not `import mloda`.
 - Call `PluginLoader.all()` once before the first request.
 - A bare install runs `compute_frameworks=["PythonDictFramework"]`. pandas needs `pip install "mloda[pandas]"`.
-- Derived features are named `column__operation_group`, for example `income__sum_aggr`.
+- Derived features are named `column__operation_suffix`, for example `income__sum_aggr`.
 - Check a name before running it: `resolve_feature("income__sum_aggr")` from `mloda.user`.
 ```
 
@@ -94,7 +104,7 @@ Writing a plugin? Point the agent at the [plugin guides](https://github.com/mlod
 
 ## Your own FeatureGroup
 
-A FeatureGroup is a class that names the feature it provides, declares what it needs, and computes it. Define one, then request it by name like any other feature.
+This is how the logic gets into one place. A FeatureGroup is a class that names the feature it provides, declares what it needs, and computes it. Define it once, then every consumer requests it by name like any other feature.
 
 ```python
 from mloda.provider import FeatureGroup
@@ -123,30 +133,34 @@ print(result.summary())
 
 ```text
 Result
-income
-50000
-75000
-None
-60000
-85000
+| income |
+|--------|
+| 50000  |
+| 75000  |
+| None   |
+| 60000  |
+| 85000  |
 
-income_after_tax
-35000
-52500
-None
-42000
-59500
+| income_after_tax |
+|------------------|
+| 35000            |
+| 52500            |
+| None             |
+| 42000            |
+| 59500            |
 
 Plan
-step 1  ApiDataFG       income  (source SampleData)
-step 2  IncomeAfterTax  income_after_tax  (from income)
+| step | plugin         | features         | from              |
+|------|----------------|------------------|-------------------|
+| 1    | ApiDataFG      | income           | source SampleData |
+| 2    | IncomeAfterTax | income_after_tax | income            |
 ```
 
 Three methods: the name it answers to, the input it needs, the computation. mloda read `income` from your data and ran your class after it. Any FeatureGroup your code imports is available to `run_all`; the [plugin guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) cover naming patterns, options, joins and the rest.
 
 ## Same request, other backend
 
-The request does not change when the backend does. Install one and name it:
+The notebook in the story works in pandas, the service in plain Python. The request does not change when the backend does. Install one and name it:
 
 ```bash
 pip install "mloda[pandas]"
@@ -185,13 +199,15 @@ Result
 4           37.5          270000.0
 
 Plan
-step 1  ApiDataFG               age, customer_id, income  (source SampleData)
-step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
+| step | plugin                 | features                        | from              |
+|------|------------------------|---------------------------------|-------------------|
+| 1    | ApiDataFG              | age, customer_id, income        | source SampleData |
+| 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |
 ```
 
 Same features, same plan, pandas DataFrames in the result. PyArrow (`mloda[pyarrow]`, `PyArrowTable`) works the same way.
 
-## Why mloda
+## When mloda fits
 
 | You want to | mloda gives you |
 |---|---|

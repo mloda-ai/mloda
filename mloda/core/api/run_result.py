@@ -18,7 +18,7 @@ from mloda.core.abstract_plugins.components.credential_handle import (
     handle_option_keys,
 )
 from mloda.core.api.plan_info import PlanStep, _key_id, match_digests, snapshot_group
-from mloda.core.api.text_summary import plan_detail, result_and_plan, step_lines, table_lines
+from mloda.core.api.text_summary import plan_cells, plan_table, result_and_plan, table_lines
 
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature import Feature
@@ -172,12 +172,11 @@ class RunResult(_RunOutcomeFields, list[Any]):
         )
 
     def summary(self, max_rows: int = 20) -> str:
-        """The frames as aligned text tables, then the resolved plan, in the layout ``mloda demo`` uses."""
+        """The frames as Markdown pipe tables, then the resolved plan table, in the layout ``mloda demo`` uses."""
         if max_rows < 1:
             raise ValueError(f"max_rows must be at least 1, got {max_rows}")
         tables = [_frame_text(frame, max_rows) for frame in self]
-        steps = step_lines((n, _step_label(step), _step_detail(step)) for n, step in enumerate(self._plan, 1))
-        return result_and_plan(tables, steps)
+        return result_and_plan(tables, plan_table((n, _step_cells(step)) for n, step in enumerate(self._plan, 1)))
 
 
 def _frame_text(frame: Any, max_rows: int) -> str:
@@ -188,15 +187,10 @@ def _frame_text(frame: Any, max_rows: int) -> str:
     return "\n".join(table_lines([str(name) for name in frame], shown, total - len(shown)))
 
 
-def _step_label(step: PlanStep) -> str:
-    name = step.feature_group_name if step.step_kind == "compute" else None
-    return name or step.step_kind
-
-
-def _step_detail(step: PlanStep) -> str:
+def _step_cells(step: PlanStep) -> tuple[str, str, str]:
     identity = step.data_access_identity or ""
     source = identity.removeprefix("api_data:") if identity.startswith("api_data:") else None
-    return plan_detail(
+    return plan_cells(
         step.step_kind,
         step.feature_group_name,
         step.source_feature_group_name,

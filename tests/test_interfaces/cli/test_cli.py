@@ -211,7 +211,11 @@ def _assert_no_withheld_values(outcome: _Outcome) -> None:
         assert customer_id not in outcome.err
 
 
-EXPLAIN_TEXT = "step 1  CsvFG  customer_id, income, segment  (source sales)\n"
+EXPLAIN_TEXT = """\
+| step | plugin | features                     | from         |
+|------|--------|------------------------------|--------------|
+| 1    | CsvFG  | customer_id, income, segment | source sales |
+"""
 
 
 class TestExplainParity:
@@ -228,7 +232,7 @@ class TestExplainParity:
         assert outcome.json() == _expected_explain(config)
         assert "plan_id" in outcome.json()
 
-    def test_text_format_prints_one_line_per_step(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+    def test_text_format_prints_the_plan_table(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
         config = _config(tmp_path)
         _elsewhere(tmp_path, monkeypatch)
 
@@ -1041,24 +1045,40 @@ class TestUsage:
 
 
 DEMO_STDOUT = """\
-Result
-customer_id  income
-C001         50000
-C002         75000
-C003         None
-C004         60000
-C005         85000
+Data (SampleData)
+| customer_id | age  | income |
+|-------------|------|--------|
+| C001        | 25   | 50000  |
+| C002        | None | 75000  |
+| C003        | 45   | None   |
+| C004        | 30   | 60000  |
+| C005        | 50   | 85000  |
 
-income__sum_aggr  age__avg_aggr
-270000            37.5
-270000            37.5
-270000            37.5
-270000            37.5
-270000            37.5
+Request
+customer_id, income, income__sum_aggr, age__avg_aggr
+
+Result
+| customer_id | income |
+|-------------|--------|
+| C001        | 50000  |
+| C002        | 75000  |
+| C003        | None   |
+| C004        | 60000  |
+| C005        | 85000  |
+
+| income__sum_aggr | age__avg_aggr |
+|------------------|---------------|
+| 270000           | 37.5          |
+| 270000           | 37.5          |
+| 270000           | 37.5          |
+| 270000           | 37.5          |
+| 270000           | 37.5          |
 
 Plan
-step 1  ApiDataFG               age, customer_id, income  (source SampleData)
-step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
+| step | plugin                 | features                        | from              |
+|------|------------------------|---------------------------------|-------------------|
+| 1    | ApiDataFG              | age, customer_id, income        | source SampleData |
+| 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |
 
 Next
 Edit the README example: https://github.com/mloda-ai/mloda#run-it
@@ -1096,10 +1116,15 @@ class TestDemo:
         ]
 
         assert demo.plan_lines(steps) == [
-            "step 1  CsvFG      customer_id, income  (source sales)",
-            "step 2  transform  CsvFG -> JsonFG",
-            "step 3  join       CsvFG + JsonFG  (inner)",
+            "| step | plugin    | features            | from                   |",
+            "|------|-----------|---------------------|------------------------|",
+            "| 1    | CsvFG     | customer_id, income | source sales           |",
+            "| 2    | transform |                     | CsvFG -> JsonFG        |",
+            "| 3    | join      |                     | CsvFG + JsonFG (inner) |",
         ]
+
+    def test_plan_lines_of_an_empty_plan_are_empty(self) -> None:
+        assert demo.plan_lines([]) == []
 
     @pytest.mark.parametrize(
         ("toml", "env"),

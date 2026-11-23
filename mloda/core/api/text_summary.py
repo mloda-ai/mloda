@@ -1,24 +1,33 @@
-"""Plain-text rendering of result tables and plan steps, shared by ``RunResult.summary`` and ``mloda demo``."""
+"""GitHub-flavored Markdown pipe tables of result frames and plan steps.
+
+Shared by ``RunResult.summary`` and ``mloda demo``.
+"""
 
 from collections.abc import Iterable, Sequence
 from typing import Any
 
+PLAN_HEADER = ("step", "plugin", "features", "from")
 
-def aligned(rows: Sequence[Sequence[str]]) -> list[str]:
-    """Left-align each column to its widest cell, two spaces between columns, trailing whitespace stripped."""
-    widths = [max(len(cell) for cell in column) for column in zip(*rows, strict=True)]
-    return ["  ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True)).rstrip() for row in rows]
+
+def pipe_table(rows: Sequence[Sequence[str]]) -> list[str]:
+    """Header row, dash separator, then the rest; ``|`` escaped, each column padded to its widest cell."""
+    cells = [[cell.replace("|", "\\|") for cell in row] for row in rows]
+    widths = [max(len(cell) for cell in column) for column in zip(*cells, strict=True)]
+    lines = [
+        "| " + " | ".join(cell.ljust(width) for cell, width in zip(row, widths, strict=True)) + " |" for row in cells
+    ]
+    return [lines[0], "|" + "|".join("-" * (width + 2) for width in widths) + "|", *lines[1:]]
 
 
 def table_lines(names: Sequence[str], rows: Iterable[Sequence[Any]], hidden_rows: int = 0) -> list[str]:
-    """Header plus ``str`` cells for every row given; ``hidden_rows > 0`` appends a ``... and N more rows`` line."""
-    lines = aligned([list(names), *([str(value) for value in row] for row in rows)])
+    """Pipe table of ``str`` cells for every row given; ``hidden_rows > 0`` appends a ``... and N more rows`` line."""
+    lines = pipe_table([list(names), *([str(value) for value in row] for row in rows)])
     if hidden_rows > 0:
         lines.append(f"... and {hidden_rows} more rows")
     return lines
 
 
-def plan_detail(
+def plan_cells(
     kind: str,
     feature_group: str | None,
     source_feature_group: str | None,
@@ -26,23 +35,20 @@ def plan_detail(
     features: Sequence[str],
     source: str | None,
     inputs: Sequence[str],
-) -> str:
-    """Transform: ``Source -> Dest``; join: ``Left + Right  (type)``; compute: names, then source alias or inputs."""
+) -> tuple[str, str, str]:
+    """The ``plugin``, ``features`` and ``from`` cells of one plan step."""
     if kind == "transform":
-        return f"{source_feature_group} -> {feature_group}"
+        return "transform", "", f"{source_feature_group} -> {feature_group}"
     if kind == "join":
-        return f"{feature_group} + {source_feature_group}  ({join_type})"
-    detail = ", ".join(features)
-    if source:
-        return f"{detail}  (source {source})"
-    if inputs:
-        return f"{detail}  (from {', '.join(inputs)})"
-    return detail
+        return "join", "", f"{feature_group} + {source_feature_group} ({join_type})"
+    origin = f"source {source}" if source else ", ".join(inputs)
+    return feature_group or kind, ", ".join(features), origin
 
 
-def step_lines(steps: Iterable[tuple[int, str, str]]) -> list[str]:
-    """One aligned ``step N  label  detail`` line per (number, label, detail)."""
-    return aligned([[f"step {number}", label, detail] for number, label, detail in steps])
+def plan_table(steps: Iterable[tuple[int, Sequence[str]]]) -> list[str]:
+    """One ``step | plugin | features | from`` row per (number, cells); no lines for an empty plan."""
+    rows = [[str(number), *cells] for number, cells in steps]
+    return pipe_table([list(PLAN_HEADER), *rows]) if rows else []
 
 
 def result_and_plan(tables: Sequence[str], steps: Sequence[str]) -> str:

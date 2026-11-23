@@ -1,8 +1,8 @@
 """Tests for ``RunResult.summary``: the frames and the resolved plan as plain text.
 
-Contract under test: the format ``mloda demo`` prints (``Result`` tables, then ``Plan`` lines) minus its
-``Next`` section. Mapping frames render as aligned tables truncated to ``max_rows``, other frames via
-``str``, the plan as numbered, aligned step lines; the string has no trailing newline.
+Contract: the ``Result``/``Plan`` part of ``mloda demo``. Mapping frames render as GitHub-flavored
+Markdown pipe tables truncated to ``max_rows``, other frames via ``str``, the plan as one
+``step | plugin | features | from`` pipe table; the string has no trailing newline.
 """
 
 import inspect
@@ -31,23 +31,27 @@ _REGISTERED = (PythonDictFramework, PythonDictAggregation)
 
 README_SUMMARY = """\
 Result
-customer_id  income
-C001         50000
-C002         75000
-C003         None
-C004         60000
-C005         85000
+| customer_id | income |
+|-------------|--------|
+| C001        | 50000  |
+| C002        | 75000  |
+| C003        | None   |
+| C004        | 60000  |
+| C005        | 85000  |
 
-age__avg_aggr  income__sum_aggr
-37.5           270000
-37.5           270000
-37.5           270000
-37.5           270000
-37.5           270000
+| age__avg_aggr | income__sum_aggr |
+|---------------|------------------|
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
 
 Plan
-step 1  ApiDataFG               age, customer_id, income  (source SampleData)
-step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)"""
+| step | plugin                 | features                        | from              |
+|------|------------------------|---------------------------------|-------------------|
+| 1    | ApiDataFG              | age, customer_id, income        | source SampleData |
+| 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |"""
 
 
 class _Frame:
@@ -86,28 +90,35 @@ class TestSummaryOfTheReadmeExample:
 
 
 class TestMappingFrames:
-    """A dict-of-lists frame renders as an aligned table."""
+    """A dict-of-lists frame renders as a GFM pipe table."""
 
-    def test_none_renders_as_none_and_columns_align(self) -> None:
+    def test_none_renders_as_none_and_columns_pad_to_the_widest_cell(self) -> None:
         results = _hand_built([{"a": [1, None], "bb": ["x", "yy"]}])
 
-        assert results.summary() == "Result\na     bb\n1     x\nNone  yy\n\nPlan"
+        assert results.summary() == ("Result\n| a    | bb |\n|------|----|\n| 1    | x  |\n| None | yy |\n\nPlan")
+
+    def test_a_pipe_in_a_header_or_cell_is_escaped_and_counted_in_the_width(self) -> None:
+        results = _hand_built([{"a|b": ["x|y", "z"]}])
+
+        assert results.summary() == "Result\n| a\\|b |\n|------|\n| x\\|y |\n| z    |\n\nPlan"
 
     def test_frames_are_separated_by_one_blank_line_in_list_order(self) -> None:
         results = _hand_built([{"a": [1]}, _Frame()])
 
-        assert results.summary() == "Result\na\n1\n\n<frame as text>\n\nPlan"
+        assert results.summary() == "Result\n| a |\n|---|\n| 1 |\n\n<frame as text>\n\nPlan"
 
     def test_rows_beyond_the_default_max_rows_collapse_into_a_remainder_line(self) -> None:
         results = _hand_built([{"n": list(range(25))}])
 
-        expected = "Result\nn\n" + "\n".join(str(i) for i in range(20)) + "\n... and 5 more rows\n\nPlan"
+        rows = "\n".join(f"| {i:<2} |" for i in range(20))
+        expected = f"Result\n| n  |\n|----|\n{rows}\n... and 5 more rows\n\nPlan"
         assert results.summary() == expected
 
     def test_max_rows_covering_every_row_prints_them_all_without_a_remainder_line(self) -> None:
         results = _hand_built([{"n": list(range(25))}])
 
-        expected = "Result\nn\n" + "\n".join(str(i) for i in range(25)) + "\n\nPlan"
+        rows = "\n".join(f"| {i:<2} |" for i in range(25))
+        expected = f"Result\n| n  |\n|----|\n{rows}\n\nPlan"
         assert results.summary(max_rows=25) == expected
 
     def test_max_rows_of_zero_is_rejected(self) -> None:
@@ -158,13 +169,18 @@ class TestNonMappingFrames:
 
 
 class TestPlanLines:
-    """Plan steps render numbered from 1, labelled and detailed per step kind."""
+    """The plan renders as one ``step | plugin | features | from`` pipe table, numbered from 1."""
 
-    def test_a_root_compute_step_renders_its_sorted_names_without_a_detail_suffix(self) -> None:
+    def test_a_root_compute_step_renders_its_sorted_names_with_an_empty_from_cell(self) -> None:
         compute = PlanStep("compute", ("b", "a"), ApiDataFG, None, None, None)
         results = _hand_built([{"a": [1]}], [compute])
 
-        assert results.summary() == "Result\na\n1\n\nPlan\nstep 1  ApiDataFG  a, b"
+        assert results.summary() == (
+            "Result\n| a |\n|---|\n| 1 |\n\nPlan\n"
+            "| step | plugin    | features | from |\n"
+            "|------|-----------|----------|------|\n"
+            "| 1    | ApiDataFG | a, b     |      |"
+        )
 
     def test_transform_and_join_steps_are_labelled_by_kind_and_name_their_groups(self) -> None:
         compute = PlanStep(
@@ -175,13 +191,15 @@ class TestPlanLines:
         results = _hand_built([{"a": [1]}], [compute, transform, join])
 
         assert results.summary() == (
-            "Result\na\n1\n\nPlan\n"
-            "step 1  CsvFG      customer_id, income  (source sales)\n"
-            "step 2  transform  CsvFG -> JsonFG\n"
-            "step 3  join       CsvFG + JsonFG  (inner)"
+            "Result\n| a |\n|---|\n| 1 |\n\nPlan\n"
+            "| step | plugin    | features            | from                   |\n"
+            "|------|-----------|---------------------|------------------------|\n"
+            "| 1    | CsvFG     | customer_id, income | source sales           |\n"
+            "| 2    | transform |                     | CsvFG -> JsonFG        |\n"
+            "| 3    | join      |                     | CsvFG + JsonFG (inner) |"
         )
 
-    def test_plan_detail_names_the_api_data_source_or_the_inputs(self) -> None:
+    def test_the_from_cell_names_the_api_data_source_or_the_inputs(self) -> None:
         source = PlanStep("compute", ("x",), ApiDataFG, None, None, None, _data_access_identity="api_data:Orders")
         derived = PlanStep(
             "compute", ("x__sum_aggr",), AggregatedFeatureGroup, None, None, None, input_feature_names=("x",)
@@ -189,9 +207,14 @@ class TestPlanLines:
         results = _hand_built([{"x": [1]}], [source, derived])
 
         assert results.summary().splitlines()[-2:] == [
-            "step 1  ApiDataFG               x  (source Orders)",
-            "step 2  AggregatedFeatureGroup  x__sum_aggr  (from x)",
+            "| 1    | ApiDataFG              | x           | source Orders |",
+            "| 2    | AggregatedFeatureGroup | x__sum_aggr | x             |",
         ]
+
+    def test_an_empty_plan_renders_the_heading_without_table_lines(self) -> None:
+        results = _hand_built([{"a": [1]}])
+
+        assert results.summary().endswith("| 1 |\n\nPlan")
 
 
 class TestPublicExport:

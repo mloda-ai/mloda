@@ -61,23 +61,27 @@ print(result.summary())
 
 ```text
 Result
-customer_id  income
-C001         50000
-C002         75000
-C003         None
-C004         60000
-C005         85000
+| customer_id | income |
+|-------------|--------|
+| C001        | 50000  |
+| C002        | 75000  |
+| C003        | None   |
+| C004        | 60000  |
+| C005        | 85000  |
 
-age__avg_aggr  income__sum_aggr
-37.5           270000
-37.5           270000
-37.5           270000
-37.5           270000
-37.5           270000
+| age__avg_aggr | income__sum_aggr |
+|---------------|------------------|
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
 
 Plan
-step 1  ApiDataFG               age, customer_id, income  (source SampleData)
-step 2  AggregatedFeatureGroup  age__avg_aggr, income__sum_aggr  (from age, income)
+| step | plugin                 | features                        | from              |
+|------|------------------------|---------------------------------|-------------------|
+| 1    | ApiDataFG              | age, customer_id, income        | source SampleData |
+| 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |
 ```
 
 `result` is a list with one frame per step that produced requested output; `result.summary()` renders the frames and the resolved plan as text.

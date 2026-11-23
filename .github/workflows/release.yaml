@@ -168,6 +168,9 @@ jobs:
     name: Publish to TestPyPI
     needs: [github_release, build]
     runs-on: ubuntu-24.04
+    environment:
+      name: testpypi
+      url: https://test.pypi.org/project/mloda/${{ needs.github_release.outputs.new_release_version }}/
     permissions:
       id-token: write
     steps:

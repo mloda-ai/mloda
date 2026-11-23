@@ -554,6 +554,8 @@ class TestReleaseWorkflow:
         "publish_testpypi": {"id-token": "write"},
         "publish_pypi": {"contents": "read", "id-token": "write"},
     }
+    # Must match the environment each Trusted Publisher is limited to on (Test)PyPI.
+    EXPECTED_ENVIRONMENTS = {"publish_testpypi": "testpypi", "publish_pypi": "pypi"}
 
     @staticmethod
     def _workflow_names() -> list[str]:
@@ -590,7 +592,7 @@ class TestReleaseWorkflow:
         for key in publishers:
             job = jobs[key]
             assert job.get("permissions") == self.EXPECTED_PERMISSIONS[key[1]], f"{key} permissions"
-            assert "environment" not in job, f"{key} must not use an environment"
+            assert job.get("environment", {}).get("name") == self.EXPECTED_ENVIRONMENTS[key[1]], f"{key} environment"
             steps = job["steps"]
             assert not any(str(s.get("uses", "")).startswith("actions/checkout") for s in steps), f"{key} checkout"
             (publish,) = [s for s in steps if str(s.get("uses", "")).startswith(self.ACTION)]

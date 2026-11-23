@@ -218,6 +218,16 @@ def make_run_group(
                 data = _double_into(data, "rg_out", "rg_src")
                 data["rg_src"] = data["rg_src"].astype("float64" if len(data) else object)
                 return data
+            if kind == "input_widened_with_rows":
+                data = _double_into(data, "rg_out", "rg_src")
+                if len(data):
+                    data["rg_src"] = data["rg_src"].astype("float64")
+                return data
+            if kind == "input_narrowed_with_rows":
+                data = _double_into(data, "rg_out", "rg_src")
+                if len(data):
+                    data["rg_src"] = data["rg_src"].astype("Int32")
+                return data
             if kind == "object_date":
                 import pandas as pd
                 from datetime import date
@@ -931,6 +941,26 @@ def test_pandas_na_output_passes_determinism() -> None:
 
 
 @pytest.mark.parametrize(
+    ("kind", "fails"),
+    [("input_widened_with_rows", False), ("input_retyped_on_zero_rows", True), ("input_narrowed_with_rows", True)],
+)
+def test_pandas_null_input_zero_rows_excuses_only_the_adapter_retype(kind: str, fails: bool) -> None:
+    """Only the adapter's own zero-row reframing of an input is excused, not a group retype."""
+    pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    result = check_feature_group_shape(
+        make_run_group(kind),
+        input_data=TypedTestData({"rg_src": (DataType.INT64, [1, None, 3]), "rg_label": _RUN_LABELS}),
+        adapter=PandasAdapter(),
+    )
+    if fails:
+        assert result.failures
+        assert all(f.startswith("zero_rows:") for f in result.failures), result.failures
+    else:
+        assert result.failures == (), result.failures
+
+
+@pytest.mark.parametrize(
     ("kind", "adapter_cls"),
     [
         ("int64_on_zero_rows", PandasAdapter),
@@ -1090,6 +1120,7 @@ def test_requested_name_already_in_input_data_fails_outputs() -> None:
         ("list_null_on_zero_rows", "zero_rows:", PolarsAdapter),
         ("input_retyped_on_zero_rows", "zero_rows:", PandasAdapter),
         ("input_retyped_both", "zero_rows:", PandasAdapter),
+        ("input_widened_with_rows", "zero_rows:", PandasAdapter),
         ("iceberg_scan", "zero_rows:", IcebergAdapter),
         ("leaks_cell_in_error", "error_values:", PythonDictAdapter),
         ("nondeterministic", "determinism:", PythonDictAdapter),

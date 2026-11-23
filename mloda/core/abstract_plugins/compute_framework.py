@@ -7,7 +7,7 @@ from abc import ABC
 from collections.abc import Callable, Iterable, Mapping, Sequence
 from collections.abc import Set as AbstractSet
 from contextvars import ContextVar
-from typing import Any, ClassVar, NamedTuple, NoReturn, final, get_origin
+from typing import Any, ClassVar, Literal, NamedTuple, NoReturn, final, get_origin
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.connection_requirement import ConnectionRequirement
 from mloda.core.abstract_plugins.components.credential_access import (
@@ -308,6 +308,11 @@ class ComputeFramework(ABC):
         However, we only need to set it if we really want to be sure that the datatype is correct.
         """
         return None
+
+    @classmethod
+    def nan_null_semantics(cls) -> Literal["distinct", "collapsed", "dtype_dependent"]:
+        """Whether native storage keeps NaN apart from null, independently of operation behavior."""
+        return "distinct"
 
     @classmethod
     def result_framework(cls) -> type["ComputeFramework"]:

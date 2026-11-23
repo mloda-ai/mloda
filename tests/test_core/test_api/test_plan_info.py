@@ -660,6 +660,7 @@ class TestPlanStepDataclass:
             "contract_version",
             "bound_credential_handle",
             "allowed_variants",
+            "potential_nan_null_loss",
         ]
 
     def test_join_keys_defaults_to_none(self) -> None:

@@ -366,6 +366,54 @@ When data needs to move between compute frameworks:
 
 For more details on how data transformation works between compute frameworks, see [Framework Transformers](framework-transformers.md).
 
+## NaN and null during transfers
+
+`ComputeFramework.nan_null_semantics()` declares what the framework's storage can represent:
+
+| Declaration | Meaning | Example |
+| --- | --- | --- |
+| `distinct` | NaN and null can remain separate; the default declaration. | Arrow |
+| `collapsed` | Storage cannot retain their distinction. | SQLite |
+| `dtype_dependent` | The distinction depends on the column dtype. | Pandas: ordinary float64 collapses it, while Arrow-backed float columns can retain it. |
+
+`PlanStep.potential_nan_null_loss` marks a step whose conversion may lose this distinction. It
+covers explicit transforms, cross-framework joins, neutral source imports, and requested result
+conversion. A native representation taken as is is quiet, as is a known source that already
+collapses the values. For neutral imports the planner uses `SourceFeatureGroup.neutral_type(match)`
+and already registered framework declarations; it does not load a source to identify its type.
+Unknown or conflicting source declarations retain a conservative potential-risk flag.
+
+The flag does not establish that the data contains float columns, that both values occur, or that
+values were lost. The planner lacks complete column schemas and does not scan data; a Pandas
+conversion may preserve the distinction for an appropriate dtype. This storage advisory does not
+change framework selection or require `allow_variants`.
+
+The boolean appears in `explain()` and service step records. A format-9 [plan lock](plan-lock.md)
+records it only when true; it contributes to the structure hash and is excluded from the content
+hash. The registry's OpenLineage companion carries flagged steps in the optional parent-run
+`mlodaPlan.lossyTransfers` field. A compute item may concern a neutral import or result conversion;
+its existing framework names are step context, rather than a unique source/destination edge.
+
+### Retiring storage-only divergence records
+
+After the registry upgrades to a core release with this advisory, a `nan_as_null` record can be
+retired when its entire difference comes from an incoming representation losing NaN/null identity.
+Ordering and partition-key collapse caused by storage belong to the transfer declaration across
+all subtypes, including rank, window maximum and percentile, rather than per-operation copies.
+
+| Existing registry records | Follow-up review |
+| --- | --- |
+| Pandas/SQLite rank: `rank`, `dense_rank`, `percent_rank` | Retire the storage-only explanation that NaN and null tie; retain any operation-specific tie rule. |
+| Pandas/SQLite frame aggregate ordering; Pandas window aggregation `first`/`last` ordering | Retire the order-by storage clause, separately from their sum/count/value handling. |
+| Pandas/SQLite fill and offset; Pandas EMA | Separate the storage clause from the operation's treatment of missing values before retiring anything. |
+
+Keep behavior the operation itself chooses: PythonDict rank deliberately ties NaN with null;
+Pandas reductions may skip NaN or exclude it from counts; arithmetic can turn a NaN operand or
+result into null. Pandas EMA uses `ewm(ignore_na=True)`, so that operation behavior remains separate
+from its float64 ordering explanation. A mixed record needs narrowing or splitting, not automatic
+deletion because its reason mentions float64. This change retires no registry records; the registry's
+locked core 0.21.0 does not yet provide the advisory.
+
 ## Framework Notes
 
 - **DuckDB**: a step gets its connection from the DataAccessCollection (select one with the `connection_handle` option), or from the relation its parents hand in; a connection object in a feature option raises at planning. mloda validates it and pins its session timezone to UTC but never opens or closes it. A transform into DuckDB or SQLite needs a matching connection in the DataAccessCollection, otherwise planning (prepare, explain, run_all) fails with an error naming the step. An `output_framework` of DuckDB or SQLite needs one only when a requested step runs on another framework and its result is converted. mloda reuses the supplied connection for its lazy relations without per-thread cursors, and the live connection cannot cross a process boundary. A tz-aware column keeps its source zone (`DuckdbRelation.time_zone(column)`, re-attached by `to_arrow_table()`, set on a derived column with `with_time_zone`); DuckDB itself computes in UTC. It runs in SYNC mode only, so its steps stay in the parent process under a MULTIPROCESSING run.

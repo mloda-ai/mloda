@@ -109,6 +109,7 @@ STEP_KEYS = {
     "contract_version",
     "divergences",
     "allowed_variants",
+    "potential_nan_null_loss",
 }
 SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
 DENIED_CALLS: list[str] = []

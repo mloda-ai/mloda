@@ -1,5 +1,5 @@
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseFilterEngine, BaseMaskEngine, BaseMergeEngine, ComputeFramework, OutputSchema
@@ -55,6 +55,11 @@ class PandasDataFrame(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return cls.pd_dataframe()
+
+    @classmethod
+    def nan_null_semantics(cls) -> Literal["dtype_dependent"]:
+        """Ordinary float64 collapses NaN/null; Arrow-backed float columns can retain both."""
+        return "dtype_dependent"
 
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:

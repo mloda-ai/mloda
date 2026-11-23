@@ -4,6 +4,7 @@ import hmac
 import secrets
 from collections.abc import Collection, Iterable, Mapping
 from dataclasses import dataclass, field
+from functools import partial
 from typing import Any, Literal, TYPE_CHECKING
 from uuid import UUID
 
@@ -129,6 +130,9 @@ class PlanStep:
     hashing fails). ``feature_group_hash``: the group's code hash, set when an inherited implementation serves a
     subclass group or a source group loads neutrally. ``implementation_version``, ``implementation_hash``,
     ``feature_group_version``, ``feature_group_hash``: excluded from equality.
+
+    ``potential_nan_null_loss``: a framework conversion may collapse NaN and null. A compute step can
+    carry it for a neutral source import or requested result conversion. No data is loaded or scanned.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -171,6 +175,7 @@ class PlanStep:
     _hash_options: Options | None = field(default=None, compare=False)
     _match_digests: Mapping[Any, str] = field(default_factory=dict, compare=False, hash=False, repr=False)
     _match_key_id: str = field(default="", compare=False, hash=False, repr=False)
+    potential_nan_null_loss: bool = False
 
     @property
     def content_options(self) -> Options | None:
@@ -277,6 +282,36 @@ def match_digests(group: Mapping[Any, Any]) -> dict[Any, str]:
         or key in names
         or isinstance(value, (Mapping, list, tuple))
     }
+
+
+def _potential_nan_null_loss(
+    source: type["ComputeFramework"] | None,
+    destination: type["ComputeFramework"] | None,
+    *,
+    native_type: Any = None,
+) -> bool:
+    """Whether a representation change may erase a NaN/null distinction."""
+    if destination is None or source is destination or destination.nan_null_semantics() == "distinct":
+        return False
+    if source is not None:
+        if source.nan_null_semantics() == "collapsed":
+            return False
+        native_type = source.expected_data_framework()
+    if destination._takes_as_is(native_type):
+        return False
+    if source is None and native_type is not None:
+        from mloda.core.abstract_plugins.compute_framework import compute_framework_subclasses
+
+        # A native type shared with a preserving or dtype-dependent framework is ambiguous.
+        # Consult already registered declarations, without loading optional frameworks.
+        semantics = {
+            framework.nan_null_semantics()
+            for framework in compute_framework_subclasses()
+            if safe_field(partial(framework._takes_as_is, native_type), False)
+        }
+        if semantics == {"collapsed"}:
+            return False
+    return True
 
 
 def build_plan_steps(
@@ -405,6 +440,11 @@ def build_plan_steps(
                 hash_options = Options(group={**snapshot.group, CONNECTION_HANDLE_OPTION: "<unnamed>"})
             impl = step.features.implementation
             path = implementation_path(step.feature_group, impl, match)
+            potential_nan_null_loss = _potential_nan_null_loss(step.compute_framework, result_cf) or (
+                path == "neutral"
+                and match is not None
+                and _potential_nan_null_loss(None, step.compute_framework, native_type=match[0].neutral_type(match[1]))
+            )
             plan.append(
                 PlanStep(
                     step_kind="compute",
@@ -450,6 +490,7 @@ def build_plan_steps(
                     _data_access_identity_is_fallback=is_fallback,
                     _neutral=path == "neutral",
                     _hash_options=hash_options,
+                    potential_nan_null_loss=potential_nan_null_loss,
                 )
             )
         elif isinstance(step, TransformFrameworkStep):
@@ -470,6 +511,7 @@ def build_plan_steps(
                     compute_framework=step.to_framework,
                     source_feature_group=step.from_feature_group,
                     source_compute_framework=step.from_framework,
+                    potential_nan_null_loss=_potential_nan_null_loss(step.from_framework, step.to_framework),
                     leaves_connection=leaves(
                         min((h for source in sources if (h := home(source)) is not None), default=None)
                     )
@@ -497,6 +539,7 @@ def build_plan_steps(
                     compute_framework=step.destination_framework,
                     source_feature_group=step.link.right_feature_group,
                     source_compute_framework=step.source_framework,
+                    potential_nan_null_loss=_potential_nan_null_loss(step.source_framework, step.destination_framework),
                     join_type=step.link.jointype.value,
                     join_keys=step.join_keys(),
                     join_destination_side=None if record is None else record.destination_side.value,

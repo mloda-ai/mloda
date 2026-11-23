@@ -104,7 +104,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "join_keys": None if step.join_keys is None else list(step.join_keys),
             }
             lock["joins"].append(record)
-            wide["joins"].append(record)
+            wide["joins"].append(dict(record))
         elif step.step_kind == "transform":
             record = {
                 "feature_group": _class_path(step.feature_group),
@@ -116,6 +116,9 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
             wide["transforms"].append({k: v for k, v in record.items() if k != "leaves_connection"})
         else:
             raise ValueError(f"Unknown plan step kind {step.step_kind!r}.")
+        # The advisory affects plan structure, not the wider content fingerprint.
+        if step.potential_nan_null_loss:
+            record["potential_nan_null_loss"] = True
     sorted_requested = sorted(requested)
     return (
         {

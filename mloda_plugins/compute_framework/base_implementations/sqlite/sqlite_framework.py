@@ -3,7 +3,7 @@ import re
 import sqlite3
 import sys
 from collections.abc import Sequence
-from typing import Any
+from typing import Any, Literal
 
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
@@ -79,6 +79,11 @@ class SqliteFramework(ComputeFramework):
     @classmethod
     def expected_data_framework(cls) -> Any:
         return SqliteRelation
+
+    @classmethod
+    def nan_null_semantics(cls) -> Literal["collapsed"]:
+        """SQLite stores floating-point NaN as NULL."""
+        return "collapsed"
 
     @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:

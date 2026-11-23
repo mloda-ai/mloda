@@ -140,7 +140,24 @@ is), and a loaded artifact value is shared by concurrent runs, so treat it as
 read-only in `calculate_feature`.
 
 Provider migration: a custom `custom_loader` reads `features.artifact_value`
-(the prepare-time Options value or this run's `artifacts` value), not Options.
+for the selected `features.artifact_to_load` key, from prepare-time Options or
+this run's `artifacts`.
+
+When `features.save_artifact` is a dict and `custom_saver` returns a dict, the
+saved result is split by key. For example, returning
+`{"model_a": "/models/a.bin", "model_b": {"path": "/models/b.bin"}}` produces:
+
+| Key | `RunResult.artifacts[key]` |
+| --- | --- |
+| `model_a` | `"/models/a.bin"` |
+| `model_b` | `{"path": "/models/b.bin"}` |
+
+At prepare and at run time, one artifact is bound per `FeatureSet`: the first
+matching feature name. `features.artifact_to_load` identifies that key, and
+`features.artifact_value` holds only its value shown above, not the saver's
+whole dict. A custom loader serving several artifact features must load the
+other requested artifacts itself, for example through its own per-name storage
+lookup.
 
 #### Testing Artifacts
 

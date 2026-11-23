@@ -1337,7 +1337,7 @@ _CLAIMER_CASES: list[Any] = [
 class TestUnnarrowedSourceClaimers:
     @pytest.mark.parametrize(("build", "expected"), _CLAIMER_CASES)
     def test_flags_only_unnarrowed_claimers(
-        self, build: Callable[[str], dict[str, type[Any]]], expected: list[str]
+        self, build: Callable[[str], dict[str, type[Any]]], expected: list[str], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         module = types.ModuleType(__name__)
         for attr, cls in build(__name__).items():
@@ -1347,15 +1347,8 @@ class TestUnnarrowedSourceClaimers:
 
         assert flagged == {f"{__name__}.{n}" for n in expected}
 
-    def test_scan_makes_no_plugin_subclass_checks(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        module = types.ModuleType(__name__)
-        for attr, cls in _sqlite_bare(__name__).items():
-            setattr(module, attr, cls)
-        assert unnarrowed_source_claimers([module])
-
         checks = spy_on_plugin_subclasschecks(monkeypatch)
         unnarrowed_source_claimers([module])
-
         assert checks == []
 
     def test_flags_a_claimer_in_a_bare_stem_module(self) -> None:

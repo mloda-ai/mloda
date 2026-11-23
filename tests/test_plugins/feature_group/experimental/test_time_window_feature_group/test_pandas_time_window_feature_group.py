@@ -2,9 +2,18 @@
 Tests for the PandasTimeWindow implementation.
 """
 
+from collections.abc import Callable
+from datetime import UTC, timedelta, timezone, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
+
+from dateutil import tz
+import numpy as np
 import pandas as pd
 import pytest
+
+from mloda.core.abstract_plugins.components.contract.time_rule import TimeRule
+from mloda_plugins.feature_group.experimental.time_window.base import WindowSpan
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.provider import FeatureSet
@@ -143,3 +152,144 @@ class TestPandasTimeWindowZeroRow(PandasZeroRowAdapter, TimeWindowZeroRowTestMix
 class TestPandasTimeWindowRule(TimeWindowRuleSuite):
     adapter_class = PandasAdapter
     implementation = PandasTimeWindow
+
+
+_INT64_MIN = int(np.iinfo(np.int64).min)
+_INT64_MAX = int(np.iinfo(np.int64).max)
+_DAY_NS = 86_400 * 10**9
+_UNITS = ("day", "week", "month", "year")
+
+_ZONES: dict[str, Callable[[], tzinfo | None]] = {
+    "naive": lambda: None,
+    "new_york": lambda: ZoneInfo("America/New_York"),
+    "lord_howe": lambda: ZoneInfo("Australia/Lord_Howe"),
+    "kolkata": lambda: ZoneInfo("Asia/Kolkata"),
+    "berlin": lambda: ZoneInfo("Europe/Berlin"),
+    "fixed_offset": lambda: timezone(timedelta(hours=5, minutes=30)),
+    "utc": lambda: UTC,
+    "dateutil_new_york": lambda: tz.gettz("America/New_York"),
+}
+
+_RULES: dict[str, TimeRule] = {
+    "default": TimeRule(),
+    "fixed_length": TimeRule(calendar_units="fixed_length"),
+    "gap_raise": TimeRule(gap="raise"),
+    "repeated_earlier": TimeRule(repeated="earlier"),
+    "repeated_later": TimeRule(repeated="later"),
+    "repeated_raise": TimeRule(repeated="raise"),
+    "month_end_raise": TimeRule(month_end="raise"),
+}
+
+# (first instant, ns remainder) of short grids across DST changes, month ends and the 2024 leap day
+_GRID_STARTS: tuple[tuple[str, int], ...] = (
+    ("2024-03-09 12:00", 0),  # New York spring change on 03-10
+    ("2024-11-02 12:00", 0),  # New York fall change on 11-03
+    ("2024-04-05 12:00", 0),  # Lord Howe 30 minute change on 04-07
+    ("2024-02-27 03:00", 0),  # leap day
+    ("2023-01-30 03:00", 0),  # month ends
+    ("2024-05-30 03:00", 0),  # month ends, 31 day month
+    ("2024-11-02 12:00", 999),  # sub-microsecond remainder
+)
+
+
+def _grid(start: str, remainder: int) -> np.ndarray:
+    first = int(pd.Timestamp(start).value) + remainder
+    grid: np.ndarray = first + np.arange(110, dtype=np.int64) * (37 * 60 * 10**9)
+    return grid
+
+
+def _reference(ns: np.ndarray, span: WindowSpan, zone: tzinfo | None) -> np.ndarray:
+    """Today's dispatch: constant width when the span has one, else the per-row shift."""
+    width = span.fixed_ns(zone)
+    if width is None:
+        return np.fromiter((max(span.lower_ns(int(v), zone), _INT64_MIN) for v in ns), dtype=np.int64, count=len(ns))
+    if width > _INT64_MAX:
+        return np.full(len(ns), _INT64_MIN, dtype=np.int64)
+    return np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
+
+
+def _outcome(ns: np.ndarray, span: WindowSpan, zone: tzinfo | None, use_reference: bool) -> Any:
+    try:
+        if use_reference:
+            return _reference(ns, span, zone)
+        return PandasTimeWindow._lower_bounds(ns, span, zone)
+    except (ValueError, OverflowError) as exc:
+        return (type(exc), str(exc))
+
+
+def _assert_same_outcome(ns: np.ndarray, span: WindowSpan, zone: tzinfo | None) -> None:
+    expected = _outcome(ns, span, zone, use_reference=True)
+    actual = _outcome(ns, span, zone, use_reference=False)
+    if isinstance(expected, tuple):
+        assert actual == expected, f"{span}: expected the same error"
+    else:
+        assert not isinstance(actual, tuple), f"{span}: raised {actual}"
+        np.testing.assert_array_equal(actual, expected, err_msg=str(span))
+
+
+class TestPandasCalendarBounds:
+    """_lower_bounds equals the per-row shift for every knob and zone, edges included."""
+
+    @pytest.mark.parametrize("zone_id", list(_ZONES))
+    @pytest.mark.parametrize("rule_id", list(_RULES))
+    def test_matches_per_row_reference(self, rule_id: str, zone_id: str) -> None:
+        zone = _ZONES[zone_id]()
+        for start, remainder in _GRID_STARTS:
+            ns = _grid(start, remainder)
+            for unit in _UNITS:
+                for size in (1, 2):
+                    _assert_same_outcome(ns, WindowSpan(size, unit, _RULES[rule_id]), zone)
+
+    @pytest.mark.parametrize("zone_id", ["naive", "new_york"])
+    @pytest.mark.parametrize(
+        "ns",
+        [
+            [_INT64_MIN + 1],
+            [_INT64_MIN + _DAY_NS],
+            [_INT64_MAX],
+            [_INT64_MIN + 1, _INT64_MIN + _DAY_NS, 0, _INT64_MAX],
+        ],
+        ids=["floor", "floor_plus_day", "ceiling", "floor_to_ceiling"],
+    )
+    def test_int64_edges(self, ns: list[int], zone_id: str) -> None:
+        zone = _ZONES[zone_id]()
+        for rule in (TimeRule(), TimeRule(gap="raise"), TimeRule(month_end="raise")):
+            for unit in _UNITS:
+                for size in (1, 2):
+                    _assert_same_outcome(np.array(ns, dtype=np.int64), WindowSpan(size, unit, rule), zone)
+
+    def test_floor_row_mixed_with_a_gap_raise_row(self) -> None:
+        gap_row = pd.Timestamp("2023-03-13 06:30").value  # 02:30 EDT, one wall day earlier is in the gap
+        ns = np.array([_INT64_MIN + 1, gap_row], dtype=np.int64)
+        _assert_same_outcome(ns, WindowSpan(1, "day", TimeRule(gap="raise")), ZoneInfo("America/New_York"))
+
+    @pytest.mark.parametrize("zone_id", ["naive", "new_york"])
+    @pytest.mark.parametrize(("size", "unit"), [(10**17, "year"), (10**18, "month"), (2**63, "day")])
+    def test_huge_sizes(self, size: int, unit: str, zone_id: str) -> None:
+        ns = _grid("2024-03-09 12:00", 0)[:20]
+        _assert_same_outcome(ns, WindowSpan(size, unit), _ZONES[zone_id]())
+
+    @pytest.mark.parametrize(
+        ("zone_id", "size", "unit"),
+        [
+            ("new_york", 1, "day"),
+            ("new_york", 1, "month"),
+            ("naive", 1, "month"),
+            ("kolkata", 1, "day"),
+            ("kolkata", 2, "week"),
+        ],
+    )
+    def test_in_range_rows_make_no_per_row_call(
+        self, monkeypatch: pytest.MonkeyPatch, zone_id: str, size: int, unit: str
+    ) -> None:
+        def no_per_row_call(*args: Any, **kwargs: Any) -> int:
+            raise AssertionError("per-row shift_ns called")
+
+        zone = _ZONES[zone_id]()
+        ns = _grid("2023-03-09 12:00", 0)
+        monkeypatch.setattr(TimeRule, "shift_ns", no_per_row_call)
+        bounds = PandasTimeWindow._lower_bounds(ns, WindowSpan(size, unit), zone)
+        assert len(bounds) == len(ns)
+        if zone_id == "kolkata":
+            width = {"day": _DAY_NS, "week": 7 * _DAY_NS}[unit]
+            np.testing.assert_array_equal(bounds, ns - size * width)

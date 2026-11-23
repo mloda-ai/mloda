@@ -345,6 +345,9 @@ WINDOW_CASES: tuple[WindowCase, ...] = (
         ((1,), (1, 10), (1, 10, 100)),
         TimeRule(repeated="earlier"),
     ),
+    # Asia/Kolkata is +05:30 without DST, so a wall day is 24h: row 1 (02-28 12:30Z) looks back to 02-27 12:30Z, past
+    # row 0; row 2 (03-01 06:30Z) looks back to 02-28 06:30Z, which is before row 1
+    WindowCase("named_zone_without_dst_day", "Asia/Kolkata", _IST_DAYS, 1, "day", ((1,), (10,), (10, 100))),
     # one month before 2023-03-31 is the missing 2023-02-31
     WindowCase(
         "month_end_raise_missing_day",

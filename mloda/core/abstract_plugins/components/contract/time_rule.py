@@ -91,6 +91,7 @@ class TimeRule:
 
     def _resolve(self, wall: datetime, zone: tzinfo, prefer: timedelta | None) -> datetime:
         """Turn a wall time in zone into an instant under the gap and repeated knobs."""
+        # The pandas time window mirrors this resolution vectorized (PandasTimeWindow._lower_bounds).
         guess = wall.replace(tzinfo=UTC)
         day = timedelta(days=1)
         before_offset = (guess - day).astimezone(zone).utcoffset()

@@ -32,6 +32,7 @@ from mloda.core.abstract_plugins.components.property_spec import unforwarded_key
 from mloda.core.abstract_plugins.components.plan_freeze import ReadOnlySet, attribute_write_error
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
 from mloda.core.abstract_plugins.components.validators.feature_validator import FeatureValidator
+from mloda.core.abstract_plugins.components.validators.options_validator import OptionsValidator
 
 
 def normalize_feature_group_scope(
@@ -118,6 +119,9 @@ class Feature:
     feature group resolution). Use ``Options(context={...})`` for metadata
     that should not affect grouping.
 
+    ``split_context_keys`` locally declares keys already present in context. Their values
+    split all copies in the feature group's call scope; declaring them does not forward values.
+
     Class Methods (Convenience):
         not_typed(name, options): Creates a Feature instance without specifying a data type.
         str_of(name, options): Creates a Feature instance with STRING data type.
@@ -151,6 +155,7 @@ class Feature:
         keep_index: bool = False,
         implementation: str | type | Sequence[str | type] | None = None,
         connection: Any = None,
+        split_context_keys: frozenset[str] | set[str] | list[str] | tuple[str, ...] = frozenset(),
     ):
         if options is None:
             options = {}
@@ -262,6 +267,11 @@ class Feature:
         )
         validate_forwarding_directives(self.forward_group, self.forward_group_exclude)
         self.inherit_context_keys = self._normalize_allowlist(inherit_context_keys, "inherit_context_keys")
+        split_keys = self._normalize_allowlist(split_context_keys, "split_context_keys")
+        OptionsValidator.validate_propagate_keys_in_context(split_keys, self.options.context, "split_context_keys")
+        if split_keys:
+            self.options = self.options._fork()
+            self.options.explicit_split_context_keys |= split_keys
 
     def _inherit_consumer_options(
         self, target: Options, consumer: Options, consumer_local_keys: frozenset[str]

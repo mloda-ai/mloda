@@ -1,0 +1,236 @@
+"""Hand-set context splits fixed-name sources and follows their downstream consumers."""
+
+import itertools
+from typing import Any, ClassVar
+
+import pyarrow as pa
+import pytest
+
+from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, FeatureSet, PropertySpec
+from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+
+ROOT = "explicit_candidates"
+ALTERNATE = "explicit_candidates_alternate"
+CONSUMERS = ("explicit_small", "explicit_large")
+OUTER = {"explicit_outer_small": (CONSUMERS[0], 1), "explicit_outer_large": (CONSUMERS[1], 2)}
+FRAMEWORKS = [PythonDictFramework, PyArrowTable]
+
+
+def _values(data: Any, name: str) -> list[int]:
+    return list(data[name].to_pylist()) if isinstance(data, pa.Table) else list(data[name])
+
+
+def _columns(results: Any) -> dict[str, list[list[int]]]:
+    columns: dict[str, list[list[int]]] = {}
+    for frame in results:
+        data = frame.to_pydict() if isinstance(frame, pa.Table) else frame
+        for name, values in data.items():
+            columns.setdefault(name, []).append(list(values))
+    return {name: sorted(values) for name, values in columns.items()}
+
+
+class ExplicitContextRoot(DataCreatorFeatureGroup):
+    PROPERTY_MAPPING = {
+        "top_k": PropertySpec("The hand-set source parameter.", context=True),
+        "padding": PropertySpec("A materialized context default.", context=True, default="filled"),
+    }
+    calls: ClassVar[list[tuple[int, ...]]] = []
+    observed: ClassVar[list[Options]] = []
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {ROOT, ALTERNATE}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        cls.calls.append(tuple(sorted(int(feature.options.get("top_k")) for feature in features.features)))
+        cls.observed.extend(feature.options for feature in features.features)
+        return {str(feature.name): [int(feature.options.get("top_k")) * 10] for feature in features.features}
+
+
+class RenamingContextConsumer(FeatureGroup):
+    PROPERTY_MAPPING = {"candidates_top_k": PropertySpec("Renamed when handed to the source.", context=True)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(CONSUMERS)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        source_options = Options(context={"top_k": options.get("candidates_top_k")})
+        arguments: dict[str, Any] = {"split_context_keys": {"top_k"}}
+        return {Feature(ROOT, source_options, **arguments)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(feature.name): [value + 1 for value in _values(data, ROOT)] for feature in features.features}
+
+
+class SecondLevelContextConsumer(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(OUTER)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        source, top_k = OUTER[str(feature_name)]
+        return {Feature(source, Options(context={"candidates_top_k": top_k}))}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {
+            str(feature.name): [value + 1 for value in _values(data, OUTER[str(feature.name)][0])]
+            for feature in features.features
+        }
+
+
+def _groups(
+    calls: list[tuple[int, ...]], observed: list[Options]
+) -> tuple[type[FeatureGroup], type[FeatureGroup], type[FeatureGroup]]:
+    ExplicitContextRoot.calls = calls
+    ExplicitContextRoot.observed = observed
+
+    return ExplicitContextRoot, RenamingContextConsumer, SecondLevelContextConsumer
+
+
+def _run(
+    requests: list[Feature | str], groups: set[type[FeatureGroup]], frameworks: list[type[ComputeFramework]]
+) -> Any:
+    return mloda.run_all(
+        requests,
+        compute_frameworks=frameworks,
+        plugin_collector=PluginCollector.enabled_feature_groups(groups),
+        parallelization_modes={ParallelizationMode.SYNC},
+    )
+
+
+def _assert_explicit_source_marker(observed: list[Options], top_k: int) -> None:
+    marked = [options for options in observed if options.get("top_k") == top_k]
+    assert marked
+    assert all("top_k" in options.split_context_keys for options in marked)
+    assert all(options.inherited_context_keys == frozenset() for options in observed)
+    assert all(options.twin_split_keys == frozenset() for options in observed)
+    assert all(options.get("padding") == "filled" for options in observed)
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+@pytest.mark.parametrize("reverse", [False, True], ids=["direct-first", "consumer-first"])
+@pytest.mark.parametrize("direct_top_k", [2, 3], ids=["equal-values", "different-values"])
+def test_renamed_input_context_shares_equal_values_and_splits_different_values(
+    framework: type[ComputeFramework], reverse: bool, direct_top_k: int
+) -> None:
+    calls: list[tuple[int, ...]] = []
+    observed: list[Options] = []
+    root, consumer, _ = _groups(calls, observed)
+    requests: list[Feature | str] = [
+        Feature(ROOT, Options(context={"top_k": direct_top_k})),
+        Feature(CONSUMERS[0], Options(context={"candidates_top_k": 2})),
+    ]
+    if reverse:
+        requests.reverse()
+
+    results = _run(requests, {root, consumer}, [framework])
+
+    assert _columns(results) == {ROOT: [[direct_top_k * 10]], CONSUMERS[0]: [[21]]}
+    assert sorted(calls) == ([(2,)] if direct_top_k == 2 else [(2,), (3,)])
+    _assert_explicit_source_marker(observed, 2)
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+@pytest.mark.parametrize("merge", ["intake", "narrower-fold"])
+@pytest.mark.parametrize("order", list(itertools.permutations(range(3))))
+def test_equal_marked_and_plain_requests_keep_the_marker_when_they_merge(
+    framework: type[ComputeFramework], merge: str, order: tuple[int, ...]
+) -> None:
+    calls: list[tuple[int, ...]] = []
+    observed: list[Options] = []
+    root, consumer, _ = _groups(calls, observed)
+    pin = framework.get_class_name() if merge == "narrower-fold" else None
+    requests: list[Feature | str] = [
+        Feature(ROOT, Options(context={"top_k": 2}), compute_framework=pin),
+        Feature(CONSUMERS[0], Options(context={"candidates_top_k": 2}), compute_framework=pin),
+        Feature(ROOT, Options(context={"top_k": 3})),
+    ]
+    frameworks = [framework]
+    if merge == "narrower-fold":
+        frameworks.extend(candidate for candidate in FRAMEWORKS if candidate is not framework)
+
+    results = _run([requests[index] for index in order], {root, consumer}, frameworks)
+
+    assert _columns(results) == {ROOT: [[20], [30]], CONSUMERS[0]: [[21]]}
+    assert sorted(calls) == [(2,), (3,)]
+    _assert_explicit_source_marker(observed, 2)
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+@pytest.mark.parametrize("reverse", [False, True])
+def test_second_level_consumers_follow_explicitly_split_root_variants(
+    framework: type[ComputeFramework], reverse: bool
+) -> None:
+    calls: list[tuple[int, ...]] = []
+    observed: list[Options] = []
+    groups = _groups(calls, observed)
+    requests: list[Feature | str] = list(OUTER)
+    if reverse:
+        requests.reverse()
+
+    results = _run(requests, set(groups), [framework])
+
+    assert _columns(results) == {"explicit_outer_small": [[12]], "explicit_outer_large": [[22]]}
+    assert sorted(calls) == [(1,), (2,)]
+    _assert_explicit_source_marker(observed, 1)
+    _assert_explicit_source_marker(observed, 2)
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+def test_context_metadata_without_a_split_marker_keeps_one_call(framework: type[ComputeFramework]) -> None:
+    calls: list[tuple[int, ...]] = []
+    observed: list[Options] = []
+    root, _, _ = _groups(calls, observed)
+    requests = [
+        Feature(ROOT, Options(context={"top_k": 2, "metadata": "one"})),
+        Feature(ALTERNATE, Options(context={"top_k": 2, "metadata": "two"})),
+    ]
+
+    results = _run(list(requests), {root}, [framework])
+
+    assert _columns(results) == {ROOT: [[20]], ALTERNATE: [[20]]}
+    assert calls == [(2, 2)]
+    assert all(options.split_context_keys == frozenset() for options in observed)
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+@pytest.mark.parametrize("reverse", [False, True])
+@pytest.mark.parametrize("marker_location", ["chain-root", "third-direct-root"])
+def test_one_marker_in_the_root_scope_keeps_both_plain_downstream_paths_separate(
+    framework: type[ComputeFramework], reverse: bool, marker_location: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    def input_features(self: RenamingContextConsumer, options: Options, feature_name: FeatureName) -> set[Feature]:
+        value = options.get("candidates_top_k")
+        arguments: dict[str, Any] = {}
+        if marker_location == "chain-root" and value == 1:
+            arguments["split_context_keys"] = {"top_k"}
+        return {Feature(ROOT, Options(context={"top_k": value}), **arguments)}
+
+    monkeypatch.setattr(RenamingContextConsumer, "input_features", input_features)
+    calls: list[tuple[int, ...]] = []
+    observed: list[Options] = []
+    groups = _groups(calls, observed)
+    requests: list[Feature | str] = list(OUTER)
+    expected = {"explicit_outer_small": [[12]], "explicit_outer_large": [[22]]}
+    expected_calls = [(1,), (2,)]
+    marked_value = 1
+    if marker_location == "third-direct-root":
+        arguments: dict[str, Any] = {"split_context_keys": {"top_k"}}
+        requests.insert(0, Feature(ROOT, Options(context={"top_k": 3}), **arguments))
+        expected[ROOT] = [[30]]
+        expected_calls.append((3,))
+        marked_value = 3
+    if reverse:
+        requests.reverse()
+
+    results = _run(requests, set(groups), [framework])
+
+    assert _columns(results) == expected
+    assert sorted(calls) == expected_calls
+    _assert_explicit_source_marker(observed, marked_value)

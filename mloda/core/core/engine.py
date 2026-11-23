@@ -1152,6 +1152,7 @@ class Engine:
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
         existing.options.union_own_keys(host.options)
+        existing.options.explicit_split_context_keys |= host.options.explicit_split_context_keys
         existing.absorb_parts(host)
         if not host.link_key_only:
             existing.link_key_only = False
@@ -1287,6 +1288,7 @@ class Engine:
                 merged = set(self.specialized_from.get(existing_feature.uuid, ())) | set(specialized_from)
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
             existing_feature.options.union_own_keys(feature.options)
+            existing_feature.options.explicit_split_context_keys |= feature.options.explicit_split_context_keys
             existing_feature.absorb_parts(feature)
             if not feature.link_key_only:
                 existing_feature.link_key_only = False

@@ -63,10 +63,7 @@ def mark_credential_abort(exc: E) -> E:
 
 
 def is_credential_abort(exc: BaseException) -> bool:
-    """Is this raise a marked credential handle refusal.
-
-    Public path: import from ``mloda.provider``.
-    """
+    """Is this raise a marked credential handle refusal (public: ``mloda.provider``)."""
     return exc.__dict__.get(CREDENTIAL_ABORT_FLAG, False) is True
 
 

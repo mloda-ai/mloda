@@ -42,7 +42,7 @@ from tests import registry_isolation, registry_isolation_probe
 from tests.mixins.neutral_csv_source import neutral_csv_group
 from mloda._testing.compute_framework.connection_suite import root_binding_groups
 from mloda._testing.source import reclaim
-from tests.helpers.subclass_walks import count_root_walks
+from tests.helpers.subclass_walks import count_root_walks, spy_on_plugin_subclasschecks
 from tests.registry_isolation import (
     FEATURE_GROUPS,
     IMPLEMENTATIONS,
@@ -318,6 +318,8 @@ class TestReclaimLeakedFeatureGroups:
         assert not survivors & set(expected), "the deliberate leak must not outlive this test"
 
 
+# Held classes push the reclaim ladder to full collections, which scale with a late xdist worker's heap.
+@pytest.mark.timeout(30)
 def test_shipped_root_binding_groups_are_reclaim_tracked_not_module_reported() -> None:
     """The shipped helper lives outside the tests tree: its classes are caught by reclaim.track, not by module."""
     mark = FEATURE_GROUPS.mark()
@@ -1344,6 +1346,17 @@ class TestUnnarrowedSourceClaimers:
         flagged = {entry.split()[0] for entry in unnarrowed_source_claimers([module])}
 
         assert flagged == {f"{__name__}.{n}" for n in expected}
+
+    def test_scan_makes_no_plugin_subclass_checks(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        module = types.ModuleType(__name__)
+        for attr, cls in _sqlite_bare(__name__).items():
+            setattr(module, attr, cls)
+        assert unnarrowed_source_claimers([module])
+
+        checks = spy_on_plugin_subclasschecks(monkeypatch)
+        unnarrowed_source_claimers([module])
+
+        assert checks == []
 
     def test_flags_a_claimer_in_a_bare_stem_module(self) -> None:
         name = "test_bare_stem_claimer_probe"

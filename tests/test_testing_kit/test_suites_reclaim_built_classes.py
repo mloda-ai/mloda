@@ -90,6 +90,8 @@ class TestJsonDiscoveryHost(ColumnDiscoveryContractTestMixin):
 SELECTED = "takes_over or another_concrete_group or host_builds_a_chain_consumer or load_neutral_overriding or (TestToyFileHost and (file_a_load_neutral_override or its_own_implementation_keeps_it))"
 
 
+# Eight in-process inner tests, each ending in a full collection over the worker's heap.
+@pytest.mark.timeout(30)
 def test_hosts_without_a_conftest_leave_no_suite_built_class(pytester: pytest.Pytester) -> None:
     pytester.makepyfile(test_inner=INNER)
 

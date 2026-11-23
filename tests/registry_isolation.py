@@ -19,7 +19,7 @@ from pathlib import Path
 from typing import Any, Generic, TypeVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
-from mloda.core.abstract_plugins.components.utils import get_all_subclasses
+from mloda.core.abstract_plugins.components.utils import get_all_subclasses, is_nominal_subclass
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.input_data.file_source_fg import _FileSourceFG
@@ -197,7 +197,7 @@ def loaded_test_modules(modules: Mapping[str, object]) -> list[types.ModuleType]
         for m in list(modules.values())
         if isinstance(m, types.ModuleType) and isinstance(vars(m).get("__file__"), str)
     ]
-    return [m for m in found if TESTS_DIR in Path(str(m.__file__)).resolve().parents]
+    return [m for m in found if Path(str(m.__file__)).resolve().is_relative_to(TESTS_DIR)]
 
 
 def _ships(cls: type[Any]) -> bool:
@@ -218,27 +218,27 @@ def unnarrowed_source_claimers(modules: Iterable[types.ModuleType]) -> list[str]
     for info in pkgutil.walk_packages(input_data.__path__, f"{input_data.__name__}."):
         importlib.import_module(info.name)
     shipped = sorted((c for c in get_all_subclasses(SourceFeatureGroup) if _is_shipped(c)), key=lambda c: c.__name__)
-    shipped_suffixes = {s: c for c in shipped if issubclass(c, _FileSourceFG) for s in c.suffixes()}
+    shipped_suffixes = {s: c for c in shipped if is_nominal_subclass(c, _FileSourceFG) for s in c.suffixes()}
     own = ("find_sources", "is_pointed", "has_column", "_candidates")
     flagged: list[str] = []
     for module in modules:
         for name, cls in vars(module).items():
             if not (isinstance(cls, type) and cls.__module__ == module.__name__):
                 continue
-            if not issubclass(cls, SourceFeatureGroup) or inspect.isabstract(cls):
+            if not is_nominal_subclass(cls, SourceFeatureGroup) or inspect.isabstract(cls):
                 continue
             custom = [k for k in cls.__mro__ if not _ships(k)]
             if any("match_feature_group_criteria" in vars(k) for k in custom):
                 continue
             rival: type[Any] | None = None
-            if issubclass(cls, ReadDBFG):
+            if is_nominal_subclass(cls, ReadDBFG):
                 probe = (
                     s
                     for s in shipped
-                    if issubclass(s, ReadDBFG) and cls.is_valid_credentials({s.CREDENTIAL_KEY: "probe"})
+                    if is_nominal_subclass(s, ReadDBFG) and cls.is_valid_credentials({s.CREDENTIAL_KEY: "probe"})
                 )
                 rival = next(probe, None)
-            elif issubclass(cls, _FileSourceFG):
+            elif is_nominal_subclass(cls, _FileSourceFG):
                 rival = _suffix_rival(shipped_suffixes, cls.suffixes())
             elif not any(n in vars(k) for k in custom for n in own):
                 rival = next((k for k in cls.__mro__[1:] if _is_shipped(k)), None)

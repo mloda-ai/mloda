@@ -13,7 +13,10 @@ Expected to fail at import time (ModuleNotFoundError) until Green creates the
 module.
 """
 
+from collections.abc import Iterator
 from typing import Any
+
+import pytest
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda.core.abstract_plugins.components.contract.value_inspection import (
@@ -221,3 +224,38 @@ class TestMixedTimezoneAwareness:
         sem = iso8601_string_semantics(["2024-01-01", "2024-06-01"])
         assert sem is not None
         assert sem.is_tz_aware is False
+
+
+class TestIsoTimezoneIdentity:
+    @pytest.mark.parametrize(
+        ("values", "zone", "aware"),
+        [
+            ([None, "2024-01-01T00:00:00Z", "2024-06-01T00:00:00+00:00"], "UTC", True),
+            (["2024-01-01T00:00:00+05:30", None, "2024-06-01T00:00:00+05:30"], "UTC+05:30", True),
+            (["2024-01-01T00:00:00-03:30", "2024-06-01T00:00:00-03:30"], "UTC-03:30", True),
+            (["2024-01-01T00:00:00+01:00", "2024-06-01T00:00:00+02:00"], None, True),
+            (["2024-01-01", None, "2024-06-01T00:00:00"], None, False),
+        ],
+        ids=["utc-spellings", "positive-offset", "negative-offset", "mixed-offsets", "naive"],
+    )
+    def test_zone_is_known_only_for_a_consistent_sample(
+        self, values: list[str | None], zone: str | None, aware: bool
+    ) -> None:
+        sem = iso8601_string_semantics(values)
+        assert sem is not None
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is aware
+        assert getattr(sem, "tz") == zone
+
+    def test_zone_inspection_keeps_the_non_null_sample_bound(self) -> None:
+        def values() -> Iterator[str | None]:
+            yield None
+            yield "2024-01-01T00:00:00+05:30"
+            yield None
+            yield "2024-06-01T00:00:00+05:30"
+            raise AssertionError("Timezone inspection read past its sample bound")
+
+        sem = iso8601_string_semantics(values(), sample_size=2)
+        assert sem is not None
+        assert sem.is_tz_aware is True
+        assert getattr(sem, "tz") == "UTC+05:30"

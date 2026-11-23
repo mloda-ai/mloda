@@ -21,6 +21,8 @@ def is_tz_aware_type(logical_type: Any) -> bool:
 
 def column_semantics(data: Any, column: str) -> ColumnSemantics:
     """Return the observed semantics of ``column`` in a duckdb relation."""
+    from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
     logical_type = data.types[data.columns.index(column)]
     type_id = getattr(logical_type, "id", str(logical_type)).lower()
 
@@ -47,6 +49,7 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
         is_numeric=is_numeric,
         unit=unit,
         is_tz_aware=is_tz_aware,
+        tz=data.time_zone(column) if isinstance(data, DuckdbRelation) else None,
     )
 
 

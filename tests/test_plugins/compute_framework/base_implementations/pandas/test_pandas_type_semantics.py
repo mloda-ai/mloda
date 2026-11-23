@@ -103,3 +103,24 @@ class TestPandasArrowDtypeColumnSemantics:
         sem = column_semantics(df, "n")
         assert sem.is_numeric is True
         assert sem.is_temporal is False
+
+
+@pytest.mark.skipif(pd is None or pa is None, reason="Pandas or PyArrow is not installed. Skipping this test.")
+class TestPandasTimezoneIdentity:
+    @pytest.mark.parametrize("zone", ["UTC", "Europe/Berlin", "Asia/Kolkata"])
+    @pytest.mark.parametrize("arrow_backed", [False, True], ids=["native", "arrow"])
+    @pytest.mark.parametrize("values", [[0, None, 1], [None, None]], ids=["populated", "all-null"])
+    def test_native_schema_keeps_zone(self, zone: str, arrow_backed: bool, values: list[int | None]) -> None:
+        dtype = pd.ArrowDtype(pa.timestamp("us", tz=zone)) if arrow_backed else pd.DatetimeTZDtype("us", zone)
+        df = pd.DataFrame({"ts": pd.Series(values, dtype=dtype)})
+        sem = column_semantics(df, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert sem.unit == "us"
+        assert getattr(sem, "tz") == zone
+
+    @pytest.mark.parametrize("dtype", ["datetime64[us]", "int64", "str"])
+    def test_empty_naive_or_non_temporal_schema_has_no_zone(self, dtype: str) -> None:
+        sem = column_semantics(pd.DataFrame({"value": pd.Series([], dtype=dtype)}), "value")
+        assert sem.is_tz_aware is False
+        assert getattr(sem, "tz") is None

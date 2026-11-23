@@ -99,3 +99,27 @@ class TestSqliteMergeEngineValueInspection:
         sem = self._engine()._column_semantics(rel, "name")
         assert sem.is_temporal is False
         assert sem.is_tz_aware is False
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestSqliteTimezoneIdentity:
+    @pytest.mark.parametrize("reader", ["filter", "merge"])
+    @pytest.mark.parametrize(
+        ("values", "zone", "aware"),
+        [
+            ([None, "2024-01-01T00:00:00Z", "2024-06-01T00:00:00+00:00"], "UTC", True),
+            (["2024-01-01T00:00:00+05:30", "2024-06-01T00:00:00+05:30"], "UTC+05:30", True),
+            (["2024-01-01T00:00:00+01:00", "2024-06-01T00:00:00+02:00"], None, True),
+            (["2024-01-01T00:00:00", "2024-06-01T00:00:00"], None, False),
+            ([None, None], None, False),
+        ],
+        ids=["utc-spellings", "fixed-offset", "mixed-offsets", "naive", "all-null"],
+    )
+    def test_relation_inspection_preserves_known_and_unknown_zones(
+        self, connection: sqlite3.Connection, reader: str, values: list[str | None], zone: str | None, aware: bool
+    ) -> None:
+        relation = SqliteRelation.from_dict(connection, {"ts": values})
+        engine: Any = SqliteFilterEngine if reader == "filter" else SqliteMergeEngine.__new__(SqliteMergeEngine)
+        sem = engine._column_semantics(relation, "ts")
+        assert sem.is_tz_aware is aware
+        assert getattr(sem, "tz") == zone

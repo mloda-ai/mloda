@@ -66,6 +66,7 @@ class TestSparkColumnSemantics:
         assert sem.is_numeric is False
         assert sem.is_tz_aware is False
         assert sem.unit is None
+        assert getattr(sem, "tz") is None
 
     def test_ts_aware(self, sdf: Any) -> None:
         # Fix 4: spark tz-awareness is deferred (set to False) for TimestampType too,
@@ -76,6 +77,7 @@ class TestSparkColumnSemantics:
         assert sem.is_numeric is False
         assert sem.is_tz_aware is False
         assert sem.unit is None
+        assert getattr(sem, "tz") is None
 
     def test_num(self, sdf: Any) -> None:
         sem = column_semantics(sdf, "num")
@@ -84,6 +86,7 @@ class TestSparkColumnSemantics:
         assert sem.is_numeric is True
         assert sem.is_tz_aware is False
         assert sem.unit is None
+        assert getattr(sem, "tz") is None
 
     def test_s(self, sdf: Any) -> None:
         sem = column_semantics(sdf, "s")
@@ -92,3 +95,4 @@ class TestSparkColumnSemantics:
         assert sem.is_numeric is False
         assert sem.is_tz_aware is False
         assert sem.unit is None
+        assert getattr(sem, "tz") is None

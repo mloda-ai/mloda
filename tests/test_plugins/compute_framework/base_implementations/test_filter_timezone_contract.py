@@ -29,7 +29,7 @@ so every negative fails today for the right reason.
 import logging
 from collections.abc import Callable
 from dataclasses import dataclass
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 
 import pytest
@@ -334,3 +334,11 @@ def test_temporal_filter_guard_raises_when_opted_in_without_hook() -> None:
     single_filter = _min_filter(MIN_BOUND_AWARE)
     with pytest.raises(NotImplementedError, match=r"_column_semantics"):
         OptedInFilterEngine.do_filter({"ts": list(TS_AWARE)}, single_filter)
+
+
+@pytest.mark.parametrize("spec", SPECS, ids=SPEC_IDS)
+def test_range_filter_different_aware_zones_compares_instants(spec: FrameworkSpec) -> None:
+    bound_zone = timezone(timedelta(hours=5, minutes=30))
+    single_filter = _range_filter(RANGE_MIN_AWARE.astimezone(bound_zone), RANGE_MAX_AWARE.astimezone(bound_zone))
+    result = spec.engine.do_filter(spec.build_aware(), single_filter)
+    assert sorted(spec.get_ids(result)) == EXPECTED_RANGE_IDS

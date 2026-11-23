@@ -6,6 +6,9 @@ The implementation module does not exist yet, so these tests fail on import
 until the Green phase creates it.
 """
 
+from dataclasses import FrozenInstanceError
+from typing import Any
+
 import pytest
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import (
@@ -271,3 +274,64 @@ class TestRequireCompatibleNonTemporal:
         left = ColumnSemantics(is_ordered=True, is_temporal=False, is_numeric=True)
         right = ColumnSemantics(is_ordered=True, is_temporal=False, is_numeric=True)
         contract.require_compatible(left, right, "left_id", "right_id")  # must not raise
+
+
+def _temporal_semantics(**metadata: Any) -> ColumnSemantics:
+    return ColumnSemantics(is_ordered=True, is_temporal=True, is_numeric=False, **metadata)
+
+
+class TestColumnTimezoneIdentity:
+    def test_default_zone_is_unknown(self) -> None:
+        sem = _temporal_semantics()
+        assert getattr(sem, "tz") is None
+        assert sem.is_tz_aware is False
+
+    @pytest.mark.parametrize("aware", [False, True])
+    def test_legacy_positional_awareness_is_preserved(self, aware: bool) -> None:
+        sem = ColumnSemantics(True, True, False, "us", aware)
+        assert sem.is_tz_aware is aware
+        assert sem.unit == "us"
+        assert getattr(sem, "tz") is None
+
+    def test_legacy_keyword_can_report_aware_with_unknown_zone(self) -> None:
+        sem = _temporal_semantics(is_tz_aware=True)
+        assert sem.is_tz_aware is True
+        assert getattr(sem, "tz") is None
+
+    @pytest.mark.parametrize("zone", ["UTC", "Europe/Berlin", "Asia/Kolkata"])
+    def test_known_zone_implies_awareness(self, zone: str) -> None:
+        sem = _temporal_semantics(tz=zone)
+        assert getattr(sem, "tz") == zone
+        assert sem.is_tz_aware is True
+
+    def test_zone_is_immutable(self) -> None:
+        sem = _temporal_semantics(tz="Europe/Berlin")
+        with pytest.raises(FrozenInstanceError):
+            setattr(sem, "tz", "UTC")
+
+    @pytest.mark.parametrize(
+        ("left_zone", "right_zone"),
+        [("Europe/Berlin", "Asia/Kolkata"), ("UTC", None), (None, None)],
+    )
+    def test_aware_zones_remain_comparable(self, left_zone: str | None, right_zone: str | None) -> None:
+        contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))
+        left = _temporal_semantics(tz=left_zone, is_tz_aware=True, unit="ns")
+        right = _temporal_semantics(tz=right_zone, is_tz_aware=True, unit="us")
+        contract.require_compatible(left, right, "left_ts", "right_ts")
+
+    @pytest.mark.parametrize("zone", ["Europe/Berlin", None])
+    @pytest.mark.parametrize("aware_on_left", [False, True])
+    def test_aware_and_naive_remain_incompatible(self, zone: str | None, aware_on_left: bool) -> None:
+        contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))
+        aware = _temporal_semantics(tz=zone, is_tz_aware=True)
+        naive = _temporal_semantics()
+        left, right = (aware, naive) if aware_on_left else (naive, aware)
+        with pytest.raises(ValueError, match="incompatible timezone awareness"):
+            contract.require_compatible(left, right, "left_ts", "right_ts")
+
+    @pytest.mark.parametrize("zone", ["Europe/Berlin", None])
+    def test_policy_uses_awareness_even_when_zone_is_unknown(self, zone: str | None) -> None:
+        sem = _temporal_semantics(tz=zone, is_tz_aware=True)
+        ComparisonContract(frozenset(), tz_policy=TzPolicy.REQUIRE_AWARE).validate(sem, "ts")
+        with pytest.raises(ValueError, match="timezone-naive"):
+            ComparisonContract(frozenset(), tz_policy=TzPolicy.REQUIRE_NAIVE).validate(sem, "ts")

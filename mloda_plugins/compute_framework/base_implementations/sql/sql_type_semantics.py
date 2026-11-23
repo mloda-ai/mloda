@@ -67,4 +67,5 @@ def column_semantics_from_arrow(
         is_numeric=is_numeric,
         unit=unit,
         is_tz_aware=is_tz_aware,
+        tz=arrow_type.tz if pa.types.is_timestamp(arrow_type) else None,
     )

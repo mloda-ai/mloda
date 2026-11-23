@@ -44,6 +44,7 @@ def column_semantics(df: "pd.DataFrame", column: str) -> ColumnSemantics:
         is_numeric=is_numeric,
         unit=unit,
         is_tz_aware=is_tz_aware,
+        tz=str(dtype.tz) if isinstance(dtype, pd.DatetimeTZDtype) else None,
     )
 
 

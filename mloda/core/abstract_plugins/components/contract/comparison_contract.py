@@ -22,13 +22,18 @@ class TzPolicy(Enum):
 
 @dataclass(frozen=True)
 class ColumnSemantics:
-    """Observed semantics of a single column."""
+    """Observed column semantics; a known zone implies awareness, while aware columns may have an unknown zone."""
 
     is_ordered: bool
     is_temporal: bool
     is_numeric: bool
     unit: str | None = None
     is_tz_aware: bool = False
+    tz: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.tz is not None:
+            object.__setattr__(self, "is_tz_aware", True)
 
 
 @dataclass(frozen=True)

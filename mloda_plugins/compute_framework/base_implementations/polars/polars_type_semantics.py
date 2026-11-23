@@ -30,6 +30,7 @@ def column_semantics(df: Any, column: str) -> ColumnSemantics:
         is_numeric=is_numeric,
         unit=unit,
         is_tz_aware=is_tz_aware,
+        tz=dtype.time_zone if isinstance(dtype, pl.Datetime) else None,
     )
 
 

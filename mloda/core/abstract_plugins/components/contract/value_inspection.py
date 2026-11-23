@@ -44,6 +44,21 @@ def is_iso8601_string(value: Any) -> bool:
     return isinstance(value, str) and _parse_iso(value) is not None
 
 
+def common_time_zone(values: Iterable[Any]) -> str | None:
+    """The native zone label shared by all non-null datetimes, else unknown."""
+    zone: str | None = None
+    for value in values:
+        if value is None:
+            continue
+        if not isinstance(value, datetime) or value.tzinfo is None:
+            return None
+        candidate = str(value.tzinfo)
+        if zone is not None and candidate != zone:
+            return None
+        zone = candidate
+    return zone
+
+
 def iso8601_string_semantics(values: Iterable[Any], sample_size: int = 100) -> ColumnSemantics | None:
     """Classify a column of ISO-8601 date/datetime strings from a bounded value sample.
 
@@ -80,4 +95,5 @@ def iso8601_string_semantics(values: Iterable[Any], sample_size: int = 100) -> C
         is_numeric=False,
         unit=None,
         is_tz_aware=is_tz_aware,
+        tz=common_time_zone(parsed),
     )

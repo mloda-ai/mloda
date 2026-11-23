@@ -6,8 +6,11 @@ Because python_dict carries no schema, the function inspects the first non-null 
 Expected to fail at import time (ModuleNotFoundError) until Green implements it.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime, timedelta, timezone, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
+
+import pytest
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_type_semantics import (
@@ -122,3 +125,58 @@ class TestPythonDictDatetimeObjectRegression:
         assert sem.is_temporal is True
         assert sem.is_ordered is True
         assert sem.is_tz_aware is True
+
+
+class TestPythonDictTimezoneIdentity:
+    @pytest.mark.parametrize(
+        ("zone", "expected"),
+        [
+            (UTC, "UTC"),
+            (ZoneInfo("Europe/Berlin"), "Europe/Berlin"),
+            (timezone(timedelta(hours=5, minutes=30)), "UTC+05:30"),
+            (timezone(-timedelta(hours=3, minutes=30)), "UTC-03:30"),
+        ],
+    )
+    def test_native_zone_survives_nulls_and_daylight_saving(self, zone: tzinfo, expected: str) -> None:
+        data = {"ts": [None, datetime(2024, 1, 1, tzinfo=zone), None, datetime(2024, 7, 1, tzinfo=zone)]}
+        sem = column_semantics(data, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert getattr(sem, "tz") == expected
+
+    @pytest.mark.parametrize("other_zone", ["America/New_York", "Africa/Lagos"])
+    @pytest.mark.parametrize("reverse", [False, True])
+    def test_mixed_native_zones_do_not_claim_the_first_zone(self, other_zone: str, reverse: bool) -> None:
+        values = [
+            datetime(2024, 1, 1, tzinfo=ZoneInfo("Europe/Berlin")),
+            datetime(2024, 1, 1, tzinfo=ZoneInfo(other_zone)),
+        ]
+        sem = column_semantics({"ts": list(reversed(values)) if reverse else values}, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert getattr(sem, "tz") is None
+
+    @pytest.mark.parametrize(
+        "values", [[], [None, None], [datetime(2024, 1, 1)], [date(2024, 1, 1)], [1], ["plain text"]]
+    )
+    def test_naive_or_untyped_values_have_no_zone(self, values: list[Any]) -> None:
+        sem = column_semantics({"ts": values}, "ts")
+        assert sem.is_tz_aware is False
+        assert getattr(sem, "tz") is None
+
+    @pytest.mark.parametrize(
+        ("values", "zone", "aware"),
+        [
+            ([None, "2024-01-01T00:00:00Z", "2024-06-01T00:00:00+00:00"], "UTC", True),
+            ([None, "2024-01-01T00:00:00+05:30", "2024-06-01T00:00:00+05:30"], "UTC+05:30", True),
+            (["2024-01-01T00:00:00+01:00", "2024-06-01T00:00:00+02:00"], None, True),
+            (["2024-01-01T00:00:00", "2024-06-01T00:00:00"], None, False),
+        ],
+    )
+    def test_iso_string_route_preserves_zone_information(
+        self, values: list[str | None], zone: str | None, aware: bool
+    ) -> None:
+        sem = column_semantics({"ts": values}, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is aware
+        assert getattr(sem, "tz") == zone

@@ -1,9 +1,6 @@
-"""Column-semantics introspector for pyspark DataFrames (epic #518, Phase 1).
-
-Spark exposes no sub-type unit, so ``unit`` is always None. Timezone awareness is
-deferred: Spark's session-tz ``TimestampType`` would raise false positives on naive
-filter bounds, so ``is_tz_aware`` is always False for now.
-"""
+"""Column semantics for Spark DataFrames.
+Column time units and zone identity are unavailable from the schema. Awareness remains
+deferred to avoid rejecting naive bounds for session-timezone TimestampType columns."""
 
 from typing import Any
 
@@ -59,4 +56,5 @@ def column_semantics(sdf: Any, column: str) -> ColumnSemantics:
         is_numeric=is_numeric,
         unit=None,
         is_tz_aware=is_tz_aware,
+        tz=None,
     )

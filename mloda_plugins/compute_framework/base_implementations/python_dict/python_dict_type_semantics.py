@@ -1,20 +1,16 @@
-"""Column-semantics introspector for python_dict data (epic #518, Phase 1).
-
-python_dict carries no schema, so semantics are inferred from the first
-non-null value. ``unit`` is always None (value-level resolution is deferred).
-The native representation is columnar: a mapping of column name to a list of
-values.
-"""
+"""Column semantics for columnar Python dictionaries.
+Classification uses the first non-null value; zone identity requires agreement across native datetimes.
+``unit`` stays unknown. ISO strings use the shared bounded sample."""
 
 from datetime import date, datetime, timedelta
 from typing import Any
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
-from mloda.core.abstract_plugins.components.contract.value_inspection import iso8601_string_semantics
+from mloda.core.abstract_plugins.components.contract.value_inspection import common_time_zone, iso8601_string_semantics
 
 
 def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics:
-    """Return the observed semantics of ``column`` inferred from the first non-null value."""
+    """Classify from the first non-null value and retain a common native timezone when known."""
     value = None
     for candidate in data.get(column, []):
         if candidate is not None:
@@ -52,4 +48,5 @@ def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics
         is_numeric=is_numeric,
         unit=None,
         is_tz_aware=is_tz_aware,
+        tz=common_time_zone(data.get(column, [])) if isinstance(value, datetime) else None,
     )

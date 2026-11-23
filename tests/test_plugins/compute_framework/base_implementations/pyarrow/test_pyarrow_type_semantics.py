@@ -67,3 +67,29 @@ class TestPyArrowColumnSemantics:
         assert sem.is_numeric is False
         assert sem.is_tz_aware is False
         assert sem.unit is None
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestPyArrowTimezoneIdentity:
+    @pytest.mark.parametrize("zone", ["UTC", "Europe/Berlin", "+05:30"])
+    @pytest.mark.parametrize("values", [[0, None, 1], [None, None], []], ids=["populated", "all-null", "empty"])
+    def test_native_schema_keeps_zone(self, zone: str, values: list[int | None]) -> None:
+        table = pa.table({"ts": pa.array(values, type=pa.timestamp("us", tz=zone))})
+        sem = column_semantics(table, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert sem.unit == "us"
+        assert getattr(sem, "tz") == zone
+
+    @pytest.mark.parametrize("type_name", ["timestamp", "date", "duration", "number", "null"])
+    def test_naive_or_non_temporal_schema_has_no_zone(self, type_name: str) -> None:
+        types = {
+            "timestamp": pa.timestamp("us"),
+            "date": pa.date32(),
+            "duration": pa.duration("us"),
+            "number": pa.int64(),
+            "null": pa.null(),
+        }
+        sem = column_semantics(pa.table({"value": pa.array([None], type=types[type_name])}), "value")
+        assert sem.is_tz_aware is False
+        assert getattr(sem, "tz") is None

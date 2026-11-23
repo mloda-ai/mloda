@@ -81,3 +81,29 @@ class TestPolarsColumnSemantics:
         assert sem.is_numeric is True
         assert sem.is_temporal is False
         assert sem.unit is None
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsTimezoneIdentity:
+    @pytest.mark.parametrize("zone", ["UTC", "Europe/Berlin", "Asia/Kolkata"])
+    @pytest.mark.parametrize("lazy", [False, True], ids=["eager", "lazy"])
+    @pytest.mark.parametrize("values", [[0, None, 1], [None, None]], ids=["populated", "all-null"])
+    def test_native_schema_keeps_zone(self, zone: str, lazy: bool, values: list[int | None]) -> None:
+        df = pl.DataFrame({"ts": pl.Series(values, dtype=pl.Datetime("us", zone))})
+        sem = column_semantics(df.lazy() if lazy else df, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert sem.unit == "us"
+        assert getattr(sem, "tz") == zone
+
+    @pytest.mark.parametrize("type_name", ["timestamp", "date", "duration", "number"])
+    def test_empty_naive_or_non_temporal_schema_has_no_zone(self, type_name: str) -> None:
+        types: dict[str, Any] = {
+            "timestamp": pl.Datetime("us"),
+            "date": pl.Date,
+            "duration": pl.Duration("us"),
+            "number": pl.Int64,
+        }
+        sem = column_semantics(pl.DataFrame({"value": pl.Series([], dtype=types[type_name])}), "value")
+        assert sem.is_tz_aware is False
+        assert getattr(sem, "tz") is None

@@ -74,3 +74,36 @@ class TestSqlColumnSemanticsFromArrow:
         sem = column_semantics_from_arrow(pa.large_string(), value_sample=["2024-01-01T00:00:00"])
         assert sem.is_temporal is True
         assert sem.is_ordered is True
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestSqlTimezoneIdentity:
+    @pytest.mark.parametrize("zone", ["UTC", "Europe/Berlin", "+05:30"])
+    def test_timestamp_schema_keeps_zone(self, zone: str) -> None:
+        sem = column_semantics_from_arrow(pa.timestamp("ns", tz=zone))
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert sem.unit == "ns"
+        assert getattr(sem, "tz") == zone
+
+    @pytest.mark.parametrize(
+        "type_name", [name for name in ("string", "large_string", "string_view") if hasattr(pa, name)]
+    )
+    @pytest.mark.parametrize(
+        ("values", "zone", "aware", "temporal"),
+        [
+            ([None, "2024-01-01T00:00:00Z", "2024-06-01T00:00:00+00:00"], "UTC", True, True),
+            (["2024-01-01T00:00:00+05:30", "2024-06-01T00:00:00+05:30"], "UTC+05:30", True, True),
+            (["2024-01-01T00:00:00+01:00", "2024-06-01T00:00:00+02:00"], None, True, True),
+            (["2024-01-01T00:00:00", "2024-06-01T00:00:00"], None, False, True),
+            ([None, None], None, False, False),
+        ],
+        ids=["utc-spellings", "fixed-offset", "mixed-offsets", "naive", "all-null"],
+    )
+    def test_string_sample_preserves_zone_information(
+        self, type_name: str, values: list[str | None], zone: str | None, aware: bool, temporal: bool
+    ) -> None:
+        sem = column_semantics_from_arrow(getattr(pa, type_name)(), value_sample=values)
+        assert sem.is_temporal is temporal
+        assert sem.is_tz_aware is aware
+        assert getattr(sem, "tz") == zone

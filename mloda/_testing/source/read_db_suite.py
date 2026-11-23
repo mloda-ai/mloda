@@ -234,7 +234,7 @@ class ReadDBFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         assert self._group_name() in message
         assert "table_name=<table>" in message
         assert self.credential_key in message
-        assert "narrow with a data_access_handle or column_to_file." not in message
+        assert f"narrow with a {HANDLE_OPTION} or column_to_file." not in message
         assert SECRET not in message
         if mode == "unpointed":
             assert "(2 sources)" in message

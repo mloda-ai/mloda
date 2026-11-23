@@ -494,13 +494,13 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
             assert "int" in result.eliminations[self.feature_group_class].reason
 
     def test_a_handle_of_another_kind_yields_no_sources(self) -> None:
-        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
+        self._require(self._applicability().data_access_handle, f"{HANDLE_OPTION} does not apply to the group")
         dac, handle = self.foreign_handle_dac()
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: handle}))
         assert not self._claims(feature, dac)
 
     def test_an_unknown_handle_records_a_rejection_listing_the_known_handles(self) -> None:
-        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
+        self._require(self._applicability().data_access_handle, f"{HANDLE_OPTION} does not apply to the group")
         dac, known = self.known_handles_dac()
         options = self._options(context={HANDLE_OPTION: "unknown_handle_for_suite"})
         outcome = probe_match_criteria(self.feature_group_class, self.present_column, options, dac)
@@ -513,7 +513,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
             assert handle in outcome.rejection.reason
 
     def test_a_non_str_handle_is_no_narrowing_and_is_rejected_by_the_option_check(self) -> None:
-        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
+        self._require(self._applicability().data_access_handle, f"{HANDLE_OPTION} does not apply to the group")
         feature = Feature(self.present_column, self._options(context={HANDLE_OPTION: ["own_handle"]}))
         assert not self._claims(feature, self.own_dac())
 
@@ -559,7 +559,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
 
     def test_missing_column_text_hides_the_columns_unless_a_handle_narrows_the_search(self) -> None:
         self._require(self._applicability().checked_route, "no checked route")
-        self._require(self._applicability().data_access_handle, "data_access_handle does not apply to the group")
+        self._require(self._applicability().data_access_handle, f"{HANDLE_OPTION} does not apply to the group")
         unpointed = self._evaluate(Feature(self.missing_column), self.own_dac())
         reason = unpointed.eliminations[self.feature_group_class].reason
         assert self.unpointed_source in reason
@@ -575,7 +575,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     def test_a_typo_of_a_known_column_suggests_it_only_where_the_columns_are_shown(self) -> None:
         self._require(self._applicability().checked_route, "no checked route")
         applicability = self._applicability()
-        self._require(applicability.pointer or applicability.data_access_handle, "no pointer or data_access_handle")
+        self._require(applicability.pointer or applicability.data_access_handle, f"no pointer or {HANDLE_OPTION}")
         typo = f"{self.present_column}x"
         suggestion = f"did you mean '{self.present_column}'?"
 

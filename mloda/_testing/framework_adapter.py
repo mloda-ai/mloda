@@ -520,7 +520,8 @@ class DuckDBAdapter(_ArrowReadAdapter):
 
 
 class SqliteAdapter(_ArrowReadAdapter):
-    # has_type stays None: SqliteFramework has no exact readback, its types are replayed from the source Arrow schema or inferred.
+    # Value-fit by design, so has_type stays None: mloda declares only SQLite affinities and computed columns none,
+    # so result types are replayed source hints or inferred from values (a computed bool reads as int64).
     capabilities = AdapterCapabilities(typed_columns=True, sql_relation=True)
     sync_only_reason: ClassVar[str | None] = _SYNC_ONLY_REASON
 
@@ -537,6 +538,7 @@ class SqliteAdapter(_ArrowReadAdapter):
         return SqliteFramework
 
     def _readback_framework(self, result: Any) -> type[ComputeFramework]:
+        # A plain Arrow result stays value-fit too, instead of PyArrowTable's exact readback.
         return self.compute_framework()
 
     def open(self) -> None:

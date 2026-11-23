@@ -57,7 +57,7 @@ class TestArtifactsRunAll:
 
 
 class MultiArtifactFeature(DataCreatorFeatureGroup):
-    """Saves a dict artifact; output columns record what the FeatureSet bound on load."""
+    """Saves a dict artifact and records what the FeatureSet bound on load."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -80,7 +80,7 @@ _MULTI_SAVED = {"MultiArtifactKeyA": "value-a", "MultiArtifactKeyB": "value-b"}
 
 
 class TestMultiArtifactSaver:
-    """A dict saver result becomes one artifact per key; load binds one key per FeatureSet."""
+    """Dict saver yields one artifact per key; load binds one key."""
 
     def test_a_dict_saver_yields_one_artifact_per_key(self) -> None:
         session = mloda.prepare(
@@ -101,3 +101,42 @@ class TestMultiArtifactSaver:
         columns = {c: list(t.to_pandas()[c]) for t in result for c in t.to_pandas().columns}
         for column in _MULTI_SAVED:
             assert list(columns[column][0]) == ["MultiArtifactKeyA", "'value-a'"]
+
+
+_SINGLE_SAVED = {"SingleArtifactKeyA": "x", "SingleArtifactKeyB": "y"}
+
+
+class WholeDictSaverArtifact(BaseArtifact):
+    """Saver that turns any artifact into a dict."""
+
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        return dict(_SINGLE_SAVED)
+
+
+class SingleArtifactFeature(DataCreatorFeatureGroup):
+    """Sets a string artifact; its saver returns a dict."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"SingleArtifactKeyA", "SingleArtifactKeyB"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return WholeDictSaverArtifact
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        if features.artifact_to_save:
+            features.save_artifact = "raw"
+        return {name: [1] for name in features.get_all_names()}
+
+
+class TestSaverReturnedDict:
+    """A dict from the saver is one artifact under the first name when save_artifact is not a dict."""
+
+    def test_a_dict_saver_with_a_non_dict_save_artifact_yields_one_artifact(self) -> None:
+        enabled = PluginCollector.enabled_feature_groups({SingleArtifactFeature})
+        session = mloda.prepare(["SingleArtifactKeyA", "SingleArtifactKeyB"], [PyArrowTable], plugin_collector=enabled)
+
+        assert session.run().artifacts == {"SingleArtifactKeyA": _SINGLE_SAVED}

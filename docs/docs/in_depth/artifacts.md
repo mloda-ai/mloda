@@ -146,38 +146,33 @@ FeatureSet's one artifact key, see below), not Options.
 #### Several artifacts from one saver
 
 The saver's return is split per key only when `features.save_artifact` is a dict
-and the saver returns a dict: each key becomes its own entry in
-`RunResult.artifacts`, holding that key's value (for example a path), never the
-whole dict. Otherwise the return is one artifact under the set's alphabetically
-first feature name.
+and the saver returns a dict. Each key then becomes its own entry in
+`RunResult.artifacts`, holding that key's value (for example a path). Otherwise
+the return is one artifact under the set's alphabetically first feature name.
 
 ```py
-# One group serving feature_a and feature_b in one FeatureSet.
-# calculate_feature: features.save_artifact = {"feature_a": model_a, "feature_b": model_b}
 @classmethod
-def custom_saver(cls, features: FeatureSet) -> Any:
+def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
     paths = {}
-    for name, model in features.save_artifact.items():
+    for name, model in artifact.items():  # artifact is features.save_artifact
         paths[name] = f"/models/{name}.bin"
         write_model(model, paths[name])
     return paths
 
+# save_artifact = {"feature_a": model_a, "feature_b": model_b} gives
 # result.artifacts == {"feature_a": "/models/feature_a.bin", "feature_b": "/models/feature_b.bin"}
 ```
 
 - Return only keys in `features.get_all_names()`. Features of one group can land in
-  separate FeatureSets, and a key another set also returns raises (artifact name
-  already exists). Keys that are not feature names cannot be passed back, see the
-  note on savers keyed by other names above.
+  separate FeatureSets, and a key another set also returns raises.
 - One binding per FeatureSet: on load (Options or `run(artifacts=...)`), the set
   binds the alphabetically first of its feature names that has a value.
-  `features.artifact_to_load` is that name and `features.artifact_value` is that
-  key's value only. The other keys are not bound and passing them raises nothing.
+  `features.artifact_to_load` is that name and `features.artifact_value` is its
+  value only. The other keys are not bound, and passing them raises nothing.
 - A `custom_loader` serving several features must load the others itself, for
-  example from a storage location it controls, as `SklearnArtifact.custom_loader`
-  scans its storage dir for every saved key. On the Options path the unbound values
-  are still in `features.options`; on the runtime path they are not reachable from
-  the FeatureSet.
+  example from storage it controls, as `SklearnArtifact.custom_loader` does. The
+  unbound values stay in `features.options` on the Options path, but are not
+  reachable from the FeatureSet on the runtime path.
 
 #### Testing Artifacts
 

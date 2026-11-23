@@ -46,7 +46,7 @@ PROPERTY_MAPPING = {
 | `forward_to_inputs` | `bool` | `True` | `False`: input features do not inherit the key unless an explicit `forward_group` allowlist names it. Context is unaffected. |
 | `group_only` | `bool` | `False` | `True`: the key is a group option and a caller placing it in `Options(context=...)` is refused at plan time. Requires `context=False`. |
 
-A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. A key declared with `group_only=True` is refused in the context the same way. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
+A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `group_only=True` key is refused in the context the same way. A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
 
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
@@ -445,7 +445,7 @@ PROPERTY_MAPPING = {
 ```
 
 A caller who places the key explicitly in `Options(group=...)` or `Options(context=...)`
-overrides the spec's classification, except for a `group_only=True` key, whose placement in the context is refused at plan time.
+overrides the spec's classification, except that a `group_only=True` key in the context is refused.
 
 ## How a name-parsed value binds to a key
 

@@ -1,6 +1,7 @@
 import gc
 import importlib.util
 import os
+import uuid
 from collections.abc import Callable, Iterator
 from typing import Any
 import pytest
@@ -15,6 +16,7 @@ from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightS
 from mloda_plugins.feature_group.experimental.dynamic_feature_group_factory.dynamic_feature_group_factory import (
     DynamicFeatureGroupCreator,
 )
+from mloda_plugins.feature_group.experimental.sklearn import sklearn_artifact
 
 # The re-export registers the timeout backstop hook for the suite.
 from tests.helpers.timeout_backstop import pytest_timeout_cancel_timer, pytest_timeout_set_timer  # noqa: F401
@@ -113,6 +115,17 @@ def restore_dynamic_feature_group_cache(_no_feature_group_registry_pollution: No
     yield
     DynamicFeatureGroupCreator._created_classes.clear()
     DynamicFeatureGroupCreator._created_classes.update(before)
+
+
+@pytest.fixture(autouse=True)
+def _redirect_sklearn_default_storage(tmp_path_factory: pytest.TempPathFactory) -> Iterator[None]:
+    """Keep the suite out of the real user cache by pointing the sklearn default dir at a temp path."""
+    # No monkeypatch here: requesting it would delay a test's own monkeypatch undo past the leak checks.
+    path = tmp_path_factory.getbasetemp() / "sklearn_default" / uuid.uuid4().hex
+    original = sklearn_artifact.default_storage_dir
+    setattr(sklearn_artifact, "default_storage_dir", lambda: path)
+    yield
+    setattr(sklearn_artifact, "default_storage_dir", original)
 
 
 @pytest.fixture(autouse=True)

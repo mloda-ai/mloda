@@ -236,6 +236,8 @@ class Options:
         self.inherited_group_keys: frozenset[str] = frozenset()
         self.inherited_context_keys: frozenset[str] = frozenset()
         self.twin_split_keys: frozenset[str] = frozenset()
+        # Local Feature declarations, independent of forwarding provenance.
+        self.explicit_split_context_keys: frozenset[str] = frozenset()
         self.last_forwarded_group_keys: frozenset[str] = frozenset()
         self.non_forwarded_group_keys: frozenset[str] = frozenset()
         self._own_group_keys: frozenset[str] = frozenset(self.group.keys())
@@ -324,8 +326,9 @@ class Options:
 
     @property
     def split_context_keys(self) -> frozenset[str]:
-        """Context keys that split frames: inherited keys plus keys separating root twins."""
-        return self.inherited_context_keys | self.twin_split_keys
+        """Context keys whose values split every feature in the same call scope.
+        Includes local explicit declarations, inherited keys, and inferred root-twin keys."""
+        return self.inherited_context_keys | self.twin_split_keys | self.explicit_split_context_keys
 
     def __hash__(self) -> int:
         """
@@ -465,6 +468,7 @@ class Options:
         copied.inherited_group_keys = self.inherited_group_keys
         copied.inherited_context_keys = self.inherited_context_keys
         copied.twin_split_keys = self.twin_split_keys
+        copied.explicit_split_context_keys = self.explicit_split_context_keys
         copied.last_forwarded_group_keys = self.last_forwarded_group_keys
         copied.non_forwarded_group_keys = self.non_forwarded_group_keys
         copied._own_group_keys = self._own_group_keys

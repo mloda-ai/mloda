@@ -238,7 +238,11 @@ class DuckdbRelation(SqlBaseRelation):
         return table
 
     def df(self) -> Any:
-        return self._relation.df()
+        """Materialize a pandas frame, restoring recorded source time zones."""
+        frame = self._relation.df()
+        for column, zone in self._time_zones.items():
+            frame[column] = frame[column].dt.tz_convert(zone)
+        return frame
 
     def __len__(self) -> int:
         return len(self._relation)

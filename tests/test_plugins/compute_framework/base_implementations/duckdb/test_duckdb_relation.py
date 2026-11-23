@@ -1,7 +1,7 @@
 """Tests for the DuckdbRelation class."""
 
 from collections.abc import Callable
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
 import pyarrow as pa
@@ -331,6 +331,43 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         rel = DuckdbRelation.from_arrow(connection, _tz_table().slice(0, 0))
 
         assert rel.to_arrow_table().schema.field("ts").type == pa.timestamp("us", tz="+05:00")
+
+    @pytest.mark.parametrize("zone", ["+05:00", "Europe/Berlin"], ids=["fixed-offset", "iana-dst"])
+    def test_df_agrees_with_arrow_on_recorded_zone_instants_and_nulls(self, connection: Any, zone: str) -> None:
+        times = [datetime(2021, 3, 28, 0, 30, tzinfo=UTC), None, datetime(2021, 3, 28, 1, 30, tzinfo=UTC)]
+        source = pa.table(
+            {
+                "ts": pa.array(times, type=pa.timestamp("us", tz=zone)),
+                "id": pa.array([1, None, 3], type=pa.int64()),
+                "label": ["before", "missing", "after"],
+            }
+        )
+        rel = DuckdbRelation.from_arrow(connection, source)
+
+        frame = rel.df()
+        result = pa.Table.from_pandas(frame, preserve_index=False)
+        arrow = rel.to_arrow_table()
+
+        assert result.column_names == source.column_names
+        assert result.column("id").equals(source.column("id"))
+        assert result.column("label").to_pylist() == source.column("label").to_pylist()
+        assert arrow.column("ts").equals(source.column("ts"))
+        assert result.column("ts").cast(arrow.schema.field("ts").type).equals(arrow.column("ts"))
+        assert result.schema.field("ts").type.tz == zone
+
+    def test_df_without_recorded_zones_keeps_native_naive_frame(self, connection: Any) -> None:
+        source = pa.table(
+            {
+                "id": pa.array([1, None, 3], type=pa.int64()),
+                "ts": pa.array([None, *_naive_ts(1, 2)], type=pa.timestamp("us")),
+            }
+        )
+        rel = DuckdbRelation.from_arrow(connection, source)
+
+        frame = rel.df()
+
+        assert frame.equals(rel._relation.df())
+        assert frame["ts"].dt.tz is None
 
     @pytest.mark.parametrize(
         ("op", "column", "expected"),

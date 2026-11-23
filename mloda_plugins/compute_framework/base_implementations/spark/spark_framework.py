@@ -140,13 +140,15 @@ class SparkFramework(ComputeFramework):
             return None
         from pyspark.sql.types import DecimalType, ShortType, TimestampType
 
+        from mloda_plugins.compute_framework.base_implementations.spark.spark_type_semantics import time_zone
+
         spark_type = data.schema[column_name].dataType
         if isinstance(spark_type, ShortType):
             return DataType.INT32
         if isinstance(spark_type, DecimalType):
             return DataType.DECIMAL
         if isinstance(spark_type, TimestampType):
-            return DataType.TIMESTAMP_MICROS
+            return DataType.TIMESTAMP_MICROS if time_zone(data, column_name) is None else DataType.TIMESTAMP_MICROS_TZ
         return self._spark_type_to_exact_data_type(spark_type)
 
     def _exact_column_data_type(self, data: Any, column_name: str) -> DataType | None:

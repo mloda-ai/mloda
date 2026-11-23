@@ -16,6 +16,7 @@ from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_filter_engine import DuckDBFilterEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_mask_engine import DuckDBMaskEngine
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_table as arrow_table_from
 
 try:
     import duckdb
@@ -264,7 +265,7 @@ class DuckDBFramework(ComputeFramework):
                     "pyarrow is required to build a DuckDB relation from a dict. "
                     "Install it with: pip install 'mloda[duckdb]'"
                 )
-            arrow_table = pa.Table.from_pydict(data)
+            arrow_table = arrow_table_from(data)
 
             if self.framework_connection_object is None:
                 raise ValueError(

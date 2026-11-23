@@ -221,3 +221,13 @@ class TestMixedTimezoneAwareness:
         sem = iso8601_string_semantics(["2024-01-01", "2024-06-01"])
         assert sem is not None
         assert sem.is_tz_aware is False
+
+
+class TestIsoStringsHaveNoZone:
+    """Offsets in ISO-8601 strings are not zones, so tz stays None."""
+
+    def test_aware_strings_keep_unknown_zone(self) -> None:
+        sem = iso8601_string_semantics(["2024-01-01T00:00:00+02:00", "2024-06-01T00:00:00Z"])
+        assert sem is not None
+        assert sem.is_tz_aware is True
+        assert sem.tz is None

@@ -689,12 +689,18 @@ class SparkAdapter(_ArrowReadAdapter):
         if self._session is None:
             raise RuntimeError("SparkAdapter needs an open session: use it as a context manager")
         from_arrow_schema = require("pyspark.sql.pandas.types", "building Spark test frames").from_arrow_schema
+        from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import with_time_zones
 
         # The NTZ schema keeps naive timestamps from being shifted by the session time zone.
-        return self._session.createDataFrame(table, schema=from_arrow_schema(table.schema, prefer_timestamp_ntz=True))
+        frame = self._session.createDataFrame(table, schema=from_arrow_schema(table.schema, prefer_timestamp_ntz=True))
+        return with_time_zones(frame, table.schema)
 
     def to_table(self, result: Any) -> pa.Table:
-        return result.toArrow()
+        from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import (
+            SparkPyArrowTransformer,
+        )
+
+        return SparkPyArrowTransformer.transform_fw_to_other_fw(result)
 
     def column_names(self, result: Any) -> list[str]:
         return list(result.columns)

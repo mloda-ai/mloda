@@ -345,15 +345,6 @@ class TestSparkDtypeExtractionSuite(DtypeExtractionSuite):
 
 
 _NO_UNSIGNED = (Cause.BACKEND, "Spark has no unsigned integer types")
-_INSTANT_TIMESTAMP = (
-    Cause.BACKEND,
-    "Spark TimestampType is kept as TIMESTAMP_MICROS for compatibility "
-    "(it is the instant type; TimestampNTZType is the naive one)",
-)
-_SESSION_ZONE = (
-    Cause.BACKEND,
-    "Spark hands tz-aware columns back in the session zone: https://github.com/mloda-ai/mloda/issues/3008",
-)
 _ONE_TIMESTAMP = "Spark has only one TimestampType (microseconds); millisecond cannot be expressed"
 
 
@@ -364,10 +355,6 @@ class TestSparkDataTypeValidatorSuite(DataTypeValidatorSuite):
         "uint64_col": _NO_UNSIGNED,
         "uint16_col": _NO_UNSIGNED,
         "uint32_col": _NO_UNSIGNED,
-        "timestamp_us_tz_col": _INSTANT_TIMESTAMP,
-        "timestamp_ns_tz_col": _INSTANT_TIMESTAMP,
-        "timestamp_us_dst_col": _SESSION_ZONE,
-        "timestamp_us_sub_hour_col": _SESSION_ZONE,
     }
     switched_off = {
         "test_timestamp_ms_column_strict_ms_passes": Cause.BACKEND,
@@ -593,6 +580,26 @@ def test_extract_column_data_type_folds_inexact_types_jvm_free(make_type: Any, e
     frame = _jvm_free_spark_frame(make_type(_spark_types()))
     framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     assert framework._extract_column_data_type(frame, "c") == DataType[expected]
+
+
+def test_extract_column_data_type_resolves_recorded_zone_jvm_free() -> None:
+    from mloda.user import DataType
+
+    t = _spark_types()
+    field = t.StructField("c", t.TimestampType(), metadata={"mloda.time_zone": "America/New_York"})
+    frame = SimpleNamespace(columns=["c"], schema=t.StructType([field]))
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._extract_column_data_type(frame, "c") == DataType.TIMESTAMP_MICROS_TZ
+
+
+def test_extract_column_data_type_without_recorded_zone_stays_naive_jvm_free() -> None:
+    from mloda.user import DataType
+
+    t = _spark_types()
+    field = t.StructField("c", t.TimestampType(), metadata={"other": "x"})
+    frame = SimpleNamespace(columns=["c"], schema=t.StructType([field]))
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    assert framework._extract_column_data_type(frame, "c") == DataType.TIMESTAMP_MICROS
 
 
 _SPARK_EXACT = [

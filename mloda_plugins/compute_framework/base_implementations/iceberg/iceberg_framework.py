@@ -3,6 +3,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
 from mloda.user import FeatureName, ParallelizationMode
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_table
 from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine
 from mloda.provider import OutputSchema
@@ -288,7 +289,7 @@ class IcebergFramework(ComputeFramework):
             # The transformer will handle conversion to Iceberg table when needed
             if pa is None:
                 raise ImportError("PyArrow is not installed. To use this framework, please install pyarrow.")
-            return pa.Table.from_pydict(data)
+            return arrow_table(data)
 
         if isinstance(data, IcebergTable):
             """Data is already an Iceberg table"""

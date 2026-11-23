@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import datetime
+import zoneinfo
 from datetime import tzinfo
 from typing import Any
 
@@ -27,9 +29,10 @@ except ImportError:
 _INT64_MIN = int(np.iinfo(np.int64).min)
 _INT64_MAX = int(np.iinfo(np.int64).max)
 _DAY_NS = 86_400_000_000_000
-_EDGE_NS = 3 * _DAY_NS
-_FLOOR_DAYS = _INT64_MIN // _DAY_NS + 3
-_NS_RANGE_DAYS = 213_504
+_EDGE_NS = 3 * _DAY_NS  # margin for the +-1 day probes plus slack near the int64 limits
+_FLOOR_DAYS = _INT64_MIN // _DAY_NS + 3  # earliest day count whose ns value cannot overflow, with slack
+_NS_RANGE_DAYS = 213_504  # days spanned by the int64 ns range (about 584.5 years)
+_PANDAS_TZ_RULES_END_NS = 4_102_444_800_000_000_000  # pandas tz_convert follows a zone's DST rules only before 2100
 _MAX_DAYS_PER_UNIT = {"day": 1, "week": 7, "month": 31, "year": 366}
 
 
@@ -142,7 +145,7 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
 
     @classmethod
     def _lower_bounds(cls, ns: np.ndarray, span: WindowSpan, zone: tzinfo | None) -> np.ndarray:
-        """Window start per sorted instant; calendar spans are vectorized, edge rows use the per-row shift."""
+        """Window start per sorted instant; calendar spans are vectorized (mirrors TimeRule._resolve)."""
         width = span.fixed_ns(zone)
         if width is not None:
             if width > _INT64_MAX:
@@ -152,11 +155,14 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         def per_row(i: int) -> int:
             return max(span.lower_ns(int(ns[i]), zone), _INT64_MIN)
 
-        if span.size * _MAX_DAYS_PER_UNIT[span.unit] > _NS_RANGE_DAYS:
+        vectorizable = zone is None or isinstance(zone, (datetime.timezone, zoneinfo.ZoneInfo))
+        if not vectorizable or span.size * _MAX_DAYS_PER_UNIT[span.unit] > _NS_RANGE_DAYS:
             return np.fromiter((per_row(i) for i in range(len(ns))), dtype=np.int64, count=len(ns))
 
         rule = span.rule
         slow = (ns < _INT64_MIN + _EDGE_NS) | (ns > _INT64_MAX - _EDGE_NS)
+        if isinstance(zone, zoneinfo.ZoneInfo):
+            slow = slow | (ns >= _PANDAS_TZ_RULES_END_NS - _EDGE_NS)
         safe = np.where(slow, 0, ns)
         wall = safe if zone is None else _wall_ns(safe, zone)
         days, time_of_day = np.divmod(wall, _DAY_NS)
@@ -232,7 +238,7 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         # Sort STABLY by absolute time, remembering original positions, so the
         # rolled result can be scattered back to the ORIGINAL (possibly unsorted)
         # row order. asi8 holds UTC instants (tz-aware) or wall clock (naive).
-        instants = times.array.as_unit("ns").asi8
+        instants = pd.DatetimeIndex(times).as_unit("ns").asi8
         order = np.argsort(instants, kind="stable")
         ns = instants[order]
         sorted_index = pd.DatetimeIndex(ns.view("M8[ns]"))

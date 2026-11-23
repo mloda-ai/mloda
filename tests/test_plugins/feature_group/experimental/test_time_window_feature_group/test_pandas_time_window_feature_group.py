@@ -10,6 +10,7 @@ from zoneinfo import ZoneInfo
 from dateutil import tz
 import numpy as np
 import pandas as pd
+import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.contract.time_rule import TimeRule
@@ -193,6 +194,8 @@ _GRID_STARTS: tuple[tuple[str, int], ...] = (
     ("2024-12-02 12:00", 0),  # month back from 12-03 lands in the 2024-11-03 repeated hour
     ("2025-03-09 12:00", 0),  # year back from 2025-03-10 lands in the 2024-03-10 gap
     ("2025-11-02 12:00", 0),  # year back from 2025-11-03 lands in the 2024-11-03 repeated hour
+    ("2099-03-07 12:00", 0),  # last year before pandas stops following DST rules, still vectorized
+    ("2100-03-13 12:00", 0),  # pandas stops following DST rules from 2100
 )
 
 
@@ -322,3 +325,43 @@ class TestPandasCalendarBounds:
         expected = np.empty_like(sorted_result)
         expected[by_time.index.to_numpy()] = sorted_result
         np.testing.assert_array_equal(unsorted_result, expected)
+
+    @pytest.mark.parametrize(
+        ("zone", "instant", "size", "unit"),
+        [
+            (lambda: ZoneInfo("America/New_York"), "2100-03-15 12:00", 2, "day"),
+            (lambda: ZoneInfo("Europe/Berlin"), "2100-04-01 12:00", 1, "month"),
+            (lambda: tz.gettz("Europe/Berlin"), "1947-05-12 01:30", 1, "day"),
+            (lambda: tz.gettz("Australia/Lord_Howe"), "2038-02-01 00:00", 1, "month"),
+        ],
+        ids=["zoneinfo_new_york_2100", "zoneinfo_berlin_2100", "dateutil_berlin_1947", "dateutil_lord_howe_2038"],
+    )
+    def test_offsets_where_pandas_and_python_disagree(
+        self, zone: Callable[[], tzinfo | None], instant: str, size: int, unit: str
+    ) -> None:
+        ns = np.array([pd.Timestamp(instant).value], dtype=np.int64)
+        _assert_same_outcome(ns, WindowSpan(size, unit), zone())
+
+    @pytest.mark.parametrize(
+        ("dtype", "plain"),
+        [
+            (pa.timestamp("ns"), "datetime64[ns]"),
+            (pa.timestamp("us", tz="America/New_York"), "datetime64[ns, America/New_York]"),
+        ],
+        ids=["ns_naive", "us_new_york"],
+    )
+    def test_arrow_backed_timestamp_column(self, dtype: pa.DataType, plain: str) -> None:
+        times = pd.to_datetime(
+            ["2024-03-10 20:00", "2024-03-09 12:00", "2024-03-11 03:00", "2024-03-10 05:00", "2024-03-10 09:30"],
+            utc=dtype.tz is not None,
+        )
+        if dtype.tz is not None:
+            times = times.tz_convert(dtype.tz)
+        arrow_ts = pd.Series(times).astype(pd.ArrowDtype(dtype))
+        df = pd.DataFrame({"ts": arrow_ts, "value": [1.0, 2.0, 4.0, 8.0, 16.0]})
+        assert isinstance(df["ts"].dtype, pd.ArrowDtype)
+        span = WindowSpan(1, "day")
+        actual = PandasTimeWindow._perform_window_operation(df, "sum", span, ["value"], "ts")
+        expected_df = df.assign(ts=df["ts"].astype(plain))
+        expected = PandasTimeWindow._perform_window_operation(expected_df, "sum", span, ["value"], "ts")
+        np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))

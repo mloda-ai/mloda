@@ -253,10 +253,11 @@ fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming t
   (listed connection field or declared public, see `dac.redact` above) that no secret key covers. This is refused for
   now; store a hex or base64 `str` and decode it in the plugin.
 
-These plan-time refusals carry a credential-abort marker, recognized by `is_credential_abort` from
-`mloda.provider`. Their messages name handles and keys without credential values, so a trusted caller may
-display them while reducing other errors to their class. `is_match_abort` alone is not a safe display filter:
-it also recognizes errors whose messages may contain option values.
+Each refusal above, except the near-miss line in a "No feature groups found" error, plus the refusal of a credential
+held in an option value, carries the credential-abort marker, read with `is_credential_abort` from `mloda.provider`.
+The mark sits on the raised error itself, not on a wrapper. These messages name handles and keys, never a credential
+value, so a trusted caller may show them while reducing other errors to their class. `is_match_abort` is not a safe
+display filter: it also marks errors whose messages may hold option values.
 
 A `str` default is a handle declared when the option
 is unset; `default=None` declares nothing when unset. To read it at run time see [Runtime access versus match-time binding](#runtime-access-versus-match-time-binding).

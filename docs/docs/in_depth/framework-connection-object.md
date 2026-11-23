@@ -178,7 +178,7 @@ def set_framework_connection_object(self, framework_connection_object: Any | Non
 
 2. **Pass connection objects** to merge engines and other components that need them.
 
-3. **Declare the modes the connection can survive.** A live connection or session cannot be pickled into a spawned worker. Override `supported_parallelization_modes` to leave out `ParallelizationMode.MULTIPROCESSING`, keeping `THREADING` only if the handle is thread-safe (DuckDB and SQLite declare `{ParallelizationMode.SYNC}` alone). The framework's steps then stay in the parent process under a MULTIPROCESSING run and take their connection exactly as in a SYNC run. Skipping this raises at plan time.
+3. **Declare the modes the connection can survive.** A live connection or session cannot be pickled into a spawned worker. Override `supported_parallelization_modes` to leave out `ParallelizationMode.MULTIPROCESSING`, keeping `THREADING` only if the handle is thread-safe (DuckDB and SQLite declare `{ParallelizationMode.SYNC}` alone). The framework's steps then stay in the parent process under a MULTIPROCESSING run and take their connection exactly as in a SYNC run. Skipping this raises when a MULTIPROCESSING run starts, before any worker starts.
 
 ### For Transformer Developers
 

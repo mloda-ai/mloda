@@ -6,6 +6,10 @@ The implementation module does not exist yet, so these tests fail on import
 until the Green phase creates it.
 """
 
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
+from typing import Any
+from zoneinfo import ZoneInfo
+
 import pytest
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import (
@@ -271,3 +275,72 @@ class TestRequireCompatibleNonTemporal:
         left = ColumnSemantics(is_ordered=True, is_temporal=False, is_numeric=True)
         right = ColumnSemantics(is_ordered=True, is_temporal=False, is_numeric=True)
         contract.require_compatible(left, right, "left_id", "right_id")  # must not raise
+
+
+def _temporal(**kwargs: Any) -> ColumnSemantics:
+    return ColumnSemantics(is_ordered=False, is_temporal=True, is_numeric=False, **kwargs)
+
+
+class TestColumnSemanticsZone:
+    """ColumnSemantics.tz carries the zone; a given zone implies awareness."""
+
+    def test_tz_defaults_to_none(self) -> None:
+        assert _temporal().tz is None
+
+    def test_tz_given_implies_aware(self) -> None:
+        assert _temporal(tz="America/New_York").is_tz_aware is True
+
+    def test_tz_given_overrides_explicit_naive(self) -> None:
+        assert _temporal(is_tz_aware=False, tz="X").is_tz_aware is True
+
+    def test_aware_with_unknown_zone_is_expressible(self) -> None:
+        semantics = _temporal(is_tz_aware=True, tz=None)
+        assert semantics.is_tz_aware is True
+        assert semantics.tz is None
+
+    def test_different_zones_stay_compatible(self) -> None:
+        contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))
+        contract.require_compatible(_temporal(tz="UTC"), _temporal(tz="Asia/Kolkata"), "a", "b")
+
+    def test_known_and_unknown_zone_stay_compatible(self) -> None:
+        contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))
+        contract.require_compatible(_temporal(tz="UTC"), _temporal(is_tz_aware=True), "a", "b")
+
+    def test_zoned_vs_naive_still_rejected(self) -> None:
+        contract = ComparisonContract(required=frozenset({SemanticDimension.TEMPORAL}))
+        with pytest.raises(ValueError):
+            contract.require_compatible(_temporal(tz="UTC"), _temporal(), "a", "b")
+
+
+class _OddTz(tzinfo):
+    def utcoffset(self, dt: datetime | None) -> timedelta | None:
+        return None
+
+    def dst(self, dt: datetime | None) -> timedelta | None:
+        return None
+
+    def tzname(self, dt: datetime | None) -> str | None:
+        return None
+
+    def __str__(self) -> str:
+        return "odd-zone"
+
+
+class TestZoneName:
+    """zone_name spells a tzinfo as an IANA key, UTC, a fixed offset or its str."""
+
+    @pytest.mark.parametrize(
+        "tz, expected",
+        [
+            (ZoneInfo("America/New_York"), "America/New_York"),
+            (ZoneInfo("Europe/Berlin"), "Europe/Berlin"),
+            (UTC, "UTC"),
+            (timezone(timedelta(hours=5, minutes=30)), "+05:30"),
+            (timezone(timedelta(hours=-8)), "-08:00"),
+            (_OddTz(), "odd-zone"),
+        ],
+    )
+    def test_zone_name(self, tz: tzinfo, expected: str) -> None:
+        from mloda.core.abstract_plugins.components.contract.comparison_contract import zone_name
+
+        assert zone_name(tz) == expected

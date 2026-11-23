@@ -19,17 +19,17 @@ def column_semantics(df: Any, column: str) -> ColumnSemantics:
     is_ordered = is_numeric or is_temporal
 
     unit: str | None = None
-    is_tz_aware = False
+    tz: str | None = None
     if isinstance(dtype, pl.Datetime):
         unit = dtype.time_unit
-        is_tz_aware = dtype.time_zone is not None
+        tz = dtype.time_zone
 
     return ColumnSemantics(
         is_ordered=is_ordered,
         is_temporal=is_temporal,
         is_numeric=is_numeric,
         unit=unit,
-        is_tz_aware=is_tz_aware,
+        tz=tz,
     )
 
 

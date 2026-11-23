@@ -103,3 +103,26 @@ class TestPandasArrowDtypeColumnSemantics:
         sem = column_semantics(df, "n")
         assert sem.is_numeric is True
         assert sem.is_temporal is False
+
+
+@pytest.mark.skipif(pd is None, reason="Pandas is not installed. Skipping this test.")
+class TestPandasColumnSemanticsZone:
+    @pytest.mark.parametrize(
+        "zone, expected",
+        [("America/New_York", "America/New_York"), ("UTC", "UTC"), ("+05:30", "+05:30")],
+    )
+    def test_zoned_column_reports_tz(self, zone: str, expected: str) -> None:
+        if zone.startswith("+"):
+            from datetime import timedelta, timezone
+
+            tz: Any = timezone(timedelta(hours=5, minutes=30))
+        else:
+            tz = zone
+        df = pd.DataFrame({"ts": pd.to_datetime(["2021-01-01 12:00:00"]).tz_localize("UTC").tz_convert(tz)})
+        sem = column_semantics(df, "ts")
+        assert sem.is_tz_aware is True
+        assert sem.tz == expected
+
+    def test_naive_column_has_no_tz(self) -> None:
+        df = pd.DataFrame({"ts": pd.to_datetime(["2021-01-01 12:00:00"])})
+        assert column_semantics(df, "ts").tz is None

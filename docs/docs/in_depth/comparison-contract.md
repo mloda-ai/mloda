@@ -16,7 +16,8 @@ timezone-aware column (which clock applies, daylight saving lengths, the zone of
   `SemanticDimension` values (`ORDERED`, `TEMPORAL`, `NUMERIC`), an optional `unit`, and a
   `tz_policy`.
 - `ColumnSemantics` is the framework-neutral view of one column: `is_ordered`, `is_temporal`,
-  `is_numeric`, `unit`, `is_tz_aware`. Each merge and filter engine (`BaseMergeEngine` /
+  `is_numeric`, `unit`, `is_tz_aware`, `tz`. `tz` is the zone name; giving it makes the column aware,
+  and `is_tz_aware=True` with `tz=None` means aware in an unknown zone. Each merge and filter engine (`BaseMergeEngine` /
   `BaseFilterEngine` subclass) derives it from its framework's native schema via the
   `_column_semantics(data, column)` hook.
 - `ComparisonContract.validate(semantics, column)` checks a single column against the required
@@ -45,15 +46,15 @@ custom ComputeFramework) skip the guard entirely and are never forced to impleme
 opts in but forgets to implement the hook raises a clear error rather than silently skipping
 validation. All built-in backends below opt in.
 
-| Backend | ordered / temporal / numeric | timezone-awareness | time unit |
-|---------|:---:|:---:|:---:|
-| pandas | yes | yes | yes |
-| polars | yes | yes | yes |
-| pyarrow | yes | yes | yes |
-| duckdb | yes | yes (`TIMESTAMP WITH TIME ZONE`) | partial |
-| sqlite | yes | only for native timestamp columns | only for native timestamp columns |
-| spark | yes | no (deferred) | no |
-| python_dict | yes (value scan) | yes (value scan) | no |
+| Backend | ordered / temporal / numeric | timezone-awareness | zone (`tz`) | time unit |
+|---------|:---:|:---:|:---:|:---:|
+| pandas | yes | yes | native | yes |
+| polars | yes | yes | native | yes |
+| pyarrow | yes | yes | native | yes |
+| duckdb | yes | yes (`TIMESTAMP WITH TIME ZONE`) | recorded zone, else unknown | partial |
+| sqlite | yes | only for native timestamp columns | native (Arrow type) | only for native timestamp columns |
+| spark | yes | only with a recorded zone | recorded zone from the transfer, else not reported | no |
+| python_dict | yes (value scan) | yes (value scan) | tzinfo of the first value | no |
 
 ## Deferred
 

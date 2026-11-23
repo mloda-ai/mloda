@@ -6,8 +6,9 @@ Because python_dict carries no schema, the function inspects the first non-null 
 Expected to fail at import time (ModuleNotFoundError) until Green implements it.
 """
 
-from datetime import UTC, datetime
+from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
+from zoneinfo import ZoneInfo
 
 from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_type_semantics import (
@@ -122,3 +123,23 @@ class TestPythonDictDatetimeObjectRegression:
         assert sem.is_temporal is True
         assert sem.is_ordered is True
         assert sem.is_tz_aware is True
+
+
+class TestPythonDictZone:
+    """tz is the zone of the first non-null aware value."""
+
+    def test_zoneinfo_key(self) -> None:
+        data: dict[str, list[Any]] = {"ts": [None, datetime(2021, 1, 1, 12, tzinfo=ZoneInfo("America/New_York"))]}
+        sem = column_semantics(data, "ts")
+        assert sem.is_tz_aware is True
+        assert sem.tz == "America/New_York"
+
+    def test_utc(self) -> None:
+        assert column_semantics({"ts": [datetime(2021, 1, 1, tzinfo=UTC)]}, "ts").tz == "UTC"
+
+    def test_fixed_offset(self) -> None:
+        tz = timezone(timedelta(hours=5, minutes=30))
+        assert column_semantics({"ts": [datetime(2021, 1, 1, tzinfo=tz)]}, "ts").tz == "+05:30"
+
+    def test_naive_has_no_tz(self) -> None:
+        assert column_semantics({"ts": [datetime(2021, 1, 1)]}, "ts").tz is None

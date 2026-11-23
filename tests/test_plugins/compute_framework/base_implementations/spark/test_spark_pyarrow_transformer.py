@@ -316,3 +316,48 @@ class TestSparkPyArrowTransformer:
         assert sorted_data[1]["name"] is None  # id=2
         assert sorted_data[2]["age"] is None  # id=3
         assert sorted_data[3]["name"] is None and sorted_data[3]["age"] is None  # id=4
+
+    @staticmethod
+    def _zoned_table(zone: str, name: str = "ts") -> Any:
+        from datetime import UTC, datetime
+
+        instants = [datetime(2023, 3, 12, 6, 30, tzinfo=UTC), None, datetime(2023, 3, 12, 7, 30, tzinfo=UTC)]
+        return pa.table(
+            {"id": pa.array([1, 2, 3], type=pa.int64()), name: pa.array(instants, pa.timestamp("us", zone))}
+        )
+
+    @pytest.mark.parametrize("zone", ["America/New_York", "Asia/Kolkata", "UTC"])
+    @pytest.mark.parametrize("name", ["ts", "a.b"])
+    def test_zoned_column_round_trip_keeps_instants_and_zone(self, spark_session: Any, zone: str, name: str) -> None:
+        source = self._zoned_table(zone, name)
+        frame = SparkPyArrowTransformer.transform_other_fw_to_fw(source, framework_connection_object=spark_session)
+        result = SparkPyArrowTransformer.transform_fw_to_other_fw(frame).sort_by("id")
+
+        assert result.schema.field(name).type == pa.timestamp("us", tz=zone)
+        assert (
+            result.column(name).cast(pa.timestamp("us", tz="UTC")).to_pylist()
+            == source.column(name).cast(pa.timestamp("us", tz="UTC")).to_pylist()
+        )
+
+    def test_zoned_column_round_trip_in_a_non_utc_session(
+        self, spark_session: Any, spark_non_utc_timezone: Any
+    ) -> None:
+        source = self._zoned_table("Asia/Kolkata")
+        frame = SparkPyArrowTransformer.transform_other_fw_to_fw(source, framework_connection_object=spark_session)
+        result = SparkPyArrowTransformer.transform_fw_to_other_fw(frame).sort_by("id")
+
+        assert result.schema.field("ts").type == pa.timestamp("us", tz="Asia/Kolkata")
+        assert result.column("ts").to_pylist() == source.column("ts").to_pylist()
+
+    def test_with_time_zones_records_zones_in_field_metadata(self, spark_session: Any) -> None:
+        from mloda_plugins.compute_framework.base_implementations.spark import spark_type_semantics as sem
+        from mloda_plugins.compute_framework.base_implementations.spark.spark_pyarrow_transformer import (
+            with_time_zones,
+        )
+
+        source = self._zoned_table("America/New_York")
+        frame = spark_session.createDataFrame([(1, None)], "id long, ts timestamp")
+        tagged = with_time_zones(frame, source.schema)
+
+        assert sem.time_zone(tagged, "ts") == "America/New_York"
+        assert sem.time_zone(tagged, "id") is None

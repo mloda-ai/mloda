@@ -1,6 +1,7 @@
 from typing import Any
 
 from mloda.provider import BaseTransformer
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_table
 
 try:
     import pyarrow as pa
@@ -54,7 +55,7 @@ class PythonDictPyArrowTransformer(BaseTransformer):
 
         # A columnar dict of columns maps directly onto a PyArrow table. An empty column
         # ``{"col": []}`` yields a 0-row table that keeps the column name; ``{}`` -> empty table.
-        return pa.table(data)
+        return arrow_table(data)
 
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:

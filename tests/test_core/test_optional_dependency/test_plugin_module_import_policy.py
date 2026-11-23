@@ -60,6 +60,7 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_BACKENDS}.pyarrow.pyarrow_file_source_transformer": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_filter_engine": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_mask_engine": "pyarrow",
+    f"{_BACKENDS}.pyarrow.arrow_build": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_merge_engine": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_type_semantics": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_value_set": "pyarrow",

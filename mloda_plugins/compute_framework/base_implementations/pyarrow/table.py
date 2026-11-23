@@ -11,6 +11,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_mask_e
 )
 
 from mloda.user import FeatureName
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_array, arrow_table
 from mloda.provider import ComputeFramework
 
 try:
@@ -51,7 +52,7 @@ def arrow_append_columns(data: Any, columns: dict[str, Any]) -> Any | None:
     if any(len(values) != data.num_rows for values in columns.values()):
         return None
     for name, values in columns.items():
-        arrow_values = values if isinstance(values, (pa.Array, pa.ChunkedArray)) else pa.array(values)
+        arrow_values = values if isinstance(values, (pa.Array, pa.ChunkedArray)) else arrow_array(values)
         data = data.append_column(name, arrow_values)
     return data
 
@@ -141,7 +142,7 @@ class PyArrowTable(ComputeFramework):
 
         if isinstance(data, dict):
             """Initial data: Transform dict to table"""
-            return pa.table(data)
+            return arrow_table(data)
 
         if isinstance(data, pa.ChunkedArray) or isinstance(data, pa.Array):
             """Added data: Add column to table"""

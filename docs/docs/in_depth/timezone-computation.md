@@ -133,6 +133,12 @@ Handing the same instants back under another zone is not one of them. Every cale
 gives a valid but different answer that nothing downstream can detect, so a
 [divergence record](divergence-records.md) does not cover it.
 
+DuckDB and Spark store instants only. DuckDB records the zone beside the column, Spark in the field
+metadata (`mloda.time_zone`), and both re-attach it on the way out. Spark limits: a column Spark
+computes, or a key it coalesces in an outer join, loses the recorded zone and reads back in UTC; its
+Implementations compute on the session zone; a zone-carrying column against a `TimestampType` column
+without a recorded zone is reported as aware against naive.
+
 `DataTypeValidatorSuite` checks this with a DST zone and a sub-hour offset.
 
 ## Core feature groups

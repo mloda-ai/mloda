@@ -1,6 +1,7 @@
 """Cross-engine comparison contract (epic #518, Phase 0)."""
 
 from dataclasses import dataclass
+from datetime import UTC, tzinfo
 from enum import Enum
 
 
@@ -29,6 +30,27 @@ class ColumnSemantics:
     is_numeric: bool
     unit: str | None = None
     is_tz_aware: bool = False
+    tz: str | None = None
+
+    def __post_init__(self) -> None:
+        if self.tz is not None:
+            object.__setattr__(self, "is_tz_aware", True)
+
+
+def zone_name(tz: tzinfo) -> str:
+    """Name of a tzinfo: IANA key, "UTC", a fixed offset as +HH:MM, else str(tz)."""
+    key = getattr(tz, "key", None) or getattr(tz, "zone", None)
+    if isinstance(key, str):
+        return key
+    if tz is UTC:
+        return "UTC"
+    offset = tz.utcoffset(None)
+    if offset is not None:
+        minutes = int(offset.total_seconds() // 60)
+        sign = "+" if minutes >= 0 else "-"
+        hours, mins = divmod(abs(minutes), 60)
+        return f"{sign}{hours:02d}:{mins:02d}"
+    return str(tz)
 
 
 @dataclass(frozen=True)

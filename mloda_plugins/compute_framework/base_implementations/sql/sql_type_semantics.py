@@ -56,15 +56,15 @@ def column_semantics_from_arrow(
     is_ordered = is_ordered_arrow_type(arrow_type)
 
     unit: str | None = None
-    is_tz_aware = False
+    tz: str | None = None
     if pa.types.is_timestamp(arrow_type):
         unit = arrow_type.unit
-        is_tz_aware = arrow_type.tz is not None
+        tz = arrow_type.tz
 
     return ColumnSemantics(
         is_ordered=is_ordered,
         is_temporal=is_temporal,
         is_numeric=is_numeric,
         unit=unit,
-        is_tz_aware=is_tz_aware,
+        tz=tz,
     )

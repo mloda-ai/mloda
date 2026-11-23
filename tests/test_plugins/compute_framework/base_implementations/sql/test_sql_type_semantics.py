@@ -74,3 +74,16 @@ class TestSqlColumnSemanticsFromArrow:
         sem = column_semantics_from_arrow(pa.large_string(), value_sample=["2024-01-01T00:00:00"])
         assert sem.is_temporal is True
         assert sem.is_ordered is True
+
+
+@pytest.mark.skipif(pa is None, reason="PyArrow is not installed. Skipping this test.")
+class TestSqlColumnSemanticsZone:
+    @pytest.mark.parametrize("zone", ["UTC", "America/New_York", "+05:30"])
+    def test_zoned_timestamp_reports_tz(self, zone: str) -> None:
+        sem = column_semantics_from_arrow(pa.timestamp("us", tz=zone))
+        assert sem.is_tz_aware is True
+        assert sem.tz == zone
+
+    def test_naive_timestamp_has_no_tz(self) -> None:
+        sem = column_semantics_from_arrow(pa.timestamp("us"))
+        assert sem.tz is None

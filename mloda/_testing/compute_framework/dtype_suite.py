@@ -370,4 +370,9 @@ class DataTypeValidatorSuite(ComputeFrameworkSuite, suite_base=True):
             else:
                 assert got == want
                 assert got.utcoffset() == want.utcoffset()
+        engine = framework_instance.filter_engine()
+        if engine.provides_column_semantics:
+            semantics = engine._column_semantics(frame, case_id)
+            assert semantics.is_tz_aware
+            assert semantics.tz in (None, zone_name)
         assert framework_instance._extract_column_data_type(frame, case_id) == DataType.TIMESTAMP_MICROS_TZ

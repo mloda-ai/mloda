@@ -483,3 +483,39 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         assert rel.time_zone("ts") is None
         assert rel.to_arrow_table().schema == native.arrow().read_all().schema
         assert rel.df().equals(native.df())
+
+    @staticmethod
+    def _native_tz_relation(connection: Any, unit: str, values: list[datetime | None]) -> DuckdbRelation:
+        arrow = pa.table({"ts": pa.array(values, type=pa.timestamp(unit, tz="UTC"))})
+        return DuckdbRelation(connection, connection.from_arrow(arrow))
+
+    @pytest.mark.parametrize("session_zone", ["UTC", "America/New_York", "Asia/Kolkata"])
+    def test_df_native_timestamptz_ns_is_aware_in_the_session_zone(self, connection: Any, session_zone: str) -> None:
+        connection.execute(f"SET TimeZone='{session_zone}'")
+        values: list[datetime | None] = [datetime(2023, 3, 12, 6, 30), None, datetime(2023, 3, 13, 12, 0)]
+        us_frame = self._native_tz_relation(connection, "us", values).df()
+        ns_frame = self._native_tz_relation(connection, "ns", values).df()
+
+        assert us_frame["ts"].dt.tz is not None
+        assert ns_frame["ts"].dt.tz is not None
+        assert str(ns_frame["ts"].dt.tz) == str(us_frame["ts"].dt.tz)
+        assert ns_frame["ts"].dt.tz_convert("UTC").tolist() == us_frame["ts"].dt.tz_convert("UTC").tolist()
+
+    def test_df_native_ns_column_beside_a_recorded_zone_is_aware(self, connection: Any) -> None:
+        recorded = DuckdbRelation.from_arrow(
+            connection,
+            pa.table({"rid": pa.array([1, 2], type=pa.int64()), "r": _tz_table(zone="+05:00").column("ts")[:2]}),
+        )
+        native = self._native_tz_relation(connection, "ns", [datetime(2023, 3, 12, 6, 30), datetime(2023, 3, 13, 7, 0)])
+        native_rel = native.project('"ts" AS "n", CAST(row_number() OVER () AS BIGINT) AS "nid"')
+        frame = recorded.set_alias("l").join(native_rel.set_alias("r"), 'l."rid" = r."nid"').df()
+
+        assert recorded.time_zone("r") == "+05:00"
+        assert frame["r"].dt.tz is not None
+        assert frame["n"].dt.tz is not None
+
+    def test_df_zero_row_native_ns_column_is_aware(self, connection: Any) -> None:
+        frame = self._native_tz_relation(connection, "ns", []).df()
+
+        assert len(frame) == 0
+        assert frame["ts"].dt.tz is not None

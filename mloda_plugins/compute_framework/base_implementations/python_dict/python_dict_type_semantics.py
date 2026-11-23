@@ -9,7 +9,7 @@ values.
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics, zone_name
 from mloda.core.abstract_plugins.components.contract.value_inspection import iso8601_string_semantics
 
 
@@ -29,7 +29,7 @@ def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics
     is_ordered = False
     is_temporal = False
     is_numeric = False
-    is_tz_aware = False
+    tz: str | None = None
 
     if isinstance(value, bool):
         pass
@@ -39,7 +39,7 @@ def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics
     elif isinstance(value, datetime):
         is_temporal = True
         is_ordered = True
-        is_tz_aware = value.tzinfo is not None
+        tz = zone_name(value.tzinfo) if value.tzinfo is not None else None
     elif isinstance(value, date):
         is_temporal = True
         is_ordered = True
@@ -51,5 +51,5 @@ def column_semantics(data: dict[str, list[Any]], column: str) -> ColumnSemantics
         is_temporal=is_temporal,
         is_numeric=is_numeric,
         unit=None,
-        is_tz_aware=is_tz_aware,
+        tz=tz,
     )

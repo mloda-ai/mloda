@@ -98,6 +98,9 @@ def _infer_arrow_type_from_values(values: list[Any]) -> pa.DataType:
     if all(isinstance(value, bool) for value in non_null_values):
         return pa.bool_()
     if all(isinstance(value, datetime.datetime) for value in non_null_values):
+        first = non_null_values[0]
+        if all(value.tzinfo is not None for value in non_null_values):
+            return pa.timestamp("us", tz=pa.lib.tzinfo_to_string(first.tzinfo))
         return pa.timestamp("us")
     if all(isinstance(value, datetime.date) and not isinstance(value, datetime.datetime) for value in non_null_values):
         return pa.date32()

@@ -15,6 +15,7 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_type_semantics import is_tz_aware_type
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_table as arrow_table_from
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     ensure_distinct_identifiers,
@@ -238,17 +239,23 @@ class DuckdbRelation(SqlBaseRelation):
         return table
 
     def df(self) -> Any:
-        """Tz-aware columns come back in their recorded zone; DuckDB hands ns tz columns back naive in UTC."""
+        """Tz-aware columns come back aware: the recorded zone, else the session zone (DuckDB returns ns ones naive)."""
         frame = self._relation.df()
-        if not self._time_zones:
-            return frame
+        session_zone: str | None = None
         for i, (name, dtype) in enumerate(zip(self._relation.columns, self._relation.dtypes)):
+            if not is_tz_aware_type(dtype):
+                continue
+            col = frame.iloc[:, i]
             zone = self._time_zones.get(name)
-            if zone is not None and is_tz_aware_type(dtype):
-                col = frame.iloc[:, i]
-                if col.dt.tz is None:
-                    col = col.dt.tz_localize("UTC")
-                frame.isetitem(i, col.dt.tz_convert(zone))
+            if zone is None:
+                if col.dt.tz is not None:
+                    continue
+                if session_zone is None:
+                    session_zone = self._connection.execute("SELECT current_setting('TimeZone')").fetchall()[0][0]
+                zone = session_zone
+            if col.dt.tz is None:
+                col = col.dt.tz_localize("UTC")
+            frame.isetitem(i, col.dt.tz_convert(zone))
         return frame
 
     def __len__(self) -> int:
@@ -302,5 +309,5 @@ class DuckdbRelation(SqlBaseRelation):
             )
         if not data:
             raise ValueError("Cannot create relation from empty dictionary")
-        arrow_table = pa.table(data)
+        arrow_table = arrow_table_from(data)
         return cls.from_arrow(connection, arrow_table)

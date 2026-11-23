@@ -1,6 +1,10 @@
 from typing import Any
 
 from mloda.provider import BaseTransformer
+from mloda_plugins.compute_framework.base_implementations.spark.spark_type_semantics import (
+    TIME_ZONE_METADATA_KEY,
+    time_zone,
+)
 
 try:
     from pyspark.sql import DataFrame, SparkSession
@@ -12,6 +16,21 @@ try:
     import pyarrow as pa
 except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
+
+
+def with_time_zones(sdf: Any, schema: Any) -> Any:
+    """Record the zone of each zoned Arrow timestamp field in the Spark field metadata."""
+    from pyspark.sql import functions as F
+    from pyspark.sql.types import TimestampType
+
+    zones = {f.name: f.type.tz for f in schema if pa.types.is_timestamp(f.type) and f.type.tz}
+    columns = []
+    for field in sdf.schema.fields:
+        column = F.col("`" + field.name.replace("`", "``") + "`")
+        if field.name in zones and isinstance(field.dataType, TimestampType):
+            column = column.alias(field.name, metadata={**field.metadata, TIME_ZONE_METADATA_KEY: zones[field.name]})
+        columns.append(column)
+    return sdf.select(*columns)
 
 
 class SparkPyArrowTransformer(BaseTransformer):
@@ -51,9 +70,14 @@ class SparkPyArrowTransformer(BaseTransformer):
         This method uses Spark's native Arrow integration through toArrow()
         for efficient conversion.
         """
-        # Use Spark's native Arrow integration
-        # toArrow() already returns a PyArrow Table
-        return data.toArrow()
+        table = data.toArrow()
+        for index, field in enumerate(table.schema):
+            zone = time_zone(data, field.name)
+            if zone is not None and pa.types.is_timestamp(field.type):
+                table = table.set_column(
+                    index, field.name, table.column(index).cast(pa.timestamp(field.type.unit, tz=zone))
+                )
+        return table
 
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
@@ -95,4 +119,4 @@ class SparkPyArrowTransformer(BaseTransformer):
                 row[column_name] = pydict[column_name][i]
             rows.append(row)
 
-        return spark.createDataFrame(rows)
+        return with_time_zones(spark.createDataFrame(rows), data.schema)

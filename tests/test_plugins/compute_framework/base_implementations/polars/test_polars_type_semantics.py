@@ -81,3 +81,22 @@ class TestPolarsColumnSemantics:
         assert sem.is_numeric is True
         assert sem.is_temporal is False
         assert sem.unit is None
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+class TestPolarsColumnSemanticsZone:
+    def test_zoned_column_reports_tz(self) -> None:
+        df = pl.DataFrame({"ts": [datetime(2021, 1, 1, 12)]}).with_columns(
+            pl.col("ts").dt.replace_time_zone("America/New_York")
+        )
+        sem = column_semantics(df, "ts")
+        assert sem.is_tz_aware is True
+        assert sem.tz == "America/New_York"
+
+    def test_lazyframe_reports_tz(self) -> None:
+        df = pl.DataFrame({"ts": [datetime(2021, 1, 1, 12)]}).with_columns(pl.col("ts").dt.replace_time_zone("UTC"))
+        assert column_semantics(df.lazy(), "ts").tz == "UTC"
+
+    def test_naive_column_has_no_tz(self) -> None:
+        df = pl.DataFrame({"ts": [datetime(2021, 1, 1, 12)]})
+        assert column_semantics(df, "ts").tz is None

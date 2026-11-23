@@ -92,3 +92,47 @@ class TestSparkColumnSemantics:
         assert sem.is_numeric is False
         assert sem.is_tz_aware is False
         assert sem.unit is None
+
+
+def _stub_frame(**fields: Any) -> Any:
+    """A JVM-free stand-in for a Spark DataFrame: ``.schema`` and ``.columns`` only."""
+    from types import SimpleNamespace
+
+    types = pytest.importorskip("pyspark.sql.types")
+    schema = types.StructType(
+        [types.StructField(name, make(types), metadata=meta) for name, (make, meta) in fields.items()]
+    )
+    return SimpleNamespace(schema=schema, columns=list(fields))
+
+
+class TestSparkZoneMetadata:
+    def test_recorded_zone_is_aware_with_tz(self) -> None:
+        frame = _stub_frame(ts=(lambda t: t.TimestampType(), {"mloda.time_zone": "America/New_York"}))
+        sem = column_semantics(frame, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is True
+        assert sem.tz == "America/New_York"
+
+    def test_no_metadata_is_unchanged(self) -> None:
+        frame = _stub_frame(ts=(lambda t: t.TimestampType(), {}))
+        sem = column_semantics(frame, "ts")
+        assert sem.is_temporal is True
+        assert sem.is_tz_aware is False
+        assert sem.tz is None
+
+    def test_ntz_column_stays_naive(self) -> None:
+        frame = _stub_frame(ts=(lambda t: t.TimestampNTZType(), {}))
+        assert column_semantics(frame, "ts").is_tz_aware is False
+
+    def test_time_zone_reads_the_metadata_key(self) -> None:
+        from mloda_plugins.compute_framework.base_implementations.spark import spark_type_semantics as mod
+
+        frame = _stub_frame(
+            a=(lambda t: t.TimestampType(), {mod.TIME_ZONE_METADATA_KEY: "Asia/Kolkata"}),
+            b=(lambda t: t.TimestampType(), {}),
+            c=(lambda t: t.LongType(), {}),
+        )
+        assert mod.TIME_ZONE_METADATA_KEY == "mloda.time_zone"
+        assert mod.time_zone(frame, "a") == "Asia/Kolkata"
+        assert mod.time_zone(frame, "b") is None
+        assert mod.time_zone(frame, "c") is None

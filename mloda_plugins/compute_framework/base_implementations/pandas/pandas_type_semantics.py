@@ -2,7 +2,7 @@
 
 from typing import TYPE_CHECKING, Any
 
-from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics
+from mloda.core.abstract_plugins.components.contract.comparison_contract import ColumnSemantics, zone_name
 
 if TYPE_CHECKING:
     import pandas as pd
@@ -26,7 +26,7 @@ def column_semantics(df: "pd.DataFrame", column: str) -> ColumnSemantics:
 
     is_temporal = is_datetime
     is_ordered = (is_numeric or is_temporal or is_timedelta) and not is_bool
-    is_tz_aware = isinstance(dtype, pd.DatetimeTZDtype)
+    tz = zone_name(dtype.tz) if isinstance(dtype, pd.DatetimeTZDtype) else None
 
     unit: str | None = None
     if is_datetime:
@@ -43,7 +43,7 @@ def column_semantics(df: "pd.DataFrame", column: str) -> ColumnSemantics:
         is_temporal=is_temporal,
         is_numeric=is_numeric,
         unit=unit,
-        is_tz_aware=is_tz_aware,
+        tz=tz,
     )
 
 

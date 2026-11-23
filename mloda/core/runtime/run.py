@@ -649,7 +649,7 @@ class ExecutionOrchestrator:
         """Raises the MULTIPROCESSING refusals before any worker, manager or payload is created."""
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             return
-        raise_on_multiprocessing_connection_conflict(self.execution_planner)
+        raise_on_multiprocessing_connection_conflict(self.execution_planner, parallelization_modes)
         raise_on_unpicklable_join_link(self.execution_planner, parallelization_modes)
         raise_on_unpicklable_step_feature_group(self.execution_planner, parallelization_modes)
         raise_on_unpicklable_step_credentials(

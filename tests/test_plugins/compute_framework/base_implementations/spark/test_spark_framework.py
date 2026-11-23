@@ -168,11 +168,14 @@ class TestSparkFrameworkComputeFramework:
     ) -> None:
         framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         framework.set_framework_connection_object(spark_session)
-        values = [_NY_START.astimezone(_NY), None, _NY_START.astimezone(_NY) + timedelta(hours=1)]
+        from zoneinfo import ZoneInfo
+
+        kolkata = ZoneInfo("Asia/Kolkata")
+        values = [_NY_START.astimezone(kolkata), None, _NY_START.astimezone(kolkata) + timedelta(hours=1)]
 
         frame = framework.transform({"id": [1, 2, 3], "t": values}, ["id", "t"])
 
-        self._assert_column(frame, "t", "America/New_York", values)
+        self._assert_column(frame, "t", "Asia/Kolkata", values)
 
     @pytest.mark.parametrize("route", ["append_columns", "positional"])
     def test_append_aware_column_onto_zoned_frame_keeps_both_zones(self, spark_session: Any, route: str) -> None:

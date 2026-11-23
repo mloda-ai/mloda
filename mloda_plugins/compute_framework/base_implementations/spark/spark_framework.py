@@ -54,12 +54,14 @@ _SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
 
 def _aware_zone(values: Sequence[Any]) -> str | None:
     """Return the zone name when every non-None value is a tz-aware datetime, else None."""
+    first = next((v for v in values if v is not None), None)
+    if not (isinstance(first, datetime) and first.tzinfo is not None):
+        return None
+    if not all(isinstance(v, datetime) and v.tzinfo is not None for v in values if v is not None):
+        return None
     import pyarrow as pa
 
-    present = [v for v in values if v is not None]
-    if present and all(isinstance(v, datetime) and v.tzinfo is not None for v in present):
-        return str(pa.lib.tzinfo_to_string(present[0].tzinfo))
-    return None
+    return str(pa.lib.tzinfo_to_string(first.tzinfo))
 
 
 class SparkFramework(ComputeFramework):

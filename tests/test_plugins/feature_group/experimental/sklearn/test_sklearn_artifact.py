@@ -2,14 +2,20 @@
 Tests for SklearnArtifact.
 """
 
+import os
+import tempfile
 from pathlib import Path
+from typing import Any
 
 from mloda.user import Feature
 import pytest
 from unittest.mock import Mock, patch
+from mloda_plugins.feature_group.experimental.sklearn import sklearn_artifact
 from mloda_plugins.feature_group.experimental.sklearn.sklearn_artifact import SklearnArtifact
 from mloda.provider import FeatureSet
 from mloda.user import Options
+
+REAL_DEFAULT_STORAGE_DIR = sklearn_artifact.default_storage_dir
 
 
 class TestSklearnArtifact:
@@ -190,3 +196,97 @@ class TestSklearnArtifact:
         assert "fitted_transformer" in loaded_artifact
         assert "feature_names" in loaded_artifact
         assert loaded_artifact["feature_names"] == ["feature1", "feature2"]
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX owner and mode check")
+    def test_default_storage_is_private_user_dir(self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch) -> None:
+        """Default storage is a private per-user dir and never reads the shared temp dir."""
+        import joblib
+
+        monkeypatch.setattr(sklearn_artifact, "default_storage_dir", REAL_DEFAULT_STORAGE_DIR)
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+        shared_tmp = tmp_path / "shared"
+        shared_tmp.mkdir()
+        monkeypatch.setattr(tempfile, "tempdir", str(shared_tmp))
+        joblib.dump({"evil": 1}, shared_tmp / "sklearn_artifact_planted.joblib")
+
+        default_dir = tmp_path / "cache" / "mloda" / "sklearn_artifacts"
+        features = FeatureSet()
+        features.add(Feature("test_default_private_feature", Options({})))
+
+        assert SklearnArtifact.custom_loader(features) is None
+        assert not default_dir.exists()
+
+        SklearnArtifact.custom_saver(features, {"private_key": {"value": 1}})
+        assert default_dir.is_dir()
+        assert (default_dir.stat().st_mode & 0o777) == 0o700
+
+        loaded = SklearnArtifact.custom_loader(features)
+        assert loaded == {"private_key": {"value": 1}}
+
+    @pytest.mark.skipif(os.name != "posix", reason="POSIX owner and mode check")
+    def test_default_storage_refuses_shared_or_foreign_dir(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setattr(sklearn_artifact, "default_storage_dir", REAL_DEFAULT_STORAGE_DIR)
+        monkeypatch.setenv("XDG_CACHE_HOME", str(tmp_path / "cache"))
+        default_dir = tmp_path / "cache" / "mloda" / "sklearn_artifacts"
+        features = FeatureSet()
+        features.add(Feature("test_default_refuse_feature", Options({})))
+
+        SklearnArtifact.custom_saver(features, {"refuse_key": {"value": 1}})
+        default_dir.chmod(0o755)
+        with pytest.raises(PermissionError, match="not shared") as exc_info:
+            SklearnArtifact.custom_loader(features)
+        assert "artifact_storage_path" in str(exc_info.value)
+        with pytest.raises(PermissionError, match="not shared"):
+            SklearnArtifact.custom_saver(features, {"refuse_key": {"value": 2}})
+
+        default_dir.chmod(0o700)
+        real_uid = os.geteuid()
+        monkeypatch.setattr(os, "geteuid", lambda: real_uid + 1)
+        with pytest.raises(PermissionError, match="not shared"):
+            SklearnArtifact.custom_loader(features)
+
+    def test_relative_xdg_cache_home_falls_back_to_home_cache(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        monkeypatch.setenv("XDG_CACHE_HOME", "relative/cache")
+        monkeypatch.setattr(Path, "home", classmethod(lambda cls: tmp_path / "home"))
+        assert REAL_DEFAULT_STORAGE_DIR() == tmp_path / "home" / ".cache" / "mloda" / "sklearn_artifacts"
+
+    def test_explicit_shared_storage_path_is_not_permission_checked(self, tmp_path: Path) -> None:
+        storage = tmp_path / "explicit"
+        storage.mkdir()
+        storage.chmod(0o755)
+        features = FeatureSet()
+        features.add(Feature("test_explicit_shared_feature", Options({"artifact_storage_path": str(storage)})))
+
+        SklearnArtifact.custom_saver(features, {"explicit_key": {"value": 1}})
+        assert SklearnArtifact.custom_loader(features) == {"explicit_key": {"value": 1}}
+
+    def test_failed_save_keeps_previous_files_and_no_temp(self, tmp_path: Path) -> None:
+        import joblib
+
+        features = FeatureSet()
+        features.add(Feature("test_failed_save_feature", Options({"artifact_storage_path": str(tmp_path)})))
+        SklearnArtifact.custom_saver(features, {"key_a": {"value": "old_a"}, "key_b": {"value": "old_b"}})
+
+        real_dump = joblib.dump
+        calls: list[int] = []
+
+        def flaky_dump(value: Any, target: Any, *args: Any, **kwargs: Any) -> Any:
+            calls.append(1)
+            if len(calls) == 1:
+                return real_dump(value, target, *args, **kwargs)
+            Path(target).write_bytes(b"partial")
+            raise OSError("disk full")
+
+        with patch("joblib.dump", side_effect=flaky_dump):
+            with pytest.raises(OSError, match="disk full"):
+                SklearnArtifact.custom_saver(features, {"key_a": {"value": "new_a"}, "key_b": {"value": "new_b"}})
+
+        assert SklearnArtifact.custom_loader(features) == {"key_a": {"value": "old_a"}, "key_b": {"value": "old_b"}}
+        assert sorted(p.name for p in tmp_path.iterdir()) == [
+            "sklearn_artifact_key_a.joblib",
+            "sklearn_artifact_key_b.joblib",
+        ]

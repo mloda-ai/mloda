@@ -118,13 +118,13 @@ def _python_dict(data: dict[str, list[Any]]) -> Any:
 
 
 def _duckdb_from_dict(data: dict[str, list[Any]]) -> Any:
-    import duckdb
+    duckdb = pytest.importorskip("duckdb")
 
     return DuckdbRelation.from_dict(duckdb.connect(), data)
 
 
 def _duckdb_framework(data: dict[str, list[Any]]) -> Any:
-    import duckdb
+    duckdb = pytest.importorskip("duckdb")
 
     framework = DuckDBFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     framework.set_framework_connection_object(duckdb.connect())
@@ -132,6 +132,7 @@ def _duckdb_framework(data: dict[str, list[Any]]) -> Any:
 
 
 def _iceberg_framework(data: dict[str, list[Any]]) -> Any:
+    pytest.importorskip("pyiceberg")
     framework = IcebergFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     return framework.transform(data, ["t"])
 
@@ -150,7 +151,7 @@ def _sqlite_from_dict(data: dict[str, list[Any]]) -> Any:
 
 
 def _duckdb_append_columns(data: dict[str, list[Any]]) -> Any:
-    import duckdb
+    duckdb = pytest.importorskip("duckdb")
 
     base = DuckdbRelation.from_dict(duckdb.connect(), {"id": [1, 2]})
     return base.append_columns(data)

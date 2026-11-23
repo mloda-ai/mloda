@@ -28,5 +28,5 @@ def arrow_array(values: Any, type: pa.DataType | None = None) -> pa.Array:
 
 
 def arrow_table(data: Mapping[str, Any]) -> pa.Table:
-    """Build a table from a column mapping through ``arrow_array``."""
+    """Build a table, converting list columns through ``arrow_array``."""
     return pa.table({name: arrow_array(col) if isinstance(col, (list, tuple)) else col for name, col in data.items()})

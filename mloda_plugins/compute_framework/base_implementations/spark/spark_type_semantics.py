@@ -43,7 +43,7 @@ TIME_ZONE_METADATA_KEY = "mloda.time_zone"
 
 
 def time_zone(sdf: Any, column: str) -> str | None:
-    """Return the zone recorded in the field metadata of ``column``, else None."""
+    """Zone recorded in the field metadata of ``column``, else None."""
     zone = sdf.schema[column].metadata.get(TIME_ZONE_METADATA_KEY)
     return None if zone is None else str(zone)
 

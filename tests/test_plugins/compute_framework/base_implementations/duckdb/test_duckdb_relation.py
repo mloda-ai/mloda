@@ -502,6 +502,7 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         assert ns_frame["ts"].dt.tz_convert("UTC").tolist() == us_frame["ts"].dt.tz_convert("UTC").tolist()
 
     def test_df_native_ns_column_beside_a_recorded_zone_is_aware(self, connection: Any) -> None:
+        connection.execute("SET TimeZone='America/New_York'")
         recorded = DuckdbRelation.from_arrow(
             connection,
             pa.table({"rid": pa.array([1, 2], type=pa.int64()), "r": _tz_table(zone="+05:00").column("ts")[:2]}),
@@ -513,6 +514,12 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         assert recorded.time_zone("r") == "+05:00"
         assert frame["r"].dt.tz is not None
         assert frame["n"].dt.tz is not None
+        assert str(frame["r"].dt.tz) == "UTC+05:00"
+        assert str(frame["n"].dt.tz) == "America/New_York"
+        assert frame["r"].dt.tz_convert("UTC").tolist() == [pd.Timestamp(v, tz="UTC") for v in _naive_ts(1, 2)]
+        assert frame["n"].dt.tz_convert("UTC").tolist() == [
+            pd.Timestamp(v, tz="UTC") for v in [datetime(2023, 3, 12, 6, 30), datetime(2023, 3, 13, 7, 0)]
+        ]
 
     def test_df_zero_row_native_ns_column_is_aware(self, connection: Any) -> None:
         frame = self._native_tz_relation(connection, "ns", []).df()

@@ -53,21 +53,19 @@ def _builders() -> Any:
 @ENV_VALUES
 @pytest.mark.usefixtures("ignore_timezone_env")
 class TestArrowBuild:
-    def test_array_keeps_instants_and_zone(self) -> None:
-        arr = _builders().arrow_array([NOON_NY, None, LATER_NY])
-        assert arr.type == pa.timestamp("us", tz="America/New_York")
-        assert _utc(arr.to_pylist()) == _utc([NOON_NY, None, LATER_NY])
-
-    def test_array_fixed_offset_zone(self) -> None:
-        values = [datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA)]
+    @pytest.mark.parametrize(
+        "values, zone",
+        [
+            ([NOON_NY, None, LATER_NY], "America/New_York"),
+            ((NOON_NY,), "America/New_York"),
+            ([datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA)], "+05:30"),
+        ],
+        ids=["named_zone_list", "tuple", "fixed_offset"],
+    )
+    def test_array_keeps_instants_and_zone(self, values: Any, zone: str) -> None:
         arr = _builders().arrow_array(values)
-        assert arr.type == pa.timestamp("us", tz="+05:30")
-        assert _utc(arr.to_pylist()) == _utc(values)
-
-    def test_array_accepts_tuple(self) -> None:
-        arr = _builders().arrow_array((NOON_NY,))
-        assert arr.type == pa.timestamp("us", tz="America/New_York")
-        assert _utc(arr.to_pylist()) == _utc([NOON_NY])
+        assert arr.type == pa.timestamp("us", tz=zone)
+        assert _utc(arr.to_pylist()) == _utc(list(values))
 
     def test_explicit_type_wins(self) -> None:
         target = pa.timestamp("us", tz="Asia/Tokyo")

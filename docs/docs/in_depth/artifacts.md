@@ -163,16 +163,17 @@ def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
 # result.artifacts == {"feature_a": "/models/feature_a.bin", "feature_b": "/models/feature_b.bin"}
 ```
 
-- Return only keys in `features.get_all_names()`. Features of one group can land in
-  separate FeatureSets, and a key another set also returns raises.
+- Return only keys in `features.get_all_names()`. A key that is not a feature name
+  is refused by `run(artifacts=...)` and ignored on the Options path, where the set
+  saves again. Features of one group can land in separate FeatureSets, and a key
+  another set also returns raises.
 - One binding per FeatureSet: on load (Options or `run(artifacts=...)`), the set
   binds the alphabetically first of its feature names that has a value.
   `features.artifact_to_load` is that name and `features.artifact_value` is its
   value only. The other keys are not bound, and passing them raises nothing.
 - A `custom_loader` serving several features must load the others itself, for
-  example from storage it controls, as `SklearnArtifact.custom_loader` does. The
-  unbound values stay in `features.options` on the Options path, but are not
-  reachable from the FeatureSet on the runtime path.
+  example from storage it controls, as `SklearnArtifact.custom_loader` does. Do not
+  read them from `features.options`: they are absent on the runtime path.
 
 #### Testing Artifacts
 
@@ -194,17 +195,18 @@ class MySklearnFeatureGroup(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Save multiple artifacts with unique keys
+        # Key each artifact by a feature name, so it can be passed back to run(artifacts=...)
+        key = features.get_name_of_one_feature()
         if features.artifact_to_save is not None:
             SklearnArtifact.save_sklearn_artifact(
                 features, 
-                "my_transformer", 
+                key, 
                 {"fitted_transformer": fitted_model, "feature_names": ["col1", "col2"]}
             )
         
         # Load specific artifact by key
         if features.artifact_to_load is not None:
-            artifact_data = SklearnArtifact.load_sklearn_artifact(features, "my_transformer")
+            artifact_data = SklearnArtifact.load_sklearn_artifact(features, key)
             fitted_model = artifact_data["fitted_transformer"]
 ```
 

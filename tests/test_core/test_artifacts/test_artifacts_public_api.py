@@ -56,6 +56,14 @@ class TestArtifactsRunAll:
         assert len(result) == 1
 
 
+class PathMappingArtifact(BaseArtifact):
+    """Saver that maps each value, so the saver's return (not save_artifact) is what gets split."""
+
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        return {key: f"path-{value}" for key, value in artifact.items()}
+
+
 class MultiArtifactFeature(DataCreatorFeatureGroup):
     """Saves a dict artifact and records what the FeatureSet bound on load."""
 
@@ -65,7 +73,7 @@ class MultiArtifactFeature(DataCreatorFeatureGroup):
 
     @staticmethod
     def artifact() -> type[BaseArtifact] | None:
-        return BaseArtifact
+        return PathMappingArtifact
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -87,7 +95,7 @@ class TestMultiArtifactSaver:
             ["MultiArtifactKeyA", "MultiArtifactKeyB"], [PyArrowTable], plugin_collector=_multi_enabled
         )
 
-        assert session.run().artifacts == _MULTI_SAVED
+        assert session.run().artifacts == {"MultiArtifactKeyA": "path-value-a", "MultiArtifactKeyB": "path-value-b"}
 
     @pytest.mark.parametrize("how", ["options", "runtime"])
     def test_load_binds_one_key_per_feature_set(self, how: str) -> None:

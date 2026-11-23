@@ -4,12 +4,14 @@ from __future__ import annotations
 
 import gc
 from collections.abc import Callable
+from pathlib import Path
 
 import pytest
 
 from mloda._testing.source import reclaim
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
+from tests.helpers.probe_runner import run_probes
 
 
 def _registered(name: str) -> bool:
@@ -54,15 +56,11 @@ def test_a_just_built_dead_class_is_reclaimed_at_generation_zero(collections: li
 
 
 def test_a_tracked_class_still_held_is_reported_by_name() -> None:
-    mark = reclaim.mark()
-    held = reclaim.track(type("ReclaimHeldFG", (FeatureGroup,), {}))
-    try:
-        reported = reclaim.reclaim_since(mark)
-    finally:
-        del held
-        _release()
-    assert reported == ["ReclaimHeldFG"]
-    assert not _registered("ReclaimHeldFG")
+    # A collection already running in another thread makes gc.collect() a no-op.
+    # Keep the complete held/released scenario independent of the worker's heap.
+    assert run_probes(Path(__file__).with_name("reclaim_held_probe.py"), 1) == [
+        {"reported": "ReclaimHeldFG", "registration": "released"}
+    ]
 
 
 def test_nothing_tracked_since_the_mark_costs_no_collection(collections: list[int]) -> None:

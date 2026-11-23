@@ -10,10 +10,11 @@ R = TypeVar("R")
 class VarScope(Generic[T]):
     """Set a ContextVar to a value for a block, return the value on enter and reset on exit."""
 
-    def __init__(self, var: ContextVar[T], value: T) -> None:
-        self._var = var
+    # The union lets an Optional var yield a non-Optional value.
+    def __init__(self, var: ContextVar[T] | ContextVar[T | None], value: T) -> None:
+        self._var: ContextVar[Any] = var
         self._value = value
-        self._tokens: list[Token[T]] = []
+        self._tokens: list[Token[Any]] = []
 
     def __enter__(self) -> T:
         self._tokens.append(self._var.set(self._value))

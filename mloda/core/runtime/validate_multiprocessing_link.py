@@ -180,10 +180,12 @@ def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]
     )
 
 
-def raise_on_multiprocessing_connection_conflict(steps: Iterable[Any]) -> None:
-    """Raise ValueError if a step with a connection handle runs on a framework that supports MULTIPROCESSING."""
+def raise_on_multiprocessing_connection_conflict(
+    steps: Iterable[Any], register_modes: set[ParallelizationMode]
+) -> None:
+    """Raise ValueError if a step with a connection handle would run in a worker process."""
     for step in steps:
-        if step.connection_handle is None:
+        if step.connection_handle is None or not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
         cfw_class = (
             step.compute_framework
@@ -192,8 +194,7 @@ def raise_on_multiprocessing_connection_conflict(steps: Iterable[Any]) -> None:
             if isinstance(step, TransformFrameworkStep)
             else step.destination_framework
         )
-        if ParallelizationMode.MULTIPROCESSING in cfw_class.supported_parallelization_modes():
-            raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))
+        raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))
 
 
 def _forking_picklable(value: Any) -> bool:

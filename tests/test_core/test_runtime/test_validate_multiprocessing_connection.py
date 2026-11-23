@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.core.runtime.validate_multiprocessing_link import raise_on_multiprocessing_connection_conflict
@@ -12,6 +13,8 @@ from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framewor
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
+
+_MP = {ParallelizationMode.MULTIPROCESSING}
 
 
 class _ConnectionConflictUnitCFW(ComputeFramework):
@@ -28,7 +31,7 @@ def _hop_with_handle(cfw_class: type[ComputeFramework]) -> TransformFrameworkSte
 
 def test_a_framework_supporting_multiprocessing_with_a_resolved_connection_is_rejected() -> None:
     with pytest.raises(ValueError) as excinfo:
-        raise_on_multiprocessing_connection_conflict([_hop_with_handle(_ConnectionConflictUnitCFW)])
+        raise_on_multiprocessing_connection_conflict([_hop_with_handle(_ConnectionConflictUnitCFW)], _MP)
 
     message = str(excinfo.value)
     assert _ConnectionConflictUnitCFW.__name__ in message, f"the offending framework must be named; got: {message}"
@@ -49,8 +52,25 @@ def test_a_framework_supporting_multiprocessing_with_a_resolved_connection_is_re
 def test_a_framework_excluding_multiprocessing_with_a_resolved_connection_does_not_raise(
     cfw_class: type[ComputeFramework],
 ) -> None:
-    raise_on_multiprocessing_connection_conflict([_hop_with_handle(cfw_class)])
+    raise_on_multiprocessing_connection_conflict([_hop_with_handle(cfw_class)], _MP)
+
+
+@pytest.mark.parametrize(
+    "register_modes",
+    [
+        {ParallelizationMode.SYNC},
+        {ParallelizationMode.THREADING},
+        {ParallelizationMode.SYNC, ParallelizationMode.THREADING},
+    ],
+)
+def test_a_connection_step_staying_in_the_parent_process_does_not_raise(
+    register_modes: set[ParallelizationMode],
+) -> None:
+    step = _hop_with_handle(_ConnectionConflictUnitCFW)
+    assert ParallelizationMode.MULTIPROCESSING in step.get_parallelization_mode()
+
+    raise_on_multiprocessing_connection_conflict([step], register_modes)
 
 
 def test_an_empty_connection_map_does_not_raise() -> None:
-    raise_on_multiprocessing_connection_conflict([])
+    raise_on_multiprocessing_connection_conflict([], _MP)

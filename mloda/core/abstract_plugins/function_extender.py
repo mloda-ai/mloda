@@ -12,6 +12,7 @@ from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.feature_set import FeatureSet
     from mloda.core.abstract_plugins.components.options import Options
+    from mloda.core.abstract_plugins.hook_context import HookContext
     from mloda.core.abstract_plugins.plan_context import PlanContext
     from mloda.core.abstract_plugins.run_context import RunContext
     from mloda.core.api.plan_info import PlanStep
@@ -22,7 +23,7 @@ logger = logging.getLogger(__name__)
 
 @dataclass(frozen=True)
 class LifecycleOutcome:
-    """How a plan or run ended, passed to on_plan_complete and on_run_complete; error_type is the ending exception's module.qualname."""
+    """How a plan, step or run ended, with the ending exception's module.qualname when present."""
 
     status: Literal["succeeded", "failed", "cancelled"]
     error_type: str | None = None
@@ -167,6 +168,10 @@ class Extender(ABC):
         An Exception propagates and refuses the run when raise_on_error or never_fall_back is True,
         else it is logged and the run proceeds. Extenders after a refusing one get on_run_complete only."""
 
+    def on_step_complete(self, context: "HookContext", outcome: "LifecycleOutcome") -> None:
+        """Called once in the executing thread or worker after a feature-group step, with all credential reads.
+        On success, raise_on_error or never_fall_back propagates a callback error; a failed/cancelled step keeps its error."""
+
     def on_run_complete(self, run: "RunContext", outcome: "LifecycleOutcome") -> None:
         """Called once per run() or stream, in the PARENT on the caller's own extender objects, after the
         workers were joined and the runner exited, in every mode (close() is MULTIPROCESSING worker only).
@@ -245,6 +250,27 @@ def call_contained_hook(extenders: Iterable[Extender], hook: str, *args: Any) ->
             getattr(extender, hook)(*args)
         except Exception as e:
             logger.error("Extender %s.%s() %s", extender.__class__.__name__, hook, contained_raise_reason(e))
+
+
+def call_step_complete_hook(extenders: Iterable[Extender], context: "HookContext", outcome: LifecycleOutcome) -> None:
+    """Notify every extender, then propagate the first strict callback failure only if the step succeeded."""
+    failure: Exception | None = None
+    for extender in sorted(extenders, key=extender_sort_key):
+        try:
+            extender.on_step_complete(context, outcome)
+        except Exception as error:
+            if (
+                outcome.status == "succeeded"
+                and (extender.raise_on_error or extender.never_fall_back)
+                and failure is None
+            ):
+                failure = error
+            else:
+                logger.error(
+                    "Extender %s.on_step_complete() %s", extender.__class__.__name__, contained_raise_reason(error)
+                )
+    if failure is not None:
+        raise failure
 
 
 def call_run_complete_hook(extenders: Iterable[Extender], run: "RunContext", outcome: LifecycleOutcome) -> None:

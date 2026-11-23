@@ -4,12 +4,19 @@ from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
-from mloda.core.abstract_plugins.components.credential_access import readable_credentials
+from mloda.core.abstract_plugins.components.credential_access import hidden_credentials, readable_credentials
 from mloda.core.abstract_plugins.components.credential_handle import unset_credential_handle_options
 from mloda.core.abstract_plugins.components.credential_grant import read_recorder
+from mloda.core.abstract_plugins.components.credential_scrub import redact_escaping_exception
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
-from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.compute_framework import ComputeFramework, _StepFacts
+from mloda.core.abstract_plugins.function_extender import (
+    ExtenderHook,
+    LifecycleOutcome,
+    call_step_complete_hook,
+    error_outcome,
+)
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.core.step.abstract_step import Step
@@ -69,45 +76,61 @@ class FeatureGroupStep(Step):
             run_parameters = cfw_register.get_run_parameters()
             parameters = {k: run_parameters[k] for k in self.features.runtime_parameters if k in run_parameters}
         features = self.features.for_run(binding, parameters)
-        if self.own_frame and data is None:
-            data = self._source_data(cfw, from_cfw, location)
+        extenders = getattr(cfw, "function_extender", ())
+        facts = _StepFacts.of(features) if extenders else None
+        outcome = LifecycleOutcome("succeeded")
+        step_reads: set[str] = set()
+        try:
+            with read_recorder() as step_reads, redact_escaping_exception():
+                if self.own_frame and data is None:
+                    data = self._source_data(cfw, from_cfw, location)
 
-        match = features.input_data_match
-        access = None if match is None else match[1].access
-        with collect_failed_rows(self.feature_group.get_class_name()) as collector:
-            if isinstance(access, ApiDataRef) and is_nominal_subclass(self.feature_group, ApiDataFG):
-                key = access.key
-                with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
-                    data = self.run_calculate_feature(cfw, features, location, data)
-            else:
-                data = self.run_calculate_feature(cfw, features, location, data)
-        if collector.entries:
-            cfw_register.add_failed_rows(collector.entries)
-        seconds = getattr(features, "_calculate_seconds", None)
-        if seconds is not None:
-            cfw_register.add_step_duration(StepDuration(self.feature_group.get_class_name(), self.uuid, seconds))
-        with read_recorder() as saver_reads:
-            try:
+                match = features.input_data_match
+                access = None if match is None else match[1].access
+                with collect_failed_rows(self.feature_group.get_class_name()) as collector:
+                    if isinstance(access, ApiDataRef) and is_nominal_subclass(self.feature_group, ApiDataFG):
+                        key = access.key
+                        with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
+                            data = self.run_calculate_feature(cfw, features, location, data)
+                    else:
+                        data = self.run_calculate_feature(cfw, features, location, data)
+                if collector.entries:
+                    cfw_register.add_failed_rows(collector.entries)
+                seconds = getattr(features, "_calculate_seconds", None)
+                if seconds is not None:
+                    cfw_register.add_step_duration(
+                        StepDuration(self.feature_group.get_class_name(), self.uuid, seconds)
+                    )
+
                 unset: tuple[str, ...] = ()
                 if features.options is not None:
                     unset = unset_credential_handle_options(self.feature_group, features.options)
                 with readable_credentials(unset):
                     self.save_artifact(features, cfw_register)
-            finally:
-                calculate_context = cfw._calculate_context
-                if calculate_context is not None:
-                    merged = sorted({*calculate_context.credentials_read, *set(saver_reads)})
-                    object.__setattr__(calculate_context, "credentials_read", tuple(merged))
 
-        # return_data_type_rule
-
-        if location:
-            if self.need_to_upload:
-                if not isinstance(cfw.data, str):
-                    cfw.upload_finished_data(location)
-                cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.children_if_root))
-            return data
-        return None
+                # return_data_type_rule
+                if location:
+                    if self.need_to_upload:
+                        if not isinstance(cfw.data, str):
+                            cfw.upload_finished_data(location)
+                        cfw_register.add_uuid_flyway_datasets(cfw.uuid, set(self.children_if_root))
+                    return data
+                return None
+        except BaseException as error:
+            outcome = error_outcome(error)
+            raise
+        finally:
+            context = cfw._calculate_context
+            if context is not None and context.step_uuid != self.uuid:
+                context = None
+            if context is None and extenders:
+                context = cfw._build_hook_context(
+                    ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE, self.feature_group, features, facts
+                )
+            if context is not None:
+                object.__setattr__(context, "credentials_read", tuple(sorted(step_reads)))
+                with hidden_credentials():
+                    call_step_complete_hook(extenders, context, outcome)
 
     def _source_data(
         self, cfw: ComputeFramework, from_cfw: ComputeFramework | UUID | None, location: str | None

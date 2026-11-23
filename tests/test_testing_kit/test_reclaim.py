@@ -11,6 +11,9 @@ from mloda._testing.source import reclaim
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 
+# Held classes push the reclaim ladder to full collections, which scale with a late xdist worker's heap.
+pytestmark = pytest.mark.timeout(30)
+
 
 def _registered(name: str) -> bool:
     """Names only, never class objects, which would pin them."""

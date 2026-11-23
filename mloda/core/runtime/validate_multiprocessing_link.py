@@ -1,7 +1,7 @@
 """Guards a Link, a feature group class, a child_bootstrap callable, or an extender against a value
 pickle cannot round-trip, which otherwise fails deep inside a multiprocessing worker with an opaque
-PicklingError instead of being rejected clearly at plan time, and guards a MULTIPROCESSING-capable
-compute framework that resolved a live DataAccessCollection connection. This only proves resolvability
+PicklingError instead of being rejected clearly before any worker starts, and guards a step holding a
+resolved DataAccessCollection connection that would run in a worker. This only proves resolvability
 in the current process: a value resolvable here but not inside a freshly spawned worker can still fail
 there.
 """
@@ -170,7 +170,7 @@ def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> No
 def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]) -> str:
     return (
         f"{cfw_class.__name__} supports ParallelizationMode.MULTIPROCESSING and a connection was "
-        "resolved for it from the DataAccessCollection, but a TFS destination that runs in a spawned "
+        "resolved for it from the DataAccessCollection, but a step that runs in a spawned "
         "worker is never handed a connection (the worker-side connection bind only runs on the sync "
         "and threading execute paths).\n"
         "Resolution: the framework author excludes ParallelizationMode.MULTIPROCESSING from "

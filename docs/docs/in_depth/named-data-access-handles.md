@@ -255,9 +255,10 @@ fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming t
 
 The refusals above carry the credential-abort mark, except the near-miss line inside a "No feature groups found"
 error. Refusing a credential held in an option value is marked too, as is refusing a pointer-key credential on a group
-that is not that source. Read the mark with `is_credential_abort` from `mloda.provider`; it is set on the raised error
-itself, not on a wrapper. Marked messages name handles and keys, never a credential value, so a trusted caller may show
-them while reducing other errors to their class. Do not use `is_match_abort` as a display filter: it also marks errors
+that is not that source. Read the mark with `is_credential_abort` from `mloda.provider`; it reads only the error it is
+given and does not follow `__cause__`, so an error wrapping a refusal is unmarked. Marked messages name handles and keys
+(including key paths inside a credential), never a credential value, so a trusted caller may show them while reducing
+other errors to their class. Do not use `is_match_abort` as a display filter: it also marks errors
 whose messages may hold option values.
 
 A `str` default is a handle declared when the option

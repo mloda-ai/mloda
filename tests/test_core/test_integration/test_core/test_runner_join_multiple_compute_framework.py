@@ -337,6 +337,8 @@ class TestEngineMultipleJoinCfw:
         links = {Link("inner", left, right_1), Link("inner", right_2, left), Link("inner", right_3, left)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
+    # Three execution plans and two rejected plans share one budget on a loaded parallel worker.
+    @pytest.mark.timeout(30)
     def test_runner_join_multiple_cfw6_double_chained_join_left(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:

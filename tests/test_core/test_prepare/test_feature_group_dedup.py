@@ -201,6 +201,8 @@ def test_identical_content_double_define_dedups_to_one() -> None:
 # ---------------------------------------------------------------------------
 # Case 2: Different content, double-define, raises ValueError
 # ---------------------------------------------------------------------------
+# This scans all live subclasses and source hashes, including a late worker's larger registry.
+@pytest.mark.timeout(30)
 def test_different_content_double_define_raises_value_error() -> None:
     """Two different-source FG defs (same qualname/module) should raise ValueError.
 

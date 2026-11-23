@@ -318,6 +318,8 @@ class TestReclaimLeakedFeatureGroups:
         assert not survivors & set(expected), "the deliberate leak must not outlive this test"
 
 
+# Holding these groups forces full-heap reclaim passes on the parallel worker.
+@pytest.mark.timeout(30)
 def test_shipped_root_binding_groups_are_reclaim_tracked_not_module_reported() -> None:
     """The shipped helper lives outside the tests tree: its classes are caught by reclaim.track, not by module."""
     mark = FEATURE_GROUPS.mark()
@@ -1353,6 +1355,8 @@ class TestUnnarrowedSourceClaimers:
 
         assert [e.split()[0] for e in unnarrowed_source_claimers([module])] == [f"{name}.BareSqlite"]
 
+    # The full-suite audit visits every loaded test module and its source groups.
+    @pytest.mark.timeout(30)
     def test_no_test_module_leaves_an_unnarrowed_source_claimer(self) -> None:
         flagged = unnarrowed_source_claimers(loaded_test_modules(sys.modules))
         assert not flagged, (

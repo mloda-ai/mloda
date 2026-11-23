@@ -350,10 +350,6 @@ _INSTANT_TIMESTAMP = (
     "Spark TimestampType is kept as TIMESTAMP_MICROS for compatibility "
     "(it is the instant type; TimestampNTZType is the naive one)",
 )
-_SESSION_ZONE = (
-    Cause.BACKEND,
-    "Spark hands tz-aware columns back in the session zone: https://github.com/mloda-ai/mloda/issues/3008",
-)
 _ONE_TIMESTAMP = "Spark has only one TimestampType (microseconds); millisecond cannot be expressed"
 
 
@@ -366,8 +362,6 @@ class TestSparkDataTypeValidatorSuite(DataTypeValidatorSuite):
         "uint32_col": _NO_UNSIGNED,
         "timestamp_us_tz_col": _INSTANT_TIMESTAMP,
         "timestamp_ns_tz_col": _INSTANT_TIMESTAMP,
-        "timestamp_us_dst_col": _SESSION_ZONE,
-        "timestamp_us_sub_hour_col": _SESSION_ZONE,
     }
     switched_off = {
         "test_timestamp_ms_column_strict_ms_passes": Cause.BACKEND,

@@ -61,6 +61,7 @@ def spark_session() -> Any:
     - Local mode with single thread to avoid resource conflicts
     - Disabled adaptive query execution for predictable behavior
     - Arrow integration enabled for PyArrow compatibility
+    - UTC session timezone independent of the host environment
     - Reduced memory settings for test environments
     - Unique app name to avoid conflicts
 
@@ -78,6 +79,7 @@ def spark_session() -> Any:
         .config("spark.sql.adaptive.coalescePartitions.enabled", "false")
         .config("spark.serializer", "org.apache.spark.serializer.KryoSerializer")
         .config("spark.sql.execution.arrow.pyspark.enabled", "true")
+        .config("spark.sql.session.timeZone", "UTC")
         .config("spark.driver.memory", "1g")
         .config("spark.executor.memory", "1g")
         .config("spark.driver.maxResultSize", "512m")

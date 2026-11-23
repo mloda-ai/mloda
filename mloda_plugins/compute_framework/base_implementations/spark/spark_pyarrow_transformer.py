@@ -14,6 +14,14 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 
+def _assert_utc_timezone(column: str, zone: str, session_zone: str) -> None:
+    if zone != "UTC" or session_zone != "UTC":
+        raise ValueError(
+            f"Column '{column}' has time zone '{zone}' with Spark session time zone '{session_zone}'. "
+            "Spark can only preserve 'UTC' columns in a 'UTC' session. Use another compute framework for other zones."
+        )
+
+
 class SparkPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Spark DataFrame and PyArrow Table.
@@ -45,15 +53,22 @@ class SparkPyArrowTransformer(BaseTransformer):
 
     @classmethod
     def transform_fw_to_other_fw(cls, data: Any) -> Any:
-        """
-        Transform a Spark DataFrame to a PyArrow Table.
+        """Export a Spark frame, refusing a session zone that would change UTC column semantics."""
+        from pyspark.sql.types import TimestampType
 
-        This method uses Spark's native Arrow integration through toArrow()
-        for efficient conversion.
-        """
-        # Use Spark's native Arrow integration
-        # toArrow() already returns a PyArrow Table
+        session_zone = data.sparkSession.conf.get("spark.sql.session.timeZone")
+        for field in data.schema:
+            if isinstance(field.dataType, TimestampType):
+                _assert_utc_timezone(field.name, "UTC", session_zone)
         return data.toArrow()
+
+    @classmethod
+    def validate_arrow_timezones(cls, data: Any, spark: Any) -> None:
+        """Reject column zones Spark cannot retain, including schema-only columns."""
+        session_zone = spark.conf.get("spark.sql.session.timeZone")
+        for field in data.schema:
+            if pa.types.is_timestamp(field.type) and field.type.tz is not None:
+                _assert_utc_timezone(field.name, field.type.tz, session_zone)
 
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
@@ -76,6 +91,8 @@ class SparkPyArrowTransformer(BaseTransformer):
             spark = SparkSession.getActiveSession()
             if spark is None:
                 raise ValueError("No active SparkSession found and no framework connection object provided.")
+
+        cls.validate_arrow_timezones(data, spark)
 
         # Create Spark DataFrame directly from PyArrow Table
         # Convert PyArrow Table to list of dictionaries

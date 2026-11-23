@@ -135,6 +135,10 @@ gives a valid but different answer that nothing downstream can detect, so a
 
 `DataTypeValidatorSuite` checks this with a DST zone and a sub-hour offset.
 
+Spark accepts timezone-aware Arrow columns only in `UTC`, with a `UTC` Spark session. It checks the
+session again before export and raises a `ValueError` naming the column and its zone if either
+restriction is violated. Native `TimestampNTZType` columns do not require a UTC session.
+
 ## Core feature groups
 
 | Group | Application |

@@ -34,8 +34,8 @@ An operation group's serving Implementation must be imported (or plugins loaded)
 
 - **`requests=`** probes and runs these names instead of the class name and declared names; a name-path group needs it. Pass a sequence of names, not a string, and check names that bind different option keys in separate calls.
 - **Configuration path**: with `in_features` in `base_options`, a mixin group matches any name and a missing required key records no rejection, so `foreign:` and `required:` failures are expected there. Pass `requests=` with the real names instead.
-- **`secrets:`** is described in [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle); `check_feature_group_secrets` runs that sub-check alone.
-- **Type notes**: a `type` or `gap` [divergence record](divergence-records.md) of the group or its serving Implementation turns a type failure, or a column that changes type on zero rows, into a `type:` note naming the record. A `type` record on the serving Implementation whose columns all match exactly on a typed framework fails as stale; on the group it is a note.
+- **`secrets:`** is described in [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle); `check_feature_group_secrets` runs that sub-check alone; `check_feature_group_result_types` runs only the run and type checks and reports no stale records.
+- **Type notes**: a `type` [divergence record](divergence-records.md) of the group or its serving Implementation turns an exact mismatch, a lost type, a value misfit or a zero-row type change into a `type:` note naming the record. Only a `gap` record excuses an unresolved type (exact readback, but the declared type cannot be resolved), which otherwise fails. For example, a Pandas `object` column declared DATE, STRING, LIST, BINARY or DECIMAL is unresolved. A `type` record on the serving Implementation whose columns all match exactly on a typed framework fails as stale; on the group it is a note.
 
 ### Other checks
 

@@ -55,7 +55,12 @@ from mloda.core.abstract_plugins.implementation import (
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
 
-__all__ = ["assert_feature_group_shape", "check_feature_group_secrets", "check_feature_group_shape"]
+__all__ = [
+    "assert_feature_group_shape",
+    "check_feature_group_result_types",
+    "check_feature_group_secrets",
+    "check_feature_group_shape",
+]
 
 _FOREIGN_NAME = "conformance_foreign_feature"
 _UNKNOWN_VALUE = "conformance_unknown_value"
@@ -554,11 +559,11 @@ def _coverage(
     return covering
 
 
-def _excused(text: str, covering: list[_Declared], used: set[_Declared]) -> str | None:
-    """The type note that replaces a failure when a declared record covers its column; marks the record used."""
-    if not covering:
+def _excused(text: str, covering: list[_Declared], used: set[_Declared], kind: DivergenceKind) -> str | None:
+    """The type note that replaces a failure when the first covering record of kind covers its column; marks it used."""
+    declared = next((d for d in covering if d.record.kind == kind), None)
+    if declared is None:
         return None
-    declared = covering[0]
     used.add(declared)
     record = declared.record
     return f"type: {text}; declared {record.kind.value} divergence on {declared.owner}: {record.describe()}"
@@ -574,13 +579,14 @@ def _check_types(
 ) -> list[str]:
     failures = []
 
-    def fail(name: str, text: str) -> None:
-        note = _excused(text, covering.get(name, []), used)
+    def fail(name: str, text: str, kind: DivergenceKind = DivergenceKind.TYPE) -> None:
+        note = _excused(text, covering.get(name, []), used, kind)
         if note is None:
             failures.append(f"type: {text}")
         else:
             notes.append(note)
 
+    readback = adapter._exact_instance(result) is not None
     for name, data_type in expected.items():
         if name not in adapter.column_names(result):
             continue
@@ -595,7 +601,13 @@ def _check_types(
             continue
         if not all(value_fits(data_type, v) for v in adapter.column_values(result, name)):
             fail(name, f"'{name}' holds values that do not fit {data_type.name}")
-        if adapter.capabilities.typed_columns:
+        if readback:
+            text = (
+                f"'{name}' does not resolve to an exact {data_type.name} type on {type(adapter).__name__}, "
+                "checked by value only"
+            )
+            fail(name, text, DivergenceKind.GAP)
+        elif adapter.capabilities.typed_columns:
             notes.append(
                 f"type: '{name}' checked by value only, {type(adapter).__name__} has no exact {data_type.name} type"
             )
@@ -660,7 +672,7 @@ def _check_zero_rows(
                     twin = adapter.exact_type(result, column)
                     changed = twin is None or twin != adapter.exact_type(out, column)
             text = f"column '{column}' changes type on zero rows"
-            note = _excused(text, covering.get(column, []), used) if changed else None
+            note = _excused(text, covering.get(column, []), used, DivergenceKind.TYPE) if changed else None
             if note is not None:
                 notes.append(note)
             elif changed:
@@ -785,7 +797,14 @@ def _input_problems(cls: type[FeatureGroup], names: list[str], base: Options, da
     return [f"requested name '{n}' is already in input_data" for n in names if n in data.types]
 
 
-def _run_checks(
+class _FirstRun(NamedTuple):
+    failures: list[str]
+    names: list[str]
+    result: Any
+    ran: bool
+
+
+def _first_run(
     cls: type[FeatureGroup],
     names: list[str],
     base: Options,
@@ -793,18 +812,19 @@ def _run_checks(
     adapter: FrameworkAdapter,
     notes: list[str],
     require_run: bool,
-) -> list[str]:
+) -> _FirstRun:
+    """The run preamble: applicability, routing and input checks, then one run and its output checks."""
     failures: list[str] = []
     skipped = failures if require_run else notes
 
     reason = _not_applicable_reason(cls) or _availability_reason(adapter)
     if reason is not None:
         notes.append(f"run: {reason}")
-        return []
+        return _FirstRun([], names, None, False)
     reason = _rule_reason(cls, adapter) or _no_implementation_reason(cls, adapter)
     if reason is not None:
         skipped.append(f"run: {reason}")
-        return failures
+        return _FirstRun(failures, names, None, False)
     remaining = []
     for name in names:
         block, raised = _route_block(cls, adapter, name, base)
@@ -815,21 +835,55 @@ def _run_checks(
         else:
             remaining.append(name)
     if not remaining:
-        return failures
-    names = remaining
-    problems = _input_problems(cls, names, base, data)
+        return _FirstRun(failures, remaining, None, False)
+    problems = _input_problems(cls, remaining, base, data)
     if problems:
-        return failures + [f"outputs: {p}" for p in problems]
-    result, error = _run(cls, adapter, data, names, base)
+        return _FirstRun(failures + [f"outputs: {p}" for p in problems], remaining, None, False)
+    result, error = _run(cls, adapter, data, remaining, base)
     if error is not None:
-        return [*failures, f"outputs: run raised: {error}"]
-    failures += _check_outputs(cls, adapter, data, names, base, result)
+        return _FirstRun([*failures, f"outputs: run raised: {error}"], remaining, None, False)
+    failures += _check_outputs(cls, adapter, data, remaining, base, result)
+    return _FirstRun(failures, remaining, result, True)
+
+
+class _TypeSetup(NamedTuple):
+    expected: dict[str, DataType]
+    typed: dict[str, DataType]
+    records: list[_Declared]
+    covering: _Coverage
+
+
+def _type_setup(
+    cls: type[FeatureGroup],
+    adapter: FrameworkAdapter,
+    data: TypedTestData,
+    names: list[str],
+    base: Options,
+    result: Any,
+) -> _TypeSetup:
     expected = _expected_types(cls, names, base)
     # A feature's declared type applies to each of its part columns.
     written = _written(adapter, data, result, names)
     typed = {column: expected[name] for column, name, _ in written if name in expected}
     records = _declared_records(cls, adapter)
-    covering = _coverage(cls, base, records, written)
+    return _TypeSetup(expected, typed, records, _coverage(cls, base, records, written))
+
+
+def _run_checks(
+    cls: type[FeatureGroup],
+    names: list[str],
+    base: Options,
+    data: TypedTestData,
+    adapter: FrameworkAdapter,
+    notes: list[str],
+    require_run: bool,
+) -> list[str]:
+    first = _first_run(cls, names, base, data, adapter, notes, require_run)
+    failures = first.failures
+    if not first.ran:
+        return failures
+    names, result = first.names, first.result
+    expected, typed, records, covering = _type_setup(cls, adapter, data, names, base, result)
     used: set[_Declared] = set()
     failures += _check_types(adapter, typed, result, notes, covering, used)
     unchanged: set[str] = set()
@@ -864,6 +918,75 @@ def _stale_report(declared: _Declared, columns: list[str], adapter: FrameworkAda
     return f"type: {declared.owner} declares a type divergence ('{reason}') that this run on {framework} does not need"
 
 
+class _Resolved(NamedTuple):
+    problem: str | None
+    requested: list[str] | None
+    bound_keys: dict[str, frozenset[str]]
+    base: Options | None
+
+
+def _resolve(cls: type[FeatureGroup], base_options: Options | None, requests: Sequence[str] | None) -> _Resolved:
+    """The requested names, their bound option keys and the base options; problem names why none can be built."""
+    if isinstance(requests, str):
+        return _Resolved("names: requests must be a sequence of names, not a string", None, {}, None)
+    requested = None if requests is None else list(requests)
+    if requested is not None and not requested:
+        return _Resolved("names: no requests to check", requested, {}, None)
+    bound_keys = {k: v for k, v in ((n, _name_bound_keys(cls, n)) for n in requested or ()) if v is not None}
+    if len(set(bound_keys.values())) > 1:
+        problem = "names: the requested names bind different option keys; check them in separate calls"
+        return _Resolved(problem, requested, bound_keys, None)
+    base = base_options if base_options is not None else _base_options(cls, bound_keys)
+    if base is None:
+        problem = "names: cannot build a matching request; declare allowed_values or default, or pass base_options"
+        return _Resolved(problem, requested, bound_keys, None)
+    return _Resolved(None, requested, bound_keys, base)
+
+
+def _run_names(cls: type[FeatureGroup], requested: list[str] | None) -> list[str]:
+    return requested if requested is not None else sorted(cls.feature_names_supported()) or [cls.get_class_name()]
+
+
+def check_feature_group_result_types(
+    cls: type[FeatureGroup],
+    base_options: Options | None = None,
+    *,
+    input_data: TypedTestData,
+    adapter: FrameworkAdapter | None = None,
+    require_run: bool = False,
+    requests: Sequence[str] | None = None,
+) -> CheckResult:
+    """Run once and check only the run, outputs and result types; no stale-record check."""
+    check = "feature_group_result_types"
+    if not isinstance(cls, type) or not is_nominal_subclass(cls, FeatureGroup):
+        name = getattr(cls, "__name__", repr(cls))
+        return CheckResult(
+            check=check, subject=name, failures=(f"declaration: {name} is not a FeatureGroup subclass",), notes=()
+        )
+    declaration_failures, declaration_notes, rule_valid = _check_declarations(cls)
+    resolved = _resolve(cls, base_options, requests)
+    base = resolved.base
+    if resolved.problem is not None or base is None:
+        return CheckResult(
+            check=check,
+            subject=cls.__name__,
+            failures=(str(resolved.problem), *declaration_failures),
+            notes=tuple(declaration_notes),
+        )
+    failures = list(declaration_failures)
+    notes = list(declaration_notes)
+    if not rule_valid:
+        notes.append("run: not run (compute_framework_rule is malformed)")
+        return CheckResult(check=check, subject=cls.__name__, failures=tuple(failures), notes=tuple(notes))
+    run_adapter = adapter or PythonDictAdapter()
+    first = _first_run(cls, _run_names(cls, resolved.requested), base, input_data, run_adapter, notes, require_run)
+    failures += first.failures
+    if first.ran:
+        _, typed, _, covering = _type_setup(cls, run_adapter, input_data, first.names, base, first.result)
+        failures += _check_types(run_adapter, typed, first.result, notes, covering, set())
+    return CheckResult(check=check, subject=cls.__name__, failures=tuple(failures), notes=tuple(notes))
+
+
 def check_feature_group_secrets(cls: type[FeatureGroup]) -> CheckResult:
     """Check only the secret-shaped option declarations of a FeatureGroup."""
     failures, notes = _check_secrets(cls)
@@ -890,11 +1013,13 @@ def check_feature_group_shape(
     With require_run, a rule exclusion, a missing serving Implementation or a route block is a failure instead of a note.
     Secret checks cover declarations, not call sites: a secret under an undeclared benign key goes unseen;
     silence a false positive per option in NOT_SECRET_OPTIONS with a reason.
-    A TYPE or GAP record covering a type failure turns it into a note. A TYPE record on the serving Implementation
-    whose columns all match exactly on a typed framework fails as stale (scope a data-dependent one with subtypes
-    or outputs); a group-level one is only a note, since it applies on every framework.
+    A TYPE record covering an exact mismatch, a lost type, a value misfit or a zero-row type change turns it into a
+    note. An unresolved type on a framework with exact readback fails unless a GAP record covers it. A TYPE record
+    on the serving Implementation whose columns all match exactly on a typed framework fails as stale (scope a
+    data-dependent one with subtypes or outputs); a group-level one is only a note, since it applies on every framework.
     data_access_collection= is matched against by every match probe and checks a source's match_credentials.
-    requests= probes those names instead of the class and declared names; a base_options value contradicting them is a failure with the abort text.
+    requests= probes those names instead of the class and declared names; a base_options value contradicting them
+    is a failure with the abort text.
     """
     if not isinstance(cls, type) or not is_nominal_subclass(cls, FeatureGroup):
         name = getattr(cls, "__name__", repr(cls))
@@ -905,44 +1030,20 @@ def check_feature_group_shape(
             notes=(),
         )
     declaration_failures, declaration_notes, rule_valid = _check_declarations(cls)
-    if isinstance(requests, str):
-        return CheckResult(
-            check="feature_group_shape",
-            subject=cls.__name__,
-            failures=("names: requests must be a sequence of names, not a string", *declaration_failures),
-            notes=tuple(declaration_notes),
-        )
-    requested = None if requests is None else list(requests)
     secret_failures, secret_notes = _check_secrets(cls)
     secret_failures = [*declaration_failures, *secret_failures]
     secret_notes = [*declaration_notes, *secret_notes]
-    if requested is not None and not requested:
+    resolved = _resolve(cls, base_options, requests)
+    base = resolved.base
+    if resolved.problem is not None or base is None:
+        string = isinstance(requests, str)
         return CheckResult(
             check="feature_group_shape",
             subject=cls.__name__,
-            failures=("names: no requests to check", *secret_failures),
-            notes=tuple(secret_notes),
+            failures=(str(resolved.problem), *(declaration_failures if string else secret_failures)),
+            notes=tuple(declaration_notes if string else secret_notes),
         )
-    bound_keys = {k: v for k, v in ((n, _name_bound_keys(cls, n)) for n in requested or ()) if v is not None}
-    if len(set(bound_keys.values())) > 1:
-        return CheckResult(
-            check="feature_group_shape",
-            subject=cls.__name__,
-            failures=(
-                "names: the requested names bind different option keys; check them in separate calls",
-                *secret_failures,
-            ),
-            notes=tuple(secret_notes),
-        )
-    base = base_options if base_options is not None else _base_options(cls, bound_keys)
-    if base is None:
-        failures = [
-            "names: cannot build a matching request; declare allowed_values or default, or pass base_options",
-            *secret_failures,
-        ]
-        return CheckResult(
-            check="feature_group_shape", subject=cls.__name__, failures=tuple(failures), notes=tuple(secret_notes)
-        )
+    requested, bound_keys = resolved.requested, resolved.bound_keys
     declared = sorted(cls.feature_names_supported())
     names = requested if requested is not None else [cls.get_class_name(), *declared]
     dac = data_access_collection
@@ -963,7 +1064,7 @@ def check_feature_group_shape(
     elif not rule_valid:
         notes.append("run: not run (compute_framework_rule is malformed)")
     else:
-        run_names = requested if requested is not None else declared or [cls.get_class_name()]
+        run_names = _run_names(cls, requested)
         failures += _run_checks(cls, run_names, base, input_data, adapter or PythonDictAdapter(), notes, require_run)
     return CheckResult(check="feature_group_shape", subject=cls.__name__, failures=tuple(failures), notes=tuple(notes))
 

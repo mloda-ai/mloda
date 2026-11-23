@@ -1025,6 +1025,8 @@ class Engine:
             ) or (host.data_type is None and not host.initial_requested_data)
             if host.data_type != survivor.data_type and not untyped_free:
                 continue
+            if not self._whole_part_consumers_fit(host, survivor, live):
+                continue
             collection = self.feature_group_collection[group_class]
             if survivor.data_type is None and host.data_type is not None:
                 promoted = copy(survivor)
@@ -1044,13 +1046,28 @@ class Engine:
         ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
+    def _whole_part_consumers_fit(self, host: Feature, survivor: Feature, live: Mapping[UUID, Feature]) -> bool:
+        """Whole/part folds need each live consumer fixed to the survivor's single native framework.
+        Flexible domains can choose another framework to avoid implementation divergence."""
+        if (host.parts_only and survivor.parts_only) or not (host.requested_parts or survivor.requested_parts):
+            return True
+        frameworks = survivor.compute_frameworks
+        if not frameworks:
+            return False
+        folded = {host.uuid, survivor.uuid}
+        return all(
+            len(frameworks) == 1 and consumer in live and live[consumer].compute_frameworks == frameworks
+            for consumer, parents in self.feature_link_parents.items()
+            if parents & folded
+        )
+
     def _same_merge_scope(self, a: Feature, b: Feature, *, parts: bool = True) -> bool:
-        """True when cascade keys and parts_only match, and requested parts too unless parts=False."""
+        """True when cascade keys match, and whole/part requests too unless parts=False."""
         return (
             self._cascade_keys_at_resolution.get(a.uuid, a.options.cascade_context_keys)
             == self._cascade_keys_at_resolution.get(b.uuid, b.options.cascade_context_keys)
             and (not parts or a.requested_parts == b.requested_parts)
-            and a.parts_only == b.parts_only
+            and (not parts or a.parts_only == b.parts_only)
         )
 
     def _same_matched_filters(self, host: Feature, target: Feature, group_class: type[FeatureGroup]) -> bool:

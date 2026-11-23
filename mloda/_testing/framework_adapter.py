@@ -5,6 +5,7 @@ from __future__ import annotations
 import uuid
 from abc import ABC, abstractmethod
 from collections.abc import Mapping
+from datetime import UTC
 from dataclasses import dataclass
 from types import TracebackType
 from typing import TYPE_CHECKING, Any, ClassVar, Self
@@ -49,6 +50,10 @@ def _module_available(name: str) -> bool:
     return importlib.util.find_spec(name) is not None
 
 
+def _to_utc(values: list[Any]) -> list[Any]:
+    return [None if v is None else v.astimezone(UTC) for v in values]
+
+
 def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] | None = None) -> pa.Table:
     """Build an Arrow table from typed data; arrow_types overrides a column's physical type."""
 
@@ -59,15 +64,16 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
     for name, data_type in data.types.items():
         values = columns[name]
         if name in overrides:
-            arrays.append(pa.array(values, type=overrides[name]))
+            override = overrides[name]
+            if pa.types.is_timestamp(override) and override.tz is not None:
+                values = _to_utc(values)
+            arrays.append(pa.array(values, type=override))
         elif data_type == DataType.TIMESTAMP_MICROS_TZ:
             if all(v is None for v in values):
                 arrays.append(pa.array(values, type=pa.timestamp("us", tz="UTC")))
             else:
-                from datetime import UTC
-
                 zone = pa.lib.tzinfo_to_string(next(v for v in values if v is not None).tzinfo)
-                utc_values = [None if v is None else v.astimezone(UTC) for v in values]
+                utc_values = _to_utc(values)
                 arrays.append(pa.array(utc_values, type=pa.timestamp("us", tz=zone)))
         elif data_type == DataType.LIST:
             array = pa.array(values)

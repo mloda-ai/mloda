@@ -355,6 +355,7 @@ class DataTypeValidatorSuite(ComputeFrameworkSuite, suite_base=True):
         zone, zone_name, instants = _ZONED_CASES[case_id]
         values = [None if v is None else v.astimezone(zone) for v in instants]
         data = TypedTestData({case_id: (DataType.TIMESTAMP_MICROS_TZ, values)})
+        # The rule allows either outcome: keep instants and zone, or reject with a ValueError naming column and zone.
         try:
             frame = self.frame(adapter, case_id, data)
         except ValueError as error:

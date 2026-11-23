@@ -382,8 +382,9 @@ def test_pandas_object_date_has_no_exact_type() -> None:
     ],
     ids=["+02:00", "new_york", "+05:30"],
 )
+@pytest.mark.parametrize("override", [False, True], ids=["inferred", "arrow_types_override"])
 def test_to_arrow_table_keeps_instants_and_zone(
-    monkeypatch: pytest.MonkeyPatch, tz: Any, zone: str, ignore_timezone: str | None
+    monkeypatch: pytest.MonkeyPatch, tz: Any, zone: str, ignore_timezone: str | None, override: bool
 ) -> None:
     pa = pytest.importorskip("pyarrow")
     from mloda._testing.framework_adapter import to_arrow_table
@@ -393,12 +394,15 @@ def test_to_arrow_table_keeps_instants_and_zone(
     else:
         monkeypatch.setenv("PYARROW_IGNORE_TIMEZONE", ignore_timezone)
     values = [datetime(2023, 3, 11, 12, 0, tzinfo=tz), datetime(2023, 3, 12, 12, 0, tzinfo=tz), None]
-    table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, values)}))
+    arrow_types = {"t": pa.timestamp("ns", tz=zone)} if override else None
+    table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, values)}), arrow_types=arrow_types)
 
     field_type = table.schema.field("t").type
     assert pa.types.is_timestamp(field_type)
-    assert field_type.unit == "us"
+    assert field_type.unit == ("ns" if override else "us")
     assert field_type.tz == zone
+    if override:
+        assert field_type == arrow_types["t"]  # type: ignore[index]
     read = table.column("t").to_pylist()
     assert read[2] is None
     for got, want in zip(read[:2], values[:2]):

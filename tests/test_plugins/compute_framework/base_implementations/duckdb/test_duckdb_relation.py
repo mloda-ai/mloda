@@ -11,6 +11,7 @@ import pytest
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import (
     DuckdbRelation,
 )
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_type_semantics import is_tz_aware_type
 from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
 from mloda._testing.framework_adapter import DuckDBAdapter, FrameworkAdapter
 
@@ -430,7 +431,7 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
 
         frame = rel.df()
         for i, dtype in enumerate(rel._relation.dtypes):
-            if "TIME ZONE" in str(dtype):
+            if is_tz_aware_type(dtype):
                 assert str(frame.iloc[:, i].dt.tz) == str(pd.DatetimeTZDtype(tz="+05:00").tz)
             else:
                 assert str(frame.iloc[:, i].dtype).startswith("int")

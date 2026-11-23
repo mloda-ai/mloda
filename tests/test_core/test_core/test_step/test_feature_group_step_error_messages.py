@@ -43,7 +43,7 @@ def test_step_and_worker_upload_a_requested_result_once(need_to_upload: bool, sh
 
     native = {"col": [1, 2]}
 
-    def run_calculation(*_: object) -> object:
+    def run_calculation(*_: object, **__: object) -> object:
         if shape == "finished":
             cfw.data = "object-id"
             cfw.upload_finished_data("flight-location")

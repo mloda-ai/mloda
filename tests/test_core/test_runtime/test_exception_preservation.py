@@ -2087,12 +2087,13 @@ _ONCE_SAVES: list[str] = []
 class ChsRcOnceArtifact(BaseArtifact):
     @classmethod
     def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _read_host(features.get_options_key("chs_two_z_handle"))
         _ONCE_SAVES.append("saved")
         return {"saved": True}
 
 
 class ChsRcOnceSaverFG(ChsRcCalcAndSaverFG):
-    """Saves an artifact into a module-level list."""
+    """Calculate reads the first handle, the saver reads the second and records into a list."""
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -2104,14 +2105,22 @@ class ChsRcOnceSaverFG(ChsRcCalcAndSaverFG):
 
 
 class _ChsRcCalculateTwiceExtender(Extender):
-    """Calls the wrapped calculate twice and returns the second result."""
+    """Calls the wrapped calculate twice, recording the credential reads after each call."""
+
+    def __init__(self) -> None:
+        self.reads: list[tuple[str, ...]] = []
 
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
 
     def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        context = HookContext.current()
+        assert context is not None
         func(*args, **kwargs)
-        return func(*args, **kwargs)
+        self.reads.append(context.credentials_read)
+        result = func(*args, **kwargs)
+        self.reads.append(context.credentials_read)
+        return result
 
 
 @pytest.mark.timeout(15)
@@ -2120,16 +2129,73 @@ def test_the_saver_runs_once_when_an_extender_calls_calculate_twice(flight_serve
     from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 
     _ONCE_SAVES.clear()
+    twice = _ChsRcCalculateTwiceExtender()
     api = mloda_api(
         [Feature("chs_rc_once_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
         [PandasDataFrame],
         data_access_collection=_vault_dac(_TWO_VAULTS),
         plugin_collector=PluginCollector.enabled_feature_groups({ChsRcOnceSaverFG}),
-        function_extender={_ChsRcCalculateTwiceExtender()},
+        function_extender={twice},
     )
     api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
 
     assert _ONCE_SAVES == ["saved"]
+    assert twice.reads == [(_VAULT_A, _VAULT_B), (_VAULT_A, _VAULT_B)]
+
+
+_SWALLOWED_SAVES: list[str] = []
+
+
+class ChsRcSwallowedArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _SWALLOWED_SAVES.append("saved")
+        raise RuntimeError("saver failed")
+
+
+class ChsRcSwallowedSaverFG(ChsRcCalcAndSaverFG):
+    """Its saver records the call, then raises."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_swallowed_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcSwallowedArtifact
+
+
+class _ChsRcSwallowingExtender(Extender):
+    """Swallows any error from the wrapped calculate (mloda re-raises it anyway) and returns a frame."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        try:
+            return func(*args, **kwargs)
+        except Exception:
+            return pd.DataFrame({name: [1] for name in args[1].get_all_names()})
+
+
+@pytest.mark.timeout(15)
+def test_a_swallowed_saver_error_does_not_run_the_saver_again(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    _SWALLOWED_SAVES.clear()
+    api = mloda_api(
+        [Feature("chs_rc_swallowed_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcSwallowedSaverFG}),
+        function_extender={_ChsRcSwallowingExtender()},
+    )
+    # The extender swallows the error, but _settle re-raises it by design; the saver must still run once.
+    with pytest.raises(RuntimeError, match="saver failed"):
+        api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert _SWALLOWED_SAVES == ["saved"]
 
 
 class ChsRcFrozenArtifact(BaseArtifact):

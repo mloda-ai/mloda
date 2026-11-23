@@ -121,9 +121,11 @@ def _then_save(
 
     @functools.wraps(method)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
+        saving[0] = False
         result = method(*args, **kwargs)
         saving[0] = True
         after_calculate()
+        # stays set when the saver raises, so the outer except re-raises it unchanged
         saving[0] = False
         return result
 

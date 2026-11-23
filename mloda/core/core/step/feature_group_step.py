@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
 from mloda.core.abstract_plugins.components.credential_access import readable_credentials
+from mloda.core.abstract_plugins.components.credential_grant import read_recorder, record_credential_read
 from mloda.core.abstract_plugins.components.credential_handle import unset_credential_handle_options
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
@@ -75,19 +76,23 @@ class FeatureGroupStep(Step):
         match = features.input_data_match
         access = None if match is None else match[1].access
         saved = False
+        saver_reads: list[set[str]] = []
         after_calculate: Callable[[], None] | None = None
         if features.artifact_to_save is not None:
 
             def after_calculate() -> None:
                 nonlocal saved
                 if saved:
+                    for handle in set().union(*saver_reads):
+                        record_credential_read(handle)
                     return
+                saved = True
                 unset: tuple[str, ...] = ()
                 if features.options is not None:
                     unset = unset_credential_handle_options(self.feature_group, features.options)
-                with readable_credentials(unset):
+                with read_recorder() as reads, readable_credentials(unset):
+                    saver_reads.append(reads)
                     self.save_artifact(features, cfw_register)
-                saved = True
 
         with collect_failed_rows(self.feature_group.get_class_name()) as collector:
             if isinstance(access, ApiDataRef) and is_nominal_subclass(self.feature_group, ApiDataFG):
@@ -135,10 +140,7 @@ class FeatureGroupStep(Step):
         if self.feature_group.calculate_feature is None:
             raise ValueError("FeatureGroup calculate_feature is not implemented")
 
-        if after_calculate is None:
-            data = cfw.run_calculation(self.feature_group, features, location, data)
-        else:
-            data = cfw.run_calculation(self.feature_group, features, location, data, after_calculate=after_calculate)
+        data = cfw.run_calculation(self.feature_group, features, location, data, after_calculate=after_calculate)
         cfw.validate_expected_framework(location)
         return data
 

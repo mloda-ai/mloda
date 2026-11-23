@@ -287,6 +287,7 @@ class TestDiscriminatorSpacesDoNotCollide:
     def test_the_time_rule_spec_is_a_group_option_without_a_default(self) -> None:
         spec = TimeReferenceMixin.TIME_RULE_SPEC
         assert spec.context is False
+        assert spec.group_only is True
         assert spec.default is None
 
     @pytest.mark.parametrize(
@@ -300,13 +301,6 @@ class TestDiscriminatorSpacesDoNotCollide:
         def test_the_spec_is_the_shared_one(self, name: str, group: Any, feature_name: str) -> None:
             assert group.PROPERTY_MAPPING[TimeReferenceMixin.TIME_RULE] is TimeReferenceMixin.TIME_RULE_SPEC
             assert TimeReferenceMixin.TIME_RULE == TimeRule.OPTION_KEY
-
-        def test_a_rule_in_context_is_refused(self, name: str, group: Any, feature_name: str) -> None:
-            with pytest.raises(ValueError) as exc_info:
-                group.get_time_rule(Options(context={TimeReferenceMixin.TIME_RULE: {"gap": "raise"}}))
-            message = str(exc_info.value)
-            assert TimeReferenceMixin.TIME_RULE in message
-            assert "group" in message
 
         @pytest.mark.parametrize(
             "value",

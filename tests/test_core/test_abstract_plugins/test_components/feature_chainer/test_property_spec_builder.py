@@ -920,3 +920,44 @@ class TestPropertySpecRuntime:
             pass
 
         assert runtime_parameter_keys(_Bare) == {}
+
+
+class TestPropertySpecGroupOnly:
+    """``group_only=True`` marks a group option a caller may not move to the context."""
+
+    def test_group_only_defaults_to_false_and_is_emitted_through_builder(self) -> None:
+        assert property_spec("d").group_only is False
+        assert property_spec("d", context=False, group_only=True).group_only is True
+
+    def test_group_only_spec_equals_direct_construction(self) -> None:
+        assert property_spec("d", context=False, group_only=True) == PropertySpec("d", context=False, group_only=True)
+
+    def test_group_only_requires_group_placement(self) -> None:
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*group_only"):
+            property_spec("d", group_only=True)
+
+    def test_group_only_must_be_a_bool(self) -> None:
+        with pytest.raises(ValueError, match=r"PropertySpec\('d'\).*group_only"):
+            property_spec("d", context=False, group_only="yes")  # type: ignore[arg-type]
+
+    def test_group_only_keys_are_the_group_only_specs_of_the_mapping(self) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import group_only_keys
+
+        only = property_spec("g", context=False, group_only=True, default="a")
+
+        class _Group(FeatureGroup):
+            PROPERTY_MAPPING = {
+                "gospec_plain": property_spec("p", default="x"),
+                "gospec_group": property_spec("q", context=False, default="y"),
+                "gospec_only": only,
+            }
+
+        assert group_only_keys(_Group) == {"gospec_only": only}
+
+    def test_group_only_keys_of_a_group_without_a_mapping_are_empty(self) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import group_only_keys
+
+        class _Bare(FeatureGroup):
+            pass
+
+        assert group_only_keys(_Bare) == {}

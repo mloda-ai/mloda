@@ -22,6 +22,7 @@ class TimeReferenceMixin:
         "Time zone computation rule knobs as a mapping; applies to the feature that carries it, not its inputs.",
         default=None,
         context=False,
+        group_only=True,
         forward_to_inputs=False,
         match_guard=TimeRule.from_option,
         expected=f"a mapping of the knobs {', '.join(TimeRule.KNOBS)} to allowed values",
@@ -56,10 +57,6 @@ class TimeReferenceMixin:
     @classmethod
     def get_time_rule(cls, options: Options | None = None) -> TimeRule:
         """The time rule carried by the options, the default rule when absent."""
-        if options and cls.TIME_RULE in options.context:
-            raise ValueError(
-                f"The {cls.TIME_RULE} option must be a group option: only group options are part of a feature's identity."
-            )
         return TimeRule.from_option(options.get(cls.TIME_RULE) if options else None)
 
     @classmethod

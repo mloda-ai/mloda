@@ -96,7 +96,7 @@ feature = Feature("value__sum_1_day_window", Options(group={"time_rule": rule}))
 assert TimeRule(**rule).shift(datetime(2023, 3, 11, 12), 1, "day") == datetime(2023, 3, 12, 12)
 ```
 
-The option must be a group option (a `time_rule` in the context is refused). It applies to the feature
+The option must be a group option (a `time_rule` in the context is refused at plan time). It applies to the feature
 that carries it and is not forwarded to its input features. Spelling out a default makes a different
 feature identity than leaving it out.
 

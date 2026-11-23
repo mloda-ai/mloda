@@ -60,6 +60,7 @@ class TestTheConstructorIsTheSchema:
             "caller_settable",
             "forward_to_inputs",
             "runtime",
+            "group_only",
             "name_converter",
             "expected",
         }

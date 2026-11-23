@@ -240,6 +240,15 @@ def test_one_request_holds_the_same_window_under_two_rules(framework: type[Compu
     assert column_values([results.frame_for(fixed_rule)], name) == [1, 11]
 
 
+def test_a_time_rule_in_the_context_is_refused_at_prepare() -> None:
+    feature = Feature(
+        "tw_zoned_x__sum_1_day_window", Options(context={"time_rule": {"calendar_units": "fixed_length"}})
+    )
+    plugins = PluginCollector.enabled_feature_groups({TimeWindowZonedSourceCreator, TimeWindowFeatureGroup})
+    with pytest.raises(ValueError, match=r"Option 'time_rule' .*group-only"):
+        mloda.prepare([feature], compute_frameworks=[PandasDataFrame], plugin_collector=plugins)
+
+
 _NAN_WINDOW = "tw_nan_x__sum_3_day_window"
 _PANDAS_ONLY_WINDOW = "tw_nan_p__sum_3_day_window"
 _WINDOW_PLUGINS_OF = {

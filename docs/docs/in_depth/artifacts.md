@@ -140,7 +140,40 @@ is), and a loaded artifact value is shared by concurrent runs, so treat it as
 read-only in `calculate_feature`.
 
 Provider migration: a custom `custom_loader` reads `features.artifact_value`
-(the prepare-time Options value or this run's `artifacts` value), not Options.
+(the prepare-time Options value or this run's `artifacts` value, bound for this
+FeatureSet's one artifact key, see below), not Options.
+
+#### Several artifacts from one saver
+
+The saver's return is split per key only when `features.save_artifact` is a dict
+and the saver returns a dict. Each key then becomes its own entry in
+`RunResult.artifacts`, holding that key's value (for example a path). Otherwise
+the return is one artifact under the set's alphabetically first feature name.
+
+```py
+@classmethod
+def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+    paths = {}
+    for name, model in artifact.items():  # artifact is features.save_artifact
+        paths[name] = f"/models/{name}.bin"
+        write_model(model, paths[name])
+    return paths
+
+# save_artifact = {"feature_a": model_a, "feature_b": model_b} gives
+# result.artifacts == {"feature_a": "/models/feature_a.bin", "feature_b": "/models/feature_b.bin"}
+```
+
+- Return only keys in `features.get_all_names()`. A key that is not a feature name
+  is refused by `run(artifacts=...)` and ignored on the Options path, where the set
+  saves again. Features of one group can land in separate FeatureSets, and a key
+  another set also returns raises.
+- One binding per FeatureSet: on load (Options or `run(artifacts=...)`), the set
+  binds the alphabetically first of its feature names that has a value.
+  `features.artifact_to_load` is that name and `features.artifact_value` is its
+  value only. The other keys are not bound, and passing them raises nothing.
+- A `custom_loader` serving several features must load the others itself, for
+  example from storage it controls, as `SklearnArtifact.custom_loader` does. Do not
+  read them from `features.options`: they are absent on the runtime path.
 
 #### Testing Artifacts
 
@@ -162,17 +195,18 @@ class MySklearnFeatureGroup(FeatureGroup):
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Save multiple artifacts with unique keys
+        # Key each artifact by a feature name, so it can be passed back to run(artifacts=...)
+        key = features.get_name_of_one_feature()
         if features.artifact_to_save is not None:
             SklearnArtifact.save_sklearn_artifact(
                 features, 
-                "my_transformer", 
+                key, 
                 {"fitted_transformer": fitted_model, "feature_names": ["col1", "col2"]}
             )
         
         # Load specific artifact by key
         if features.artifact_to_load is not None:
-            artifact_data = SklearnArtifact.load_sklearn_artifact(features, "my_transformer")
+            artifact_data = SklearnArtifact.load_sklearn_artifact(features, key)
             fitted_model = artifact_data["fitted_transformer"]
 ```
 

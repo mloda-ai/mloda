@@ -64,6 +64,15 @@ class TestCfwManagerRunOutcome:
             outcome.artifacts = {}  # type: ignore[misc]
 
 
+class TestCfwManagerArtifactNames:
+    def test_set_artifact_to_save_refuses_a_duplicate_name(self) -> None:
+        cfw_register = CfwManager({ParallelizationMode.SYNC})
+        cfw_register.set_artifact_to_save("model", "m")
+
+        with pytest.raises(ValueError, match="already exists"):
+            cfw_register.set_artifact_to_save("model", "other")
+
+
 class TestCfwManagerRunContextDefault:
     def test_default_run_context_is_an_empty_run_context(self) -> None:
         cfw_register = CfwManager({ParallelizationMode.SYNC})

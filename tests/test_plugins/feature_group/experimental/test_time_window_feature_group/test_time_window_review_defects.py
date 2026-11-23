@@ -1,10 +1,10 @@
 """Regression tests pinning defects found by two reviews of the time-window fix.
 
 The window for a row at reference time ``t`` is the half-open interval
-``(t - span, t]`` (right-closed, left-open) with ``span = window_size * time_unit``
-and week/month/year approximated as 7/30/365 days. All expected values are derived
-by an independent brute-force reference (``_reference``) so the tests are
-self-checking and never trust hand-computed numbers.
+``(t - span, t]`` (right-closed, left-open) with ``span = window_size * time_unit``.
+Second, minute and hour are elapsed time; day, week, month and year are calendar
+units on the column's own wall clock. Elapsed-time expectations come from a
+brute-force reference (``_reference``); calendar ones are pinned literals.
 
 Defects pinned:
 - Pandas mis-aligns time-sorted results back to original (unsorted) rows.
@@ -24,6 +24,7 @@ import pandas as pd
 import pyarrow as pa
 import pytest
 
+from mloda.core.abstract_plugins.components.contract.time_rule import DEFAULT_TIME_RULE, TimeRule
 from mloda.user import Feature
 from mloda.provider import FeatureSet
 from mloda.provider import DefaultOptionKeys
@@ -152,46 +153,12 @@ def test_dst_transition_uses_absolute_time() -> None:
 
     pandas_result = _as_floats(
         PandasTimeWindow._perform_window_operation(
-            _dst_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(1, "hour"), ["value"], REFERENCE_TIME
+            _dst_dataframe(), "sum", TimeWindowFeatureGroup._window_span(1, "hour"), ["value"], REFERENCE_TIME
         )
     )
     pyarrow_result = _as_floats(
         PyArrowTimeWindow._perform_window_operation(
-            _dst_table(), "sum", TimeWindowFeatureGroup._get_time_delta(1, "hour"), ["value"], REFERENCE_TIME
-        )
-    )
-
-    assert pandas_result == pytest.approx(expected)
-    assert pyarrow_result == pytest.approx(expected)
-    assert pandas_result == pytest.approx(pyarrow_result)
-
-
-# --------------------------------------------------------------------------- #
-# 3. month / year: assert exact values (span = 90 / 1095 days), not length.    #
-# --------------------------------------------------------------------------- #
-
-_MY_DATES = pd.date_range(start="2023-01-01", periods=6, freq="D")
-_MY_VALUES = [1, 2, 3, 4, 5, 6]
-_MY_SPAN_DAYS = {"month": 90, "year": 1095}
-
-
-@pytest.mark.parametrize("time_unit", ["month", "year"])
-def test_month_and_year_window_values(time_unit: str) -> None:
-    """month/year windows must return the exact brute-force values on both backends."""
-    span = datetime.timedelta(days=_MY_SPAN_DAYS[time_unit])
-    expected = _reference([d.to_pydatetime() for d in _MY_DATES], _MY_VALUES, span, "sum")
-
-    df = pd.DataFrame({"value": list(_MY_VALUES), REFERENCE_TIME: _MY_DATES})
-    table = pa.Table.from_pandas(df)
-
-    pandas_result = _as_floats(
-        PandasTimeWindow._perform_window_operation(
-            df.copy(), "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
-        )
-    )
-    pyarrow_result = _as_floats(
-        PyArrowTimeWindow._perform_window_operation(
-            table, "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
+            _dst_table(), "sum", TimeWindowFeatureGroup._window_span(1, "hour"), ["value"], REFERENCE_TIME
         )
     )
 
@@ -217,7 +184,7 @@ def test_pyarrow_narrow_window_value() -> None:
 
     pyarrow_result = _as_floats(
         PyArrowTimeWindow._perform_window_operation(
-            table, "sum", TimeWindowFeatureGroup._get_time_delta(3, "second"), ["value"], REFERENCE_TIME
+            table, "sum", TimeWindowFeatureGroup._window_span(3, "second"), ["value"], REFERENCE_TIME
         )
     )
     assert pyarrow_result == pytest.approx(expected)
@@ -241,6 +208,7 @@ def _null_pyarrow() -> pa.Table:
     return pa.Table.from_pandas(_null_pandas())
 
 
+@pytest.mark.parametrize("feature_name", ["value__sum_3_hour_window", "value__sum_1_month_window"])
 @pytest.mark.parametrize(
     "cls,data_factory",
     [
@@ -248,13 +216,58 @@ def _null_pyarrow() -> pa.Table:
         (PyArrowTimeWindow, _null_pyarrow),
     ],
 )
-def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable[[], Any]) -> None:
+def test_null_reference_time_raises_value_error(cls: Any, data_factory: Callable[[], Any], feature_name: str) -> None:
     """A null/NaT reference time must raise a clear ValueError on both backends.
 
     Pins the pyarrow defect: it raises TypeError (``None - timedelta``) instead
     of a consistent ValueError.
     """
     feature_set = FeatureSet()
-    feature_set.add(Feature("value__sum_3_hour_window"))
+    feature_set.add(Feature(feature_name))
     with pytest.raises(ValueError):
         cls.calculate(TimeWindowFeatureGroup, data_factory(), feature_set, None)
+
+
+def test_pyarrow_date_reference_column_uses_calendar_months() -> None:
+    dates = [datetime.date(2023, 1, 31), datetime.date(2023, 2, 28), datetime.date(2023, 3, 1)]
+    dates.append(datetime.date(2023, 3, 31))
+    table = pa.table({"value": [1, 10, 100, 1000], REFERENCE_TIME: pa.array(dates, type=pa.date32())})
+    result = PyArrowTimeWindow._perform_window_operation(
+        table, "sum", TimeWindowFeatureGroup._window_span(1, "month"), ["value"], REFERENCE_TIME
+    )
+    assert _as_floats(result) == [1.0, 11.0, 110.0, 1100.0]
+
+
+@pytest.mark.parametrize(("size", "unit"), [(30, "day"), (1, "month")])
+def test_window_reaching_before_the_earliest_instant(size: int, unit: str) -> None:
+    df = pd.DataFrame({"value": [1, 10], REFERENCE_TIME: pd.to_datetime(["1677-10-01", "1677-10-20"])})
+    span = TimeWindowFeatureGroup._window_span(size, unit)
+
+    pandas_result = _as_floats(
+        PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)
+    )
+    pyarrow_result = _as_floats(
+        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(df), "sum", span, ["value"], REFERENCE_TIME)
+    )
+
+    assert pandas_result == [1.0, 11.0]
+    assert pyarrow_result == [1.0, 11.0]
+
+
+@pytest.mark.parametrize(
+    ("size", "unit", "rule"),
+    [(110000, "day", DEFAULT_TIME_RULE), (300, "year", TimeRule(calendar_units="fixed_length"))],
+)
+def test_window_wider_than_the_nanosecond_range_covers_every_earlier_row(size: int, unit: str, rule: TimeRule) -> None:
+    df = pd.DataFrame({"value": [1, 10], REFERENCE_TIME: pd.to_datetime(["2023-01-01", "2023-01-02"])})
+    span = TimeWindowFeatureGroup._window_span(size, unit, rule)
+
+    pandas_result = _as_floats(
+        PandasTimeWindow._perform_window_operation(df.copy(), "sum", span, ["value"], REFERENCE_TIME)
+    )
+    pyarrow_result = _as_floats(
+        PyArrowTimeWindow._perform_window_operation(pa.Table.from_pandas(df), "sum", span, ["value"], REFERENCE_TIME)
+    )
+
+    assert pandas_result == [1.0, 11.0]
+    assert pyarrow_result == [1.0, 11.0]

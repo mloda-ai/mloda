@@ -6,9 +6,10 @@ from __future__ import annotations
 
 from typing import Any, cast
 
-from datetime import datetime, timedelta
+from datetime import datetime
 
-from mloda.provider import ComputeFramework, FeatureSet, Implementation
+
+from mloda.provider import DEFAULT_TIME_RULE, ComputeFramework, FeatureSet, Implementation, TimeRule
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
 from mloda_plugins.feature_group.experimental.forecasting.base import ForecastingFeatureGroup
@@ -74,6 +75,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
+        rule: TimeRule = DEFAULT_TIME_RULE,
     ) -> tuple[pd.Series, dict[str, Any] | None]:
         """
         Perform forecasting using scikit-learn models.
@@ -92,6 +94,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
             source_column: The single source column to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
+            rule: The time zone computation rule for the future timestamps
 
         Returns:
             A tuple containing (forecast_result, updated_artifact)
@@ -115,7 +118,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         last_timestamp = df[time_filter_feature].max()
 
         # Generate future timestamps for forecasting
-        future_timestamps = cls._generate_future_timestamps(last_timestamp, horizon, time_unit)
+        future_timestamps = cls._generate_future_timestamps(last_timestamp, horizon, time_unit, rule)
 
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))
@@ -180,7 +183,9 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         return result, artifact
 
     @classmethod
-    def _generate_future_timestamps(cls, last_timestamp: datetime, horizon: int, time_unit: str) -> list[datetime]:
+    def _generate_future_timestamps(
+        cls, last_timestamp: datetime, horizon: int, time_unit: str, rule: TimeRule = DEFAULT_TIME_RULE
+    ) -> list[datetime]:
         """
         Generate future timestamps for forecasting.
 
@@ -188,29 +193,12 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
             last_timestamp: The last timestamp in the data
             horizon: The forecast horizon
             time_unit: The time unit for the horizon
+            rule: The time zone computation rule used to step the timestamps
 
         Returns:
             A list of future timestamps
         """
-        future_timestamps = []
-        for i in range(1, horizon + 1):
-            if time_unit == "second":
-                future_timestamps.append(last_timestamp + timedelta(seconds=i))
-            elif time_unit == "minute":
-                future_timestamps.append(last_timestamp + timedelta(minutes=i))
-            elif time_unit == "hour":
-                future_timestamps.append(last_timestamp + timedelta(hours=i))
-            elif time_unit == "day":
-                future_timestamps.append(last_timestamp + timedelta(days=i))
-            elif time_unit == "week":
-                future_timestamps.append(last_timestamp + timedelta(weeks=i))
-            elif time_unit == "month":
-                # Approximate a month as 30 days
-                future_timestamps.append(last_timestamp + timedelta(days=i * 30))
-            elif time_unit == "year":
-                # Approximate a year as 365 days
-                future_timestamps.append(last_timestamp + timedelta(days=i * 365))
-        return future_timestamps
+        return [rule.shift(last_timestamp, i, time_unit) for i in range(1, horizon + 1)]
 
     @classmethod
     def _determine_lag_features(cls, horizon: int, time_unit: str, data_size: int) -> list[int]:
@@ -459,6 +447,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         source_column: str,
         time_filter_feature: str,
         model_artifact: Any | None = None,
+        rule: TimeRule = DEFAULT_TIME_RULE,
     ) -> tuple[pd.Series, pd.Series, pd.Series, dict[str, Any] | None]:
         """
         Perform forecasting with confidence intervals.
@@ -477,6 +466,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
             source_column: The single source column to forecast
             time_filter_feature: The name of the time filter feature
             model_artifact: Optional artifact containing a trained model
+            rule: The time zone computation rule for the future timestamps
 
         Returns:
             A tuple containing (point_forecast, lower_bound, upper_bound, updated_artifact)
@@ -500,7 +490,7 @@ class PandasForecasting(Implementation[ForecastingFeatureGroup]):
         last_timestamp = df[time_filter_feature].max()
 
         # Generate future timestamps for forecasting
-        future_timestamps = cls._generate_future_timestamps(last_timestamp, horizon, time_unit)
+        future_timestamps = cls._generate_future_timestamps(last_timestamp, horizon, time_unit, rule)
 
         # Determine appropriate lag features based on horizon, time unit, and data size
         lag_features = cls._determine_lag_features(horizon, time_unit, len(df))

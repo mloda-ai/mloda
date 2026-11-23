@@ -2,21 +2,47 @@
 
 from __future__ import annotations
 
-import datetime
 from typing import Any
 
 import numpy as np
+from pandas.api.indexers import BaseIndexer
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda.user.pandas import PandasDataFrame
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
+from mloda_plugins.feature_group.experimental.time_window.base import (
+    TimeWindowFeatureGroup,
+    WindowSpan,
+    raise_null_reference_time,
+)
 
 
 try:
     import pandas as pd
 except ImportError:
     pd = None
+
+
+_INT64_MIN = int(np.iinfo(np.int64).min)
+
+
+class _SpanIndexer(BaseIndexer):  # type: ignore[misc]
+    """Rolling window bounds given explicitly per row."""
+
+    def __init__(self, starts: np.ndarray, ends: np.ndarray) -> None:
+        super().__init__()
+        self._starts = starts
+        self._ends = ends
+
+    def get_window_bounds(
+        self,
+        num_values: int = 0,
+        min_periods: int | None = None,
+        center: bool | None = None,
+        closed: str | None = None,
+        step: int | None = None,
+    ) -> tuple[np.ndarray, np.ndarray]:
+        return self._starts.astype(np.int64), self._ends.astype(np.int64)
 
 
 class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
@@ -43,17 +69,27 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         return data
 
     @classmethod
-    def _roll_column(cls, col: pd.Series, window_function: str, span: pd.Timedelta, starts: np.ndarray) -> pd.Series:
+    def _roll_column(cls, col: pd.Series, window_function: str, starts: np.ndarray) -> pd.Series:
         """Rolling aggregate of one column; unlike pandas rolling, +-inf stay values (only NaN is missing)."""
         values = col.to_numpy(dtype="float64", na_value=np.nan)
         if window_function in ("first", "last"):
             picked = values[starts] if window_function == "first" else values
             return pd.Series(picked, index=col.index)
 
-        rolling = col.rolling(window=span, min_periods=0 if window_function == "sum" else 1, closed="right")
+        # pandas recomputes every window when starts go backwards; roll on monotone starts, fix the few rows.
+        monotone = np.maximum.accumulate(starts)
+        indexer = _SpanIndexer(monotone, np.arange(1, len(values) + 1))
+        rolling = col.rolling(window=indexer, min_periods=0 if window_function == "sum" else 1)
+        name = {"avg": "mean"}.get(window_function, window_function)
+        result = getattr(rolling, name)()
+        back = np.flatnonzero(monotone != starts)
+        if len(back):
+            corrected = result.to_numpy(dtype="float64", na_value=np.nan, copy=True)
+            for i in back:
+                corrected[i] = getattr(pd.Series(values[starts[i] : i + 1]), name)()
+            result = pd.Series(corrected, index=col.index)
         if window_function == "count":
-            return rolling.count()
-        result = getattr(rolling, {"avg": "mean"}.get(window_function, window_function))()
+            return result
 
         def window_count(flags: np.ndarray) -> np.ndarray:
             cum = np.concatenate(([0], np.cumsum(flags)))
@@ -94,7 +130,7 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         cls,
         data: pd.DataFrame,
         window_function: str,
-        span: datetime.timedelta,
+        span: WindowSpan,
         in_features: list[str],
         time_filter_feature: str,
     ) -> Any:
@@ -136,22 +172,32 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
             # Multiple columns: keep as DataFrame
             selected_data = pd.DataFrame({c: data[c].to_numpy()[order] for c in in_features}, index=sorted_index)
 
-        # Time-based (not row-count) window: include rows in (t - span, t].
-        # Pass a Timedelta, not an offset string: aliases like "3M"/"3Y" raise
-        # "passed window 3M is not compatible with a datetimelike index".
-        span_delta = pd.Timedelta(span)
+        # Time-based (not row-count) window: include rows in (lower, t], lower being t minus the span.
         if window_function not in TimeWindowFeatureGroup.WINDOW_FUNCTIONS:
             raise ValueError(f"Unsupported window function: {window_function}")
 
         # Window start per sorted row; the window ends at the current row (duplicates included).
+        zone = times.dt.tz
         ns = sorted_index.as_unit("ns").asi8
-        starts = np.searchsorted(ns, ns - span_delta.value, side="right")
+        width = span.fixed_ns(zone)
+        if width is not None:
+            if width > np.iinfo(np.int64).max:
+                lower = np.full(len(ns), _INT64_MIN, dtype=np.int64)
+            else:
+                lower = np.where(ns < _INT64_MIN + width, _INT64_MIN, ns - width)
+        else:
+            lower = np.fromiter(
+                (max(span.lower_ns(int(v), zone), _INT64_MIN) for v in ns),
+                dtype=np.int64,
+                count=len(ns),
+            )
+        starts = np.searchsorted(ns, lower, side="right")
 
         if isinstance(selected_data, pd.Series):
-            result = cls._roll_column(selected_data, window_function, span_delta, starts)
+            result = cls._roll_column(selected_data, window_function, starts)
         else:
             result = pd.DataFrame(
-                {c: cls._roll_column(selected_data[c], window_function, span_delta, starts) for c in selected_data}
+                {c: cls._roll_column(selected_data[c], window_function, starts) for c in selected_data}
             )
 
         # For multi-column, aggregate across columns (axis=1) after rolling window

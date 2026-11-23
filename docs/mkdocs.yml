@@ -50,6 +50,7 @@ nav:
       - MCP Server and CLI: in_depth/mcp-server.md
     - Data Type Enforcement: in_depth/data-type-enforcement.md
     - Comparison Contract: in_depth/comparison-contract.md
+    - Time Zone Computation Rule: in_depth/timezone-computation.md
     - Troubleshooting:
       - Feature Group Resolution Errors: in_depth/troubleshooting/feature-group-resolution-errors.md
     

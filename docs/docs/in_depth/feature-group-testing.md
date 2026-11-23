@@ -40,6 +40,7 @@ An operation group's serving Implementation must be imported (or plugins loaded)
 ### Other checks
 
 - Subclass scope (`mloda.testing.subclass_scope`), operation group shape (`mloda.testing.operation_group_shape`) and the source group suites (`mloda.testing.source`): see [A loaded subclass replaces its parent](troubleshooting/feature-group-resolution-errors.md#a-loaded-subclass-replaces-its-parent).
+- Time zone computation rule (cases and check in `mloda.testing.time_rule`, suite in `mloda.testing.compute_framework.time_window_suite`): see [Testing against the rule](timezone-computation.md#testing-against-the-rule).
 - ComputeFramework suites and framework adapters: see [Testing](compute-framework-integration.md#testing).
 
 ## Unit tests next to the kit

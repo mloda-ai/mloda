@@ -386,6 +386,12 @@ def _read_file_mixin() -> type:
     return ReadFileFGTestMixin
 
 
+def _time_window_suite() -> type:
+    from mloda._testing.compute_framework.time_window_suite import TimeWindowRuleSuite
+
+    return TimeWindowRuleSuite
+
+
 def _filter_suite() -> type:
     from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 
@@ -641,8 +647,9 @@ def test_every_adapter_was_closed_and_each_was_opened_once():
         _file_loads_mixin,
         _db_loads_mixin,
         _document_loads_mixin,
+        _time_window_suite,
     ],
-    ids=["filter", "file_loads", "db_loads", "document_loads"],
+    ids=["filter", "file_loads", "db_loads", "document_loads", "time_window"],
 )
 def test_compute_framework_host_without_adapter_class_fails_at_class_creation(get_suite: Any) -> None:
     suite = get_suite()
@@ -680,6 +687,16 @@ def test_compute_framework_host_missing_a_required_hook_fails_naming_it() -> Non
             return [1]
 
     assert _Provided.adapter_class is PythonDictAdapter
+
+
+def test_time_window_host_without_implementation_fails_naming_it() -> None:
+    from mloda._testing.framework_adapter import PythonDictAdapter
+
+    with pytest.raises(HookError) as excinfo:
+        type("_NoImplementation", (_time_window_suite(),), {"adapter_class": PythonDictAdapter})
+
+    assert "_NoImplementation" in str(excinfo.value)
+    assert "implementation" in str(excinfo.value)
 
 
 _RELATION_WIRING_MODULE = """

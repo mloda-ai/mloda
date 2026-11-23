@@ -8,6 +8,8 @@ import pytest
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.provider import FeatureSet
+from mloda._testing.framework_adapter import PandasAdapter
+from mloda._testing.compute_framework.time_window_suite import TimeWindowRuleSuite
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda.provider import DefaultOptionKeys
 from mloda_plugins.feature_group.experimental.time_window.pandas import PandasTimeWindow
@@ -42,7 +44,7 @@ class TestPandasTimeWindow:
         result = PandasTimeWindow._perform_window_operation(
             sample_time_dataframe,
             window_function,
-            TimeWindowFeatureGroup._get_time_delta(3, "day"),
+            TimeWindowFeatureGroup._window_span(3, "day"),
             ["temperature"],
             DefaultOptionKeys.reference_time,
         )
@@ -60,7 +62,7 @@ class TestPandasTimeWindow:
             PandasTimeWindow._perform_window_operation(
                 sample_time_dataframe,
                 "invalid",
-                TimeWindowFeatureGroup._get_time_delta(3, "day"),
+                TimeWindowFeatureGroup._window_span(3, "day"),
                 ["temperature"],
                 DefaultOptionKeys.reference_time,
             )
@@ -136,3 +138,8 @@ class TestPandasTimeWindow:
 
 class TestPandasTimeWindowZeroRow(PandasZeroRowAdapter, TimeWindowZeroRowTestMixin):
     feature_group_class = PandasTimeWindow
+
+
+class TestPandasTimeWindowRule(TimeWindowRuleSuite):
+    adapter_class = PandasAdapter
+    implementation = PandasTimeWindow

@@ -14,7 +14,7 @@ from mloda.provider import FeatureChainParser, FeatureChainParserMixin, FeatureS
 from mloda.user import FeatureName
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec, is_positive_int
+from mloda.provider import PropertySpec, TimeRule, is_positive_int
 from mloda_plugins.feature_group.experimental.key_features import with_key_features
 from mloda_plugins.feature_group.experimental.forecasting.forecasting_artifact import ForecastingArtifact
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
@@ -116,9 +116,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
     - The input data must have a datetime column that can be used for time-based operations
     - By default, the feature group will use DefaultOptionKeys.reference_time (default: "reference_time")
     - You can specify a custom time column by setting the reference_time option in the feature group options
+    - The `time_rule` group option (a mapping of `TimeRule` knobs) sets how horizon steps are computed
     """
 
-    CONTRACT_VERSION = 1
+    CONTRACT_VERSION = 2
 
     # Option keys for forecasting configuration
     ALGORITHM = "algorithm"
@@ -183,6 +184,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
             match_guard=_is_bool,
         ),
         DefaultOptionKeys.reference_time: TimeReferenceMixin.REFERENCE_TIME_SPEC,
+        TimeReferenceMixin.TIME_RULE: TimeReferenceMixin.TIME_RULE_SPEC,
     }
 
     @classmethod
@@ -255,8 +257,10 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
         data: Any,
         features: FeatureSet,
         *,
-        perform: Callable[[Any, str, int, str, str, str, Any | None], tuple[Any, Any | None]],
-        perform_with_confidence: Callable[[Any, str, int, str, str, str, Any | None], tuple[Any, Any, Any, Any | None]],
+        perform: Callable[[Any, str, int, str, str, str, Any | None, TimeRule], tuple[Any, Any | None]],
+        perform_with_confidence: Callable[
+            [Any, str, int, str, str, str, Any | None, TimeRule], tuple[Any, Any, Any, Any | None]
+        ],
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
         column_semantics: Callable[[Any, str], Any],
@@ -270,6 +274,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
             _options = feature.options
 
         reference_time_column = cls.get_reference_time_column(_options)
+        rule = cls.get_time_rule(_options)
 
         cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
@@ -335,6 +340,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
                         column,
                         reference_time_column,
                         column_artifact,
+                        rule,
                     )
                     results.append((output_name, result))
                     results.append((f"{output_name}~lower", lower_bound))
@@ -348,6 +354,7 @@ class ForecastingFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Opera
                         column,
                         reference_time_column,
                         column_artifact,
+                        rule,
                     )
                     results.append((output_name, result))
 

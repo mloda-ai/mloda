@@ -6,6 +6,10 @@ backend boundary through a shared **comparison contract**. This turns a class of
 bugs (for example joining or comparing a timezone-aware column against a timezone-naive one) into a
 clear error instead of a cryptic backend failure or a quietly incorrect result.
 
+The contract decides whether columns may be compared. What a zone means for a computation on a
+timezone-aware column (which clock applies, daylight saving lengths, the zone of the result) is the
+[time zone computation rule](timezone-computation.md).
+
 ## The pieces
 
 - `ComparisonContract` declares the semantics an operation requires: a set of

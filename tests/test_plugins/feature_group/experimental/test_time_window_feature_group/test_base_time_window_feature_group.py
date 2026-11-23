@@ -16,11 +16,12 @@ import pytest
 
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.core.abstract_plugins.implementation import Implementation
-from mloda.provider import Divergence, FeatureSet, SubtypeDeclaration
+from mloda.provider import DEFAULT_TIME_RULE, Divergence, FeatureSet, SubtypeDeclaration, TimeRule
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from tests.test_plugins.feature_group.experimental.reference_contract import same, same_on_pandas
 from mloda_plugins.compute_framework.base_implementations.pandas import pandas_type_semantics
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda._testing.time_rule import WINDOW_FUNCTIONS
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import Options
@@ -270,10 +271,20 @@ class TestTimeWindowFeatureGroup:
         with pytest.raises(ValueError):
             TimeWindowFeatureGroup.get_reference_time_column(options)
 
-    def test_window_hands_the_group_time_delta_to_perform(self) -> None:
+    @pytest.mark.parametrize(
+        ("option", "rule"),
+        [
+            (None, DEFAULT_TIME_RULE),
+            ({"calendar_units": "fixed_length"}, TimeRule(calendar_units="fixed_length")),
+            ({"gap": "raise", "month_end": "raise"}, TimeRule(gap="raise", month_end="raise")),
+        ],
+        ids=["default", "fixed_length", "two_knobs"],
+    )
+    def test_window_hands_the_group_span_to_perform(self, option: dict[str, str] | None, rule: TimeRule) -> None:
         df = pd.DataFrame({"x": [1.0, 2.0], DefaultOptionKeys.reference_time: pd.date_range("2023-01-01", periods=2)})
         feature_set = FeatureSet()
-        feature_set.add(Feature("x__sum_2_hour_window"))
+        options = Options() if option is None else Options(group={"time_rule": option})
+        feature_set.add(Feature("x__sum_2_hour_window", options))
         perform = Mock(return_value=[1.0, 3.0])
         add_column = Mock(return_value="done")
 
@@ -286,7 +297,8 @@ class TestTimeWindowFeatureGroup:
             column_semantics=pandas_type_semantics.column_semantics,
         )
 
-        span = TimeWindowFeatureGroup._get_time_delta(2, "hour")
+        span = TimeWindowFeatureGroup._window_span(2, "hour", rule)
+        assert span.rule == rule
         perform.assert_called_once_with(df, "sum", span, ["x"], DefaultOptionKeys.reference_time)
         add_column.assert_called_once_with(df, "x__sum_2_hour_window", [1.0, 3.0])
         assert result == "done"
@@ -406,6 +418,10 @@ class TestTimeWindowBehaviorNeutral:
             )
             assert supported is True, f"'{window_function}' must stay supported on {framework.__name__}"
 
+    def test_the_kit_window_functions_equal_the_group_window_functions(self) -> None:
+        assert len(WINDOW_FUNCTIONS) == len(set(WINDOW_FUNCTIONS))
+        assert set(WINDOW_FUNCTIONS) == set(TimeWindowFeatureGroup.WINDOW_FUNCTIONS)
+
 
 _NAN = float("nan")
 _INF = float("inf")
@@ -497,14 +513,16 @@ def _pandas_window(window_function: str, columns: dict[str, list[float | None]],
     cells = {k: [np.nan if v is None else v for v in vs] for k, vs in columns.items()}
     times = [_START + _DAY * i for i in range(len(next(iter(columns.values()))))]
     frame = pd.DataFrame({**cells, "t": times})
-    result = PandasTimeWindow._perform_window_operation(frame, window_function, _DAY * span_days, list(columns), "t")
+    span = TimeWindowFeatureGroup._window_span(span_days, "day")
+    result = PandasTimeWindow._perform_window_operation(frame, window_function, span, list(columns), "t")
     return list(result.tolist())
 
 
 def _pyarrow_window(window_function: str, columns: dict[str, list[float | None]], span_days: int) -> list[Any]:
     times = [_START + _DAY * i for i in range(len(next(iter(columns.values()))))]
     table = pa.table({**{k: pa.array(vs, type=pa.float64()) for k, vs in columns.items()}, "t": pa.array(times)})
-    result = PyArrowTimeWindow._perform_window_operation(table, window_function, _DAY * span_days, list(columns), "t")
+    span = TimeWindowFeatureGroup._window_span(span_days, "day")
+    result = PyArrowTimeWindow._perform_window_operation(table, window_function, span, list(columns), "t")
     return list(result.to_pylist())
 
 

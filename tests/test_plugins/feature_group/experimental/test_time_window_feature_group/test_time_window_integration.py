@@ -194,6 +194,52 @@ class TimeWindowNanPandasOnlySourceCreator(TimeWindowNanSourceCreator):
         return {PandasDataFrame}
 
 
+class TimeWindowZonedSourceCreator(ATestDataCreator):
+    """Serves a New York column whose second row is 23 elapsed hours after the first (spring forward)."""
+
+    @classmethod
+    def get_raw_data(cls) -> dict[str, Any]:
+        return {
+            "tw_zoned_x": [1, 10],
+            DefaultOptionKeys.reference_time: pd.to_datetime(
+                ["2023-03-11 16:30", "2023-03-12 16:00"], utc=True
+            ).tz_convert("America/New_York"),
+        }
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame, PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return cls.get_raw_data()
+
+
+@pytest.mark.parametrize("framework", [PandasDataFrame, PyArrowTable], ids=lambda fw: fw.__name__)
+@pytest.mark.parametrize(
+    ("name", "expected"),
+    [("tw_zoned_x__sum_1_day_window", [1, 10]), ("tw_zoned_x__sum_24_hour_window", [1, 11])],
+)
+def test_zoned_column_day_is_calendar_and_24_hours_is_elapsed(
+    framework: type[ComputeFramework], name: str, expected: list[int]
+) -> None:
+    plugins = PluginCollector.enabled_feature_groups({TimeWindowZonedSourceCreator, TimeWindowFeatureGroup})
+    results = mloda.run_all([name], compute_frameworks=[framework], plugin_collector=plugins)
+    assert column_values(results, name) == expected
+
+
+@pytest.mark.parametrize("framework", [PandasDataFrame, PyArrowTable], ids=lambda fw: fw.__name__)
+def test_one_request_holds_the_same_window_under_two_rules(framework: type[ComputeFramework]) -> None:
+    name = "tw_zoned_x__sum_1_day_window"
+    default_rule = Feature(name)
+    fixed_rule = Feature(name, Options(group={"time_rule": {"calendar_units": "fixed_length"}}))
+    plugins = PluginCollector.enabled_feature_groups({TimeWindowZonedSourceCreator, TimeWindowFeatureGroup})
+    results = mloda.run_all([default_rule, fixed_rule], compute_frameworks=[framework], plugin_collector=plugins)
+    assert len(results) == 2
+    assert column_values([results.frame_for(default_rule)], name) == [1, 10]
+    assert column_values([results.frame_for(fixed_rule)], name) == [1, 11]
+
+
 _NAN_WINDOW = "tw_nan_x__sum_3_day_window"
 _PANDAS_ONLY_WINDOW = "tw_nan_p__sum_3_day_window"
 _WINDOW_PLUGINS_OF = {

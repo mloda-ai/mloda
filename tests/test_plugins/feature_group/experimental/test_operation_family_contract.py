@@ -294,9 +294,12 @@ def test_operation_group_shape_check_passes(group: type[Any]) -> None:
     assert check_operation_group_shape(group).failures == ()
 
 
+EXPECTED_CONTRACT_VERSION: dict[type[Any], int] = {TimeWindowFeatureGroup: 2, ForecastingFeatureGroup: 2}
+
+
 @pytest.mark.parametrize("group", OPERATION_GROUPS, ids=GROUP_IDS)
-def test_core_operation_bases_pin_contract_version_one(group: type[Any]) -> None:
-    assert group.CONTRACT_VERSION == 1
+def test_core_operation_bases_pin_contract_version(group: type[Any]) -> None:
+    assert group.CONTRACT_VERSION == EXPECTED_CONTRACT_VERSION.get(group, 1)
 
 
 @pytest.mark.parametrize(("name", "impl"), IMPLEMENTATION_CASES)

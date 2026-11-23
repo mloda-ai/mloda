@@ -1,7 +1,7 @@
 """Guards a Link, a feature group class, a child_bootstrap callable, or an extender against a value
 pickle cannot round-trip, which otherwise fails deep inside a multiprocessing worker with an opaque
-PicklingError instead of being rejected clearly at plan time, and guards a MULTIPROCESSING-capable
-compute framework that resolved a live DataAccessCollection connection. This only proves resolvability
+PicklingError instead of being rejected clearly before any worker starts, and guards a step holding a
+resolved DataAccessCollection connection that would run in a worker. This only proves resolvability
 in the current process: a value resolvable here but not inside a freshly spawned worker can still fail
 there.
 """
@@ -170,7 +170,7 @@ def raise_on_unpicklable_extender(function_extender: set[Extender] | None) -> No
 def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]) -> str:
     return (
         f"{cfw_class.__name__} supports ParallelizationMode.MULTIPROCESSING and a connection was "
-        "resolved for it from the DataAccessCollection, but a TFS destination that runs in a spawned "
+        "resolved for it from the DataAccessCollection, but a step that runs in a spawned "
         "worker is never handed a connection (the worker-side connection bind only runs on the sync "
         "and threading execute paths).\n"
         "Resolution: the framework author excludes ParallelizationMode.MULTIPROCESSING from "
@@ -180,10 +180,12 @@ def _multiprocessing_connection_conflict_error(cfw_class: type[ComputeFramework]
     )
 
 
-def raise_on_multiprocessing_connection_conflict(steps: Iterable[Any]) -> None:
-    """Raise ValueError if a step with a connection handle runs on a framework that supports MULTIPROCESSING."""
+def raise_on_multiprocessing_connection_conflict(
+    steps: Iterable[Any], register_modes: set[ParallelizationMode]
+) -> None:
+    """Raise ValueError if a step with a connection handle would run in a worker process."""
     for step in steps:
-        if step.connection_handle is None:
+        if step.connection_handle is None or not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
         cfw_class = (
             step.compute_framework
@@ -192,8 +194,7 @@ def raise_on_multiprocessing_connection_conflict(steps: Iterable[Any]) -> None:
             if isinstance(step, TransformFrameworkStep)
             else step.destination_framework
         )
-        if ParallelizationMode.MULTIPROCESSING in cfw_class.supported_parallelization_modes():
-            raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))
+        raise ValueError(_multiprocessing_connection_conflict_error(cfw_class))
 
 
 def _forking_picklable(value: Any) -> bool:

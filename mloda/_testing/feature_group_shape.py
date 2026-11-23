@@ -614,6 +614,14 @@ def _check_types(
     return failures
 
 
+def _retyped(adapter: FrameworkAdapter, a: Any, b: Any, column: str) -> bool:
+    if adapter.column_type(a, column) == adapter.column_type(b, column):
+        return False
+    # a nullable dtype and its numpy twin are the same exact type
+    twin = adapter.exact_type(a, column)
+    return twin is None or twin != adapter.exact_type(b, column)
+
+
 def _check_zero_rows(
     cls: type[FeatureGroup],
     adapter: FrameworkAdapter,
@@ -654,6 +662,7 @@ def _check_zero_rows(
         listed = f": {differing}" if differing else ""
         failures.append(f"zero_rows: column names differ from the run with rows{listed}")
     elif adapter.capabilities.typed_columns:
+        frames: tuple[Any, Any] | None = None
         for column in (c for c in columns if c in out_columns):
             mapped = _compared([column], names)
             data_type = expected.get(mapped[0][1]) if mapped else None
@@ -666,11 +675,14 @@ def _check_zero_rows(
                 else:
                     changed = adapter.has_type(out, column, data_type) is not True
             else:
-                changed = adapter.column_type(out, column) != adapter.column_type(result, column)
-                if changed:
-                    # a nullable dtype and its numpy twin are the same exact type
-                    twin = adapter.exact_type(result, column)
-                    changed = twin is None or twin != adapter.exact_type(out, column)
+                changed = _retyped(adapter, result, out, column)
+                if changed and column in data.types:
+                    if frames is None:
+                        frames = (adapter.from_typed(data), adapter.from_typed(empty, arrow_types))
+                    full, zero = frames
+                    # the adapter's own framing differs by row count and the group kept the zero-row type
+                    if adapter.column_type(full, column) != adapter.column_type(zero, column):
+                        changed = _retyped(adapter, zero, out, column)
             text = f"column '{column}' changes type on zero rows"
             note = _excused(text, covering.get(column, []), used, DivergenceKind.TYPE) if changed else None
             if note is not None:

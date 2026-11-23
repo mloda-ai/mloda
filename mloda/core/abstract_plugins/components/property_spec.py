@@ -101,6 +101,8 @@ class PropertySpec:
     forward_to_inputs: bool = True
     # A context option a run may replace for that run only; the prepare-time value stays the baseline.
     runtime: bool = False
+    # A group option a caller may not move to the context; refused at plan time.
+    group_only: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -148,6 +150,12 @@ class PropertySpec:
 
         if not isinstance(self.runtime, bool):
             raise ValueError(f"{prefix}: runtime must be a bool, got {type(self.runtime).__name__}.")
+
+        if not isinstance(self.group_only, bool):
+            raise ValueError(f"{prefix}: group_only must be a bool, got {type(self.group_only).__name__}.")
+
+        if self.group_only and self.context:
+            raise ValueError(f"{prefix}: group_only=True requires context=False.")
 
         if self.runtime:
             if not self.context:
@@ -274,6 +282,7 @@ def property_spec(
     caller_settable: bool = True,
     forward_to_inputs: bool = True,
     runtime: bool = False,
+    group_only: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -292,6 +301,7 @@ def property_spec(
         caller_settable=caller_settable,
         forward_to_inputs=forward_to_inputs,
         runtime=runtime,
+        group_only=group_only,
     )
 
 
@@ -308,3 +318,9 @@ def runtime_parameter_keys(feature_group: Any) -> dict[str, PropertySpec]:
     """The group's declared runtime parameter keys."""
     mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
     return {key: spec for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.runtime}
+
+
+def group_only_keys(feature_group: Any) -> dict[str, PropertySpec]:
+    """The group's declared group-only keys."""
+    mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
+    return {key: spec for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.group_only}

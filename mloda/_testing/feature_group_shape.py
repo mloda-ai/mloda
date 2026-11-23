@@ -663,6 +663,7 @@ def _check_zero_rows(
         failures.append(f"zero_rows: column names differ from the run with rows{listed}")
     elif adapter.capabilities.typed_columns:
         frames: tuple[Any, Any] | None = None
+        production: Any = None
         for column in (c for c in columns if c in out_columns):
             mapped = _compared([column], names)
             data_type = expected.get(mapped[0][1]) if mapped else None
@@ -680,9 +681,15 @@ def _check_zero_rows(
                     if frames is None:
                         frames = (adapter.from_typed(data), adapter.from_typed(empty, arrow_types))
                     full, zero = frames
-                    # the adapter's own framing differs by row count and the group kept the zero-row type
+                    # excused only when the adapter frames it differently by row count, the result is the
+                    # framework's own framing and the group kept the zero-row type
                     if adapter.column_type(full, column) != adapter.column_type(zero, column):
-                        changed = _retyped(adapter, zero, out, column)
+                        if production is None:
+                            cfw = adapter.compute_framework()(
+                                mode=ParallelizationMode.SYNC, children_if_root=frozenset()
+                            )
+                            production = cfw.transform(to_arrow_table(data), [])
+                        changed = _retyped(adapter, zero, out, column) or _retyped(adapter, production, result, column)
             text = f"column '{column}' changes type on zero rows"
             note = _excused(text, covering.get(column, []), used, DivergenceKind.TYPE) if changed else None
             if note is not None:

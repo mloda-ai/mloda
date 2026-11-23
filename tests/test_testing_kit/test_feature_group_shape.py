@@ -223,6 +223,11 @@ def make_run_group(
                 if len(data):
                     data["rg_src"] = data["rg_src"].astype("float64")
                 return data
+            if kind == "input_narrowed_with_rows":
+                data = _double_into(data, "rg_out", "rg_src")
+                if len(data):
+                    data["rg_src"] = data["rg_src"].astype("Int32")
+                return data
             if kind == "object_date":
                 import pandas as pd
                 from datetime import date
@@ -937,7 +942,7 @@ def test_pandas_na_output_passes_determinism() -> None:
 
 @pytest.mark.parametrize(
     ("kind", "fails"),
-    [("input_widened_with_rows", False), ("input_retyped_on_zero_rows", True)],
+    [("input_widened_with_rows", False), ("input_retyped_on_zero_rows", True), ("input_narrowed_with_rows", True)],
 )
 def test_pandas_null_input_zero_rows_excuses_only_the_adapter_retype(kind: str, fails: bool) -> None:
     """Only the adapter's own zero-row reframing of an input is excused, not a group retype."""

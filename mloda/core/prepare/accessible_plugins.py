@@ -169,6 +169,8 @@ class FrameworkDeclarationError(ValueError):
 
 def _running_in_zmq_shell() -> bool:
     """Detect IPython kernel (Jupyter) environment for the kernel-restart hint."""
+    if "IPython" not in sys.modules:
+        return False
     try:
         from IPython import get_ipython  # type: ignore[attr-defined]
     except ImportError:

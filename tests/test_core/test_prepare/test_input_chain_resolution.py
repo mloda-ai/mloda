@@ -473,7 +473,8 @@ def _linear_chain(depth: int) -> list[type[FeatureGroup]]:
     return groups
 
 
-@pytest.mark.parametrize("depth", [3, 150])
+# Depth 150 guards against RecursionError; planning that chain scales with every group the worker collected.
+@pytest.mark.parametrize("depth", [3, pytest.param(150, marks=pytest.mark.timeout(30))])
 @pytest.mark.parametrize("with_access", [False, True], ids=["no-access", "access-without-chain-names"])
 def test_a_single_candidate_chain_fires_the_match_hook_once_per_feature(depth: int, with_access: bool) -> None:
     groups = _linear_chain(depth)

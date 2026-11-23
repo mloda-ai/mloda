@@ -35,6 +35,7 @@ from mloda.core.prepare.accessible_plugins import (
     PreFilterPlugins,
     RedefinitionConflictError,
     dedup_feature_group_subclasses,
+    _running_in_zmq_shell,
     _safe_class_source_hash,
 )
 from mloda.core.prepare.resolution_types import ResolutionDiagnosis
@@ -1484,3 +1485,21 @@ def test_a_disabled_stale_implementation_redefinition_does_not_raise(monkeypatch
 
     assert live in implementations
     assert stale not in implementations
+
+
+def test_zmq_shell_probe_does_not_import_ipython(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.delitem(sys.modules, "IPython", raising=False)
+
+    assert _running_in_zmq_shell() is False
+    assert "IPython" not in sys.modules
+
+
+def test_zmq_shell_probe_detects_a_loaded_zmq_shell(monkeypatch: pytest.MonkeyPatch) -> None:
+    class ZMQInteractiveShell:
+        pass
+
+    fake = types.ModuleType("IPython")
+    fake.get_ipython = lambda: ZMQInteractiveShell()  # type: ignore[attr-defined]
+    monkeypatch.setitem(sys.modules, "IPython", fake)
+
+    assert _running_in_zmq_shell() is True

@@ -317,6 +317,8 @@ class TestEngineMultipleJoinCfw:
         links = {Link("inner", left, right_1), Link("inner", right_1, right_2), Link("inner", right_1, right_3)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
+    # Three engine runs, each matching against every FeatureGroup the worker collected.
+    @pytest.mark.timeout(30)
     def test_runner_join_multiple_cfw6_double_chained_join(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:
@@ -337,6 +339,8 @@ class TestEngineMultipleJoinCfw:
         links = {Link("inner", left, right_1), Link("inner", right_2, left), Link("inner", right_3, left)}
         self.base_join_runner(modes, flight_server, links, f_name="4")
 
+    # Five engine runs, each matching against every FeatureGroup the worker collected.
+    @pytest.mark.timeout(30)
     def test_runner_join_multiple_cfw6_double_chained_join_left(
         self, modes: set[ParallelizationMode], flight_server: Any
     ) -> None:

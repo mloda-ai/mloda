@@ -52,6 +52,8 @@ class TestMixComputeFramework:
         assert len(result_data) == 9
         assert len(result_data.columns) == expected_cols
 
+    # One run_all over many features, matching against every FeatureGroup the worker collected.
+    @pytest.mark.timeout(30)
     def test_mix_cfw_can_work_in_parallel(self) -> None:
         feature_list = self.feature_list
         features = self.get_feature_list_from_local_scope(feature_list, self.file_path)

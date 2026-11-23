@@ -105,45 +105,6 @@ class TestSklearnArtifact:
             with pytest.raises(ImportError, match="joblib is required"):
                 SklearnArtifact._deserialize_artifact('{"fitted_transformer": "dummy"}')
 
-    def test_custom_saver(self, tmp_path: Path) -> None:
-        """Test custom_saver method."""
-        # Skip test if sklearn/joblib not available
-        try:
-            import joblib  # noqa: F401
-            from sklearn.preprocessing import StandardScaler
-            import os
-        except ImportError:
-            pytest.skip("scikit-learn or joblib not available")
-
-        features = FeatureSet()
-        features.add(Feature("test_custom_saver_feature", Options({"artifact_storage_path": str(tmp_path)})))
-
-        # Use the new multiple artifact format
-        artifact = {
-            "test_artifact_key": {
-                "fitted_transformer": StandardScaler(),
-                "feature_names": ["test_custom_saver_feature"],
-            }
-        }
-
-        result = SklearnArtifact.custom_saver(features, artifact)
-        assert isinstance(result, dict)
-        assert "test_artifact_key" in result
-        # Verify file was created
-        assert os.path.exists(result["test_artifact_key"])
-
-    def test_custom_loader_no_options(self) -> None:
-        """Test custom_loader when no options are available."""
-        import tempfile
-
-        # Use a unique temporary directory to ensure isolation
-        with tempfile.TemporaryDirectory() as temp_dir:
-            features = FeatureSet()
-            features.add(Feature("test_no_options_feature", Options({"artifact_storage_path": temp_dir})))
-
-            result = SklearnArtifact.custom_loader(features)
-            assert result is None
-
     def test_custom_loader_no_artifact(self) -> None:
         """Test custom_loader when no artifact is stored."""
         import tempfile

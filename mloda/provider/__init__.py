@@ -129,6 +129,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 
 # Match-time misconfiguration escalation
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort as escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import is_credential_abort as is_credential_abort
 from mloda.core.abstract_plugins.components.utils import is_match_abort as is_match_abort
 
 # Subtype declaration
@@ -261,6 +262,7 @@ __all__ = [
     "record_match_rejection",
     # Match-time misconfiguration escalation
     "escalate_match_abort",
+    "is_credential_abort",
     "is_match_abort",
     # Subtype declaration
     "SubtypeDeclaration",

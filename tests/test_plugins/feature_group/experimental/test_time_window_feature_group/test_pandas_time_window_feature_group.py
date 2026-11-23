@@ -187,8 +187,12 @@ _GRID_STARTS: tuple[tuple[str, int], ...] = (
     ("2024-04-05 12:00", 0),  # Lord Howe 30 minute change on 04-07
     ("2024-02-27 03:00", 0),  # leap day
     ("2023-01-30 03:00", 0),  # month ends
-    ("2024-05-30 03:00", 0),  # month ends, 31 day month
+    ("2024-05-30 03:00", 0),  # month ends, long month
     ("2024-11-02 12:00", 999),  # sub-microsecond remainder
+    ("2024-04-09 12:00", 0),  # month back from 04-10 lands in the 2024-03-10 gap
+    ("2024-12-02 12:00", 0),  # month back from 12-03 lands in the 2024-11-03 repeated hour
+    ("2025-03-09 12:00", 0),  # year back from 2025-03-10 lands in the 2024-03-10 gap
+    ("2025-11-02 12:00", 0),  # year back from 2025-11-03 lands in the 2024-11-03 repeated hour
 )
 
 
@@ -199,7 +203,7 @@ def _grid(start: str, remainder: int) -> np.ndarray:
 
 
 def _reference(ns: np.ndarray, span: WindowSpan, zone: tzinfo | None) -> np.ndarray:
-    """Today's dispatch: constant width when the span has one, else the per-row shift."""
+    """Reference bounds: constant width when the span has one, else the per-row shift."""
     width = span.fixed_ns(zone)
     if width is None:
         return np.fromiter((max(span.lower_ns(int(v), zone), _INT64_MIN) for v in ns), dtype=np.int64, count=len(ns))
@@ -246,10 +250,11 @@ class TestPandasCalendarBounds:
         [
             [_INT64_MIN + 1],
             [_INT64_MIN + _DAY_NS],
+            [_INT64_MIN + 40 * _DAY_NS],
             [_INT64_MAX],
             [_INT64_MIN + 1, _INT64_MIN + _DAY_NS, 0, _INT64_MAX],
         ],
-        ids=["floor", "floor_plus_day", "ceiling", "floor_to_ceiling"],
+        ids=["floor", "floor_plus_day", "floor_plus_40_days", "ceiling", "floor_to_ceiling"],
     )
     def test_int64_edges(self, ns: list[int], zone_id: str) -> None:
         zone = _ZONES[zone_id]()
@@ -264,7 +269,9 @@ class TestPandasCalendarBounds:
         _assert_same_outcome(ns, WindowSpan(1, "day", TimeRule(gap="raise")), ZoneInfo("America/New_York"))
 
     @pytest.mark.parametrize("zone_id", ["naive", "new_york"])
-    @pytest.mark.parametrize(("size", "unit"), [(10**17, "year"), (10**18, "month"), (2**63, "day")])
+    @pytest.mark.parametrize(
+        ("size", "unit"), [(583, "year"), (584, "year"), (10**17, "year"), (10**18, "month"), (2**63, "day")]
+    )
     def test_huge_sizes(self, size: int, unit: str, zone_id: str) -> None:
         ns = _grid("2024-03-09 12:00", 0)[:20]
         _assert_same_outcome(ns, WindowSpan(size, unit), _ZONES[zone_id]())
@@ -293,3 +300,25 @@ class TestPandasCalendarBounds:
         if zone_id == "kolkata":
             width = {"day": _DAY_NS, "week": 7 * _DAY_NS}[unit]
             np.testing.assert_array_equal(bounds, ns - size * width)
+
+    @pytest.mark.parametrize("zone_id", ["naive", "new_york"])
+    def test_unsorted_zoned_microsecond_column_matches_sorted(self, zone_id: str) -> None:
+        zone = "America/New_York" if zone_id == "new_york" else None
+        base = pd.Timestamp("2024-03-09 12:00")
+        times = [base + pd.Timedelta(hours=7 * i) for i in range(24)]
+        times += [pd.Timestamp("2024-03-31 12:00") + pd.Timedelta(hours=5 * i) for i in range(8)]
+        stamps = pd.DatetimeIndex(times)
+        if zone is not None:
+            stamps = stamps.tz_localize("UTC").tz_convert(zone)
+        stamps = stamps.as_unit("us")
+        order = np.random.default_rng(0).permutation(len(stamps))
+        df = pd.DataFrame({"ts": stamps[order], "value": (2.0 ** (order % 20)).astype(float)})
+        assert str(df["ts"].dtype) == ("datetime64[us, America/New_York]" if zone else "datetime64[us]")
+
+        span = WindowSpan(1, "month")
+        unsorted_result = np.asarray(PandasTimeWindow._perform_window_operation(df, "sum", span, ["value"], "ts"))
+        by_time = df.sort_values("ts", kind="stable")
+        sorted_result = np.asarray(PandasTimeWindow._perform_window_operation(by_time, "sum", span, ["value"], "ts"))
+        expected = np.empty_like(sorted_result)
+        expected[by_time.index.to_numpy()] = sorted_result
+        np.testing.assert_array_equal(unsorted_result, expected)

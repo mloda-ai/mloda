@@ -117,13 +117,14 @@ def _timed(method: Callable[..., Any], features: Any) -> Callable[..., Any]:
 def _then_save(
     method: Callable[..., Any], after_calculate: Callable[[], None], saving: list[bool]
 ) -> Callable[..., Any]:
-    """Wrap ``method`` to run ``after_calculate`` right after it returns, flagging ``saving`` first."""
+    """Wrap ``method`` to run ``after_calculate`` right after it returns, holding ``saving`` set only while it runs."""
 
     @functools.wraps(method)
     def wrapper(*args: Any, **kwargs: Any) -> Any:
         result = method(*args, **kwargs)
         saving[0] = True
         after_calculate()
+        saving[0] = False
         return result
 
     return wrapper

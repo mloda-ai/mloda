@@ -1967,7 +1967,6 @@ def test_a_saver_that_reads_then_raises_still_shows_the_read_on_the_calculate_co
         api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
 
     assert [context.credentials_read for context in probe.kept] == [(_VAULT_A, _VAULT_B)]
-    # MULTIPROCESSING is not parametrized: the probe instance is pickled into the worker.
     assert probe.at_return == [((_VAULT_A, _VAULT_B), "error")]
 
 
@@ -2080,6 +2079,57 @@ def test_the_saver_runs_before_output_validation(flight_server: Any) -> None:
         api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
 
     assert _ORDERING_SAVES == ["saved"]
+
+
+_ONCE_SAVES: list[str] = []
+
+
+class ChsRcOnceArtifact(BaseArtifact):
+    @classmethod
+    def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
+        _ONCE_SAVES.append("saved")
+        return {"saved": True}
+
+
+class ChsRcOnceSaverFG(ChsRcCalcAndSaverFG):
+    """Saves an artifact into a module-level list."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"chs_rc_once_a"}
+
+    @staticmethod
+    def artifact() -> type[BaseArtifact] | None:
+        return ChsRcOnceArtifact
+
+
+class _ChsRcCalculateTwiceExtender(Extender):
+    """Calls the wrapped calculate twice and returns the second result."""
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        func(*args, **kwargs)
+        return func(*args, **kwargs)
+
+
+@pytest.mark.timeout(15)
+def test_the_saver_runs_once_when_an_extender_calls_calculate_twice(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    _ONCE_SAVES.clear()
+    api = mloda_api(
+        [Feature("chs_rc_once_a", options={"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B})],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac(_TWO_VAULTS),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcOnceSaverFG}),
+        function_extender={_ChsRcCalculateTwiceExtender()},
+    )
+    api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert _ONCE_SAVES == ["saved"]
 
 
 class ChsRcFrozenArtifact(BaseArtifact):

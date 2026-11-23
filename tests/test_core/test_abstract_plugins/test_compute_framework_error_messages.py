@@ -49,6 +49,59 @@ class TestIsMissingColumnError:
         assert excinfo.value is _UNRAISED
 
 
+class _MissingColumn(Exception):
+    pass
+
+
+class MissingColumnComputeFramework(DictComputeFramework):
+    """Treats _MissingColumn as a missing-column error and raises it from transform."""
+
+    @classmethod
+    def is_missing_column_error(cls, error: Exception) -> bool:
+        return isinstance(error, _MissingColumn)
+
+    def transform(self, data: Any, feature_names: Any) -> Any:
+        raise _MissingColumn("no such column")
+
+
+class _ListFeatureGroup(FeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: Any) -> Any:
+        return [1]
+
+
+class _MissingColumnInSaveFeatureGroup(FeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: Any) -> Any:
+        return {"a": [1]}
+
+
+class TestMissingColumnAfterSave:
+    def test_a_missing_column_after_a_successful_save_is_still_made_helpful(self) -> None:
+        cfw = MissingColumnComputeFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        calls: list[int] = []
+
+        with pytest.raises(ValueError, match="input_features"):
+            cfw.run_calculation(
+                _ListFeatureGroup, FeatureSet([Feature("a")]), location=None, after_calculate=lambda: calls.append(1)
+            )
+        assert calls == [1]
+
+    def test_a_missing_column_error_raised_by_the_save_keeps_its_type(self) -> None:
+        cfw = MissingColumnComputeFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+
+        def failing_save() -> None:
+            raise _MissingColumn("from saver")
+
+        with pytest.raises(_MissingColumn, match="from saver"):
+            cfw.run_calculation(
+                _MissingColumnInSaveFeatureGroup,
+                FeatureSet([Feature("a")]),
+                location=None,
+                after_calculate=failing_save,
+            )
+
+
 class TestValidateExpectedFrameworkErrorMessage:
     """Tests for validate_expected_framework error message clarity."""
 

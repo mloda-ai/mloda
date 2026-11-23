@@ -565,7 +565,8 @@ class TestConcurrentRunsOnOneSession:
         assert seen == [{ParallelizationMode.THREADING}]
         assert [f["PrepareRunApiFeature"].tolist() for f in frames] == [["3_v3", "103_w3"]]
 
-    @pytest.mark.timeout(30)
+    # Two MULTIPROCESSING runs; the first may pay the Manager, forkserver and flight server cold starts.
+    @pytest.mark.timeout(60)
     def test_repeated_multiprocessing_runs_get_their_own_results_and_session_is_unchanged(
         self, flight_server: Any
     ) -> None:

@@ -101,6 +101,7 @@ class PropertySpec:
     forward_to_inputs: bool = True
     # A context option a run may replace for that run only; the prepare-time value stays the baseline.
     runtime: bool = False
+    scalar: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -148,6 +149,9 @@ class PropertySpec:
 
         if not isinstance(self.runtime, bool):
             raise ValueError(f"{prefix}: runtime must be a bool, got {type(self.runtime).__name__}.")
+
+        if not isinstance(self.scalar, bool):
+            raise ValueError(f"{prefix}: scalar must be a bool, got {type(self.scalar).__name__}.")
 
         if self.runtime:
             if not self.context:
@@ -200,11 +204,10 @@ class PropertySpec:
             )
 
     def _check_declared_default(self, prefix: str) -> None:
-        """A strict spec's declared default must be within its own value space (issue #530 semantics).
+        """A declared default must satisfy scalar shape and, when strict, the key's value space."""
+        if self.scalar and isinstance(self.default, (list, tuple, set, frozenset, Mapping)):
+            raise ValueError(f"{prefix}: scalar=True requires a scalar default.")
 
-        ``NO_DEFAULT`` declares no default, and a declared ``None`` applies no value: neither has
-        anything to check.
-        """
         if is_no_default(self.default) or self.default is None or not self.strict_validation:
             return
 
@@ -274,6 +277,7 @@ def property_spec(
     caller_settable: bool = True,
     forward_to_inputs: bool = True,
     runtime: bool = False,
+    scalar: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -292,6 +296,7 @@ def property_spec(
         caller_settable=caller_settable,
         forward_to_inputs=forward_to_inputs,
         runtime=runtime,
+        scalar=scalar,
     )
 
 

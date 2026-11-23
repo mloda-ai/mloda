@@ -95,6 +95,10 @@ Feature("TextFG~source", options=Options(group={"text_lines": True}))
 
 The matched pair lives on `Feature.input_data_match`, never in the options, and is handed to the loader at load time. The source may hold credentials, so use `PlanStep.data_access_identity` (or `Group.data_access_identity(match)` outside a plan) for display and logs. If your own error text may carry a credential, scrub it with `mloda.provider.scrub_credentials` before logging.
 
+For a custom URI source, use `SourceMatch(source=source_identity(uri), access=uri)` with `source_identity` from `mloda.provider`.
+It applies the built-in file-source recipe: remove userinfo, query and fragment, and mask credential-shaped path segments and parameter regions.
+It leaves relative paths unresolved and ignores registered credential literals, keeping source identities stable across credential scopes. Use `scrub_credentials` for error and log text that may contain those literals.
+
 ### Non-file sources such as HTTP
 
 Write a `SourceFeatureGroup` subclass with a pointed-only `NamePolicy.OPEN` claim route: it claims a name only when pointed at (`options={"MyApiFG": url}` or `feature_group=MyApiFG`). Implement `find_sources` and `load_neutral` to fetch and return the data. A plain `FeatureGroup` is not a pointer target. A key that differs from a loaded source group's name only by case raises a `SourcePointerError`; a key naming a group that is not loaded is an unknown option key and is ignored. `ApiDataFG` injects in-memory data passed through the API request and is not an HTTP client.

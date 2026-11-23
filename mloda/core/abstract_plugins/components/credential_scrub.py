@@ -869,6 +869,13 @@ def _cut_path_parameter_regions(uri: str) -> str:
     return "".join(out)
 
 
+def source_identity(text: str) -> str:
+    """Apply the file-source recipe without resolving paths or consulting registered credential literals."""
+    return _cut_path_parameter_regions(
+        mask_identity_credentials(strip_uri_userinfo(text)).partition("?")[0].partition("#")[0]
+    )
+
+
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())
 _IDENTITY_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_identity_secrets", default=frozenset())
 _REGISTERED_ESCAPED: ContextVar[frozenset[str]] = ContextVar("mloda_registered_escaped", default=frozenset())

@@ -238,6 +238,7 @@ class DuckdbRelation(SqlBaseRelation):
         return table
 
     def df(self) -> Any:
+        """Tz-aware columns come back in their recorded zone (DuckDB returns ns tz columns naive in UTC, hence the localize)."""
         frame = self._relation.df()
         if not self._time_zones:
             return frame

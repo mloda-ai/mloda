@@ -688,6 +688,53 @@ def _run_filter_twin(
     return list(results), names, global_filter
 
 
+def _run_user_pinned_twin(name: str, default_kind: str, pinned_first: bool) -> tuple[list[Any], list[int]]:
+    """Run pinned/unpinned user twins without a filter and count features per calculation."""
+    key = IDC_CTX_KEY if default_kind == "ctx" else IDC_GRP_KEY
+    default = IDC_CTX_DEFAULT if default_kind == "ctx" else IDC_GRP_DEFAULT
+    calculations: list[int] = []
+
+    class IdcUserPinnedTwinFeatureGroup(DataCreatorFeatureGroup):
+        PROPERTY_MAPPING = {
+            key: PropertySpec("A declared default.", context=default_kind == "ctx", default=default),
+        }
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {name}
+
+        @classmethod
+        def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+            calculations.append(len(features.features))
+            return {str(feature.name): [feature.options.get(key)] for feature in features.features}
+
+    explicit = Options(context={key: default}) if default_kind == "ctx" else Options(group={key: default})
+    requests = [Feature(name, compute_framework="PythonDictFramework"), Feature(name, explicit)]
+    results = mloda.run_all(
+        requests if pinned_first else requests[::-1],
+        compute_frameworks=[PythonDictFramework, PyArrowTable],
+        plugin_collector=PluginCollector.enabled_feature_groups({IdcUserPinnedTwinFeatureGroup}),
+    )
+    return list(results), calculations
+
+
+@pytest.mark.parametrize("default_kind", ["ctx", "grp"])
+@pytest.mark.parametrize("pinned_first", [True, False], ids=["pinned-first", "pinned-last"])
+def test_user_pinned_default_equivalent_twin_warns_once_without_filter(
+    default_kind: str, pinned_first: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    caplog.set_level(logging.WARNING, logger=IDC_ENGINE_LOGGER)
+    name = f"idc_userpin_{default_kind}_{'first' if pinned_first else 'last'}"
+    default = IDC_CTX_DEFAULT if default_kind == "ctx" else IDC_GRP_DEFAULT
+    frames, calculations = _run_user_pinned_twin(name, default_kind, pinned_first)
+    assert len(frames) == 1
+    assert _single_row(frames[0], name) == default
+    assert calculations == [1], "the twins must merge into one feature calculated once"
+    warnings = _default_equivalent_warnings(caplog)
+    assert len(warnings) == 1, f"expected exactly one default-equivalent warning, got: {warnings!r}"
+    assert name in warnings[0], f"the warning must name the requested column: {warnings[0]!r}"
+
+
 @pytest.mark.parametrize("default_kind", ["ctx", "grp"])
 @pytest.mark.parametrize("pinned", [False, True], ids=["unpinned", "pinned"])
 @pytest.mark.parametrize(

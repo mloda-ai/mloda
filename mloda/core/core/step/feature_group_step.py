@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Any
 from uuid import UUID, uuid4
 from mloda.core.abstract_plugins.components.base_artifact import BaseArtifact
@@ -5,8 +6,8 @@ from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 from mloda.core.abstract_plugins.components.input_data.api_data_fg import ApiDataFG
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import ApiDataRef, api_data_scope
 from mloda.core.abstract_plugins.components.credential_access import readable_credentials
+from mloda.core.abstract_plugins.components.credential_grant import read_recorder, record_credential_read
 from mloda.core.abstract_plugins.components.credential_handle import unset_credential_handle_options
-from mloda.core.abstract_plugins.components.credential_grant import read_recorder
 from mloda.core.abstract_plugins.components.failed_rows import collect_failed_rows
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
@@ -74,30 +75,39 @@ class FeatureGroupStep(Step):
 
         match = features.input_data_match
         access = None if match is None else match[1].access
+        saved = False
+        saver_reads: list[set[str]] = []
+        after_calculate: Callable[[], None] | None = None
+        if features.artifact_to_save is not None:
+
+            def after_calculate() -> None:
+                nonlocal saved
+                if saved:
+                    for handle in set().union(*saver_reads):
+                        record_credential_read(handle)
+                    return
+                saved = True
+                unset: tuple[str, ...] = ()
+                if features.options is not None:
+                    unset = unset_credential_handle_options(self.feature_group, features.options)
+                with read_recorder() as reads, readable_credentials(unset):
+                    saver_reads.append(reads)
+                    self.save_artifact(features, cfw_register)
+
         with collect_failed_rows(self.feature_group.get_class_name()) as collector:
             if isinstance(access, ApiDataRef) and is_nominal_subclass(self.feature_group, ApiDataFG):
                 key = access.key
                 with api_data_scope(lambda: cfw_register.get_api_data_by_name(key), key):
-                    data = self.run_calculate_feature(cfw, features, location, data)
+                    data = self.run_calculate_feature(cfw, features, location, data, after_calculate)
             else:
-                data = self.run_calculate_feature(cfw, features, location, data)
+                data = self.run_calculate_feature(cfw, features, location, data, after_calculate)
         if collector.entries:
             cfw_register.add_failed_rows(collector.entries)
         seconds = getattr(features, "_calculate_seconds", None)
         if seconds is not None:
             cfw_register.add_step_duration(StepDuration(self.feature_group.get_class_name(), self.uuid, seconds))
-        with read_recorder() as saver_reads:
-            try:
-                unset: tuple[str, ...] = ()
-                if features.options is not None:
-                    unset = unset_credential_handle_options(self.feature_group, features.options)
-                with readable_credentials(unset):
-                    self.save_artifact(features, cfw_register)
-            finally:
-                calculate_context = cfw._calculate_context
-                if calculate_context is not None:
-                    merged = sorted({*calculate_context.credentials_read, *set(saver_reads)})
-                    object.__setattr__(calculate_context, "credentials_read", tuple(merged))
+        if after_calculate is not None and not saved:
+            after_calculate()
 
         # return_data_type_rule
 
@@ -120,12 +130,17 @@ class FeatureGroupStep(Step):
         raise ValueError(internal_invariant_error("an own-frame step has no source frame to read", f"step={self.uuid}"))
 
     def run_calculate_feature(
-        self, cfw: ComputeFramework, features: FeatureSet, location: str | None, data: Any | None = None
+        self,
+        cfw: ComputeFramework,
+        features: FeatureSet,
+        location: str | None,
+        data: Any | None = None,
+        after_calculate: Callable[[], None] | None = None,
     ) -> Any:
         if self.feature_group.calculate_feature is None:
             raise ValueError("FeatureGroup calculate_feature is not implemented")
 
-        data = cfw.run_calculation(self.feature_group, features, location, data)
+        data = cfw.run_calculation(self.feature_group, features, location, data, after_calculate=after_calculate)
         cfw.validate_expected_framework(location)
         return data
 

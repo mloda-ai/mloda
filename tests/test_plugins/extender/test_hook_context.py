@@ -424,8 +424,12 @@ class TestHookContextCurrentScope:
     def test_current_returns_active_context_inside_activate(self) -> None:
         context = _make_context()
 
-        with context.activate():
+        with context.activate() as ctx:
+            assert ctx.result_attributes is None
             assert HookContext.current() is context
+
+        assert ctx.result_attributes is None
+        assert ctx is context
 
     def test_current_returns_none_after_activate_exits(self) -> None:
         context = _make_context()

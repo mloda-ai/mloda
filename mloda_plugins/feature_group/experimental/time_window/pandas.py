@@ -94,18 +94,16 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
             picked = values[starts] if window_function == "first" else values
             return pd.Series(picked, index=col.index)
 
-        # pandas recomputes every window when starts go backwards; roll on monotone starts, fix the few rows.
-        monotone = np.maximum.accumulate(starts)
-        indexer = _SpanIndexer(monotone, np.arange(1, len(values) + 1))
-        rolling = col.rolling(window=indexer, min_periods=0 if window_function == "sum" else 1)
         name = {"avg": "mean"}.get(window_function, window_function)
-        result = getattr(rolling, name)()
-        back = np.flatnonzero(monotone != starts)
-        if len(back):
-            corrected = result.to_numpy(dtype="float64", na_value=np.nan, copy=True)
-            for i in back:
-                corrected[i] = getattr(pd.Series(values[starts[i] : i + 1]), name)()
-            result = pd.Series(corrected, index=col.index)
+        min_periods = 0 if window_function == "sum" else 1
+        if window_function == "median":
+            finite = values[np.isfinite(values)]
+            bound = float(np.abs(finite).max()) if len(finite) else 0.0
+            capped = np.where(np.isposinf(values), bound, np.where(np.isneginf(values), -bound, values))
+            source = pd.Series(capped, index=col.index)
+        else:
+            source = col
+        result = pd.Series(cls._rolled(source, name, starts, min_periods), index=col.index)
         if window_function == "count":
             return result
 
@@ -123,7 +121,15 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         fixed = result.to_numpy(dtype="float64", na_value=np.nan, copy=True)
         has_pos = pos > 0
         has_neg = neg > 0
-        if window_function in ("sum", "avg", "mean"):
+        if window_function == "median":
+            q, f, p = neg, window_count(np.isfinite(values)), pos
+            total = q + f + p
+            lo, hi = (total - 1) // 2, total // 2
+            any_neg = (lo < q) | (hi < q)
+            any_pos = (lo >= q + f) | (hi >= q + f)
+            mixed = np.where(any_neg & any_pos, np.nan, np.where(any_neg, -np.inf, np.where(any_pos, np.inf, fixed)))
+            fixed = np.where(affected & (total > 0), mixed, fixed)
+        elif window_function in ("sum", "avg", "mean"):
             inf_result = np.where(has_pos & ~has_neg, np.inf, np.where(has_neg & ~has_pos, -np.inf, np.nan))
             fixed = np.where(affected, inf_result, fixed)
         elif window_function == "min":
@@ -135,13 +141,23 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         elif window_function in ("std", "var"):
             n = window_count(~np.isnan(values))
             fixed = np.where(affected & (n >= 2), np.nan, fixed)
-        else:
-            # median recomputes inf windows per row
-            with np.errstate(invalid="ignore"):
-                for i in np.flatnonzero(affected):
-                    window = values[starts[i] : i + 1]
-                    fixed[i] = np.median(window[~np.isnan(window)])
         return pd.Series(fixed, index=col.index)
+
+    @classmethod
+    def _rolled(cls, col: pd.Series, name: str, starts: np.ndarray, min_periods: int) -> np.ndarray:
+        """Rolling aggregate for arbitrary starts, in layers of monotone starts (one pass per nesting level)."""
+        n = len(starts)
+        ends = np.arange(1, n + 1)
+        floor = np.minimum.accumulate(starts[::-1])[::-1]  # solved rows get a short window that keeps starts monotone
+        out = np.full(n, np.nan)
+        pending = np.ones(n, dtype=bool)
+        while pending.any():
+            monotone = np.maximum.accumulate(np.where(pending, starts, floor))
+            done = pending & (monotone == starts)
+            rolled = getattr(col.rolling(window=_SpanIndexer(monotone, ends), min_periods=min_periods), name)()
+            out[done] = rolled.to_numpy(dtype="float64", na_value=np.nan)[done]
+            pending &= ~done
+        return out
 
     @classmethod
     def _lower_bounds(cls, ns: np.ndarray, span: WindowSpan, zone: tzinfo | None) -> np.ndarray:

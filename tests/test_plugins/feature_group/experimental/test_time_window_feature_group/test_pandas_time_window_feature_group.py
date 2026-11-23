@@ -16,6 +16,10 @@ import pytest
 from mloda.core.abstract_plugins.components.contract.time_rule import TimeRule
 from mloda_plugins.feature_group.experimental.time_window.base import WindowSpan
 
+from tests.test_plugins.feature_group.experimental.reference_contract import same_on_pandas
+from tests.test_plugins.feature_group.experimental.test_time_window_feature_group.test_base_time_window_feature_group import (
+    _column_window_result,
+)
 from tests.test_plugins.feature_group.experimental.core_input_check import assert_core_rejects_missing_input
 from mloda.provider import FeatureSet
 from mloda._testing.framework_adapter import PandasAdapter
@@ -365,3 +369,99 @@ class TestPandasCalendarBounds:
         expected_df = df.assign(ts=df["ts"].astype(plain))
         expected = PandasTimeWindow._perform_window_operation(expected_df, "sum", span, ["value"], "ts")
         np.testing.assert_array_equal(np.asarray(actual), np.asarray(expected))
+
+
+_ROLLED = ["sum", "count", "avg", "min", "max", "std", "var", "median"]
+
+
+def _expected_windows(window_function: str, values: list[float | None], starts: np.ndarray) -> list[Any]:
+    return [_column_window_result(window_function, values[int(s) : i + 1]) for i, s in enumerate(starts)]
+
+
+def _assert_rolled(window_function: str, actual: Any, expected: list[Any]) -> None:
+    got = np.asarray(actual, dtype="float64").tolist()
+    assert len(got) == len(expected)
+    for i, (a, e) in enumerate(zip(got, expected)):
+        assert same_on_pandas(a, e), f"{window_function} row {i}: got {a}, expected {e}"
+
+
+def _median_middle_kind(window: list[float]) -> str | None:
+    clean = sorted(v for v in window if not np.isnan(v))
+    if not clean:
+        return None
+    lo, hi = clean[(len(clean) - 1) // 2], clean[len(clean) // 2]
+    if np.isinf(lo) and np.isinf(hi):
+        return "same_inf" if lo == hi else "opposite_inf"
+    if np.isinf(lo) or np.isinf(hi):
+        return "inf_and_finite"
+    return None
+
+
+class TestPandasBackStartRows:
+    """Rows whose window start moves back (month-end clamps) and +-inf windows match the reference."""
+
+    @pytest.mark.parametrize("window_function", _ROLLED)
+    def test_month_end_clamp_grid_matches_reference(self, window_function: str) -> None:
+        stamps = pd.date_range("2023-02-20", "2023-04-03", freq="3h")
+        rng = np.random.default_rng(7)
+        pool = np.array([np.nan, np.inf, -np.inf, 1.0, 2.0, 3.0, 4.0, 5.0, -7.0])
+        weights = np.array([0.1, 0.05, 0.05] + [0.8 / 6] * 6)
+        values = rng.choice(pool, size=len(stamps), p=weights)
+        df = pd.DataFrame({"ts": stamps, "value": values})
+
+        span = WindowSpan(1, "month")
+        ns = stamps.as_unit("ns").asi8
+        starts = np.searchsorted(ns, _reference(ns, span, None), side="right")
+        assert (np.maximum.accumulate(starts) != starts).any()
+        assert max(int((starts[:i] > starts[i]).sum()) for i in range(len(starts))) >= 3
+        march = [np.flatnonzero(ns == pd.Timestamp(f"2023-03-{d} 00:00").value)[0] for d in (29, 30, 31)]
+        assert len({int(starts[i]) for i in march}) == 1
+        assert ns[starts[march[0]] - 1] == pd.Timestamp("2023-02-28 00:00").value
+
+        actual = PandasTimeWindow._perform_window_operation(df, window_function, span, ["value"], "ts")
+        _assert_rolled(window_function, actual, _expected_windows(window_function, values.tolist(), starts))
+
+    @pytest.mark.parametrize("window_function", _ROLLED)
+    def test_fuzz_explicit_starts_match_reference(self, window_function: str) -> None:
+        rng = np.random.default_rng(20240229)
+        pool = [np.inf, -np.inf, np.nan, 1e308, -1e308, 0.0, 1.0, 2.0, 3.0, -4.0, 5.0]
+        if window_function in ("sum", "avg", "std", "var"):
+            pool = [v for v in pool if abs(v) != 1e308]  # add/remove rolling and exact reference differ at 1e308
+        kinds: set[str] = set()
+        for case in range(300):
+            n = int(rng.integers(1, 15))
+            if case % 10 == 0:
+                values = rng.choice([np.inf, -np.inf, np.nan], size=n)
+            else:
+                values = rng.choice(pool, size=n)
+                finite = np.abs(values[np.isfinite(values)])
+                if len(finite) and rng.random() < 0.5:
+                    values[int(rng.integers(0, n))] = float(finite.max()) * float(rng.choice([-1.0, 1.0]))
+            starts = np.array([int(rng.integers(0, i + 1)) for i in range(n)], dtype=np.int64)
+            col = pd.Series(values, index=pd.date_range("2023-01-01", periods=n, freq="D"))
+            actual = PandasTimeWindow._roll_column(col, window_function, starts)
+            expected = _expected_windows(window_function, values.tolist(), starts)
+            _assert_rolled(window_function, actual, expected)
+            if window_function == "median":
+                for i, s in enumerate(starts):
+                    kind = _median_middle_kind(values[int(s) : i + 1].tolist())
+                    if kind is not None:
+                        kinds.add(kind)
+        if window_function == "median":
+            assert kinds == {"same_inf", "opposite_inf", "inf_and_finite"}
+
+    @pytest.mark.parametrize("window_function", _ROLLED)
+    def test_back_start_and_inf_rows_make_no_per_row_call(
+        self, monkeypatch: pytest.MonkeyPatch, window_function: str
+    ) -> None:
+        def no_per_row_call(*args: Any, **kwargs: Any) -> float:
+            raise AssertionError("per-row aggregate called")
+
+        values = np.array([1.0, np.inf, 2.0, -np.inf, 3.0, np.nan, 4.0, 5.0])
+        starts = np.array([0, 0, 1, 0, 2, 1, 3, 0], dtype=np.int64)
+        col = pd.Series(values, index=pd.date_range("2023-01-01", periods=len(values), freq="D"))
+        for name in ("sum", "mean", "min", "max", "std", "var", "median", "count"):
+            monkeypatch.setattr(pd.Series, name, no_per_row_call)
+        monkeypatch.setattr(np, "median", no_per_row_call)
+        result = PandasTimeWindow._roll_column(col, window_function, starts)
+        assert len(result) == len(values)

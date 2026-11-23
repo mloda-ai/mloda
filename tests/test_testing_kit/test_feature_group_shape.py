@@ -934,8 +934,6 @@ def test_pandas_na_output_passes_determinism() -> None:
     ("kind", "adapter_cls"),
     [
         ("int64_on_zero_rows", PandasAdapter),
-        ("object_date", PandasAdapter),
-        ("object_string", PandasAdapter),
         ("tz_out", PyArrowAdapter),
     ],
 )
@@ -978,10 +976,54 @@ def test_default_run_group_passes_with_list_input_on_python_dict() -> None:
     assert result.failures == (), result.failures
 
 
-def test_pandas_object_date_run_notes_value_only_check() -> None:
-    _require_backend(PandasAdapter)
-    result = check_feature_group_shape(make_run_group("object_date"), input_data=_run_data(), adapter=PandasAdapter())
-    assert any("checked by value only" in n for n in result.notes), result.notes
+class _NoNativeInt64Adapter(PyArrowAdapter):
+    no_native_type = frozenset({DataType.INT64})
+
+
+class _NoReadbackAdapter(PyArrowAdapter):
+    def _exact_instance(self, result: Any) -> Any:
+        return None
+
+
+def _checker(which: str) -> Callable[..., Any]:
+    return check_feature_group_shape if which == "shape" else fgs.check_feature_group_result_types
+
+
+def _unresolved_case(case: str) -> tuple[type[FeatureGroup], Any]:
+    _require_backend(PandasAdapter if case == "object_date" else PyArrowAdapter)
+    if case == "object_date":
+        return make_run_group("object_date"), PandasAdapter()
+    return make_run_group("ok"), _NoNativeInt64Adapter()
+
+
+@pytest.mark.parametrize("which", ["shape", "result_types"])
+@pytest.mark.parametrize("case", ["object_date", "no_native_type"])
+@pytest.mark.parametrize("record", [None, DivergenceKind.GAP, DivergenceKind.TYPE], ids=["none", "gap", "type"])
+def test_unresolved_type_fails_unless_a_gap_record_covers_it(
+    which: str, case: str, record: DivergenceKind | None
+) -> None:
+    group, adapter = _unresolved_case(case)
+    if record is not None:
+        setattr(group, "DIVERGENCES", (_record(record),))
+    result = _checker(which)(group, input_data=_run_data(), adapter=adapter)
+    if record is DivergenceKind.GAP:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+    else:
+        assert any(f.startswith("type:") for f in result.failures), result.failures
+        assert not any("stale" in f for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    ("adapter_cls", "noted"),
+    [(_NoReadbackAdapter, True), (PythonDictAdapter, False)],
+    ids=["no_readback", "python_dict"],
+)
+def test_adapter_without_exact_readback_notes_value_only_check_never_fails(adapter_cls: type[Any], noted: bool) -> None:
+    _require_backend(adapter_cls)
+    result = check_feature_group_shape(make_run_group("ok"), input_data=_run_data(), adapter=adapter_cls())
+    assert result.failures == (), result.failures
+    assert any("checked by value only" in n for n in result.notes) is noted, result.notes
 
 
 def test_root_group_run_notes_skipped_checks(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:
@@ -1393,12 +1435,12 @@ _SUM = Options(group={"op_kind": "sum"})
     ("kind", "subtypes", "excused"),
     [
         (_TYPE, frozenset(), True),
-        (DivergenceKind.GAP, frozenset(), True),
+        (DivergenceKind.GAP, frozenset(), False),
         (DivergenceKind.VALUE, frozenset(), False),
         (_TYPE, frozenset({"median"}), False),
         (_TYPE, frozenset({"sum"}), True),
     ],
-    ids=["type", "gap", "value_does_not_excuse", "other_subtype", "matching_subtype"],
+    ids=["type", "gap_does_not_excuse", "value_does_not_excuse", "other_subtype", "matching_subtype"],
 )
 def test_implementation_record_excuses_a_type_failure(
     make_implementation: Callable[..., type[Implementation[Any]]],
@@ -1446,6 +1488,29 @@ def test_group_record_excuses_a_type_failure(
         assert all(f.startswith("type:") for f in result.failures), result.failures
 
 
+@pytest.mark.parametrize(
+    ("records", "excused"),
+    [
+        ((_TYPE,), True),
+        ((DivergenceKind.GAP,), False),
+        ((DivergenceKind.GAP, _TYPE), True),
+    ],
+    ids=["type", "gap_does_not_excuse", "gap_listed_before_type"],
+)
+def test_only_a_type_record_excuses_an_exact_mismatch_on_pyarrow(
+    records: tuple[DivergenceKind, ...], excused: bool
+) -> None:
+    _require_backend(PyArrowAdapter)
+    group = make_run_group("wrong_type")
+    setattr(group, "DIVERGENCES", tuple(_record(k) for k in records))
+    result = check_feature_group_shape(group, input_data=_run_data(), adapter=PyArrowAdapter())
+    if excused:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+    else:
+        assert any(f.startswith("type:") for f in result.failures), result.failures
+
+
 def test_type_record_is_never_stale_on_an_untyped_adapter(
     make_implementation: Callable[..., type[Implementation[Any]]],
 ) -> None:
@@ -1476,18 +1541,86 @@ def test_unneeded_group_type_record_on_a_typed_framework_notes_once() -> None:
     assert len([n for n in result.notes if n.startswith("type: ") and "does not need" in n]) == 1, result.notes
 
 
+@pytest.mark.parametrize("record", [_TYPE, DivergenceKind.GAP], ids=["type", "gap_does_not_excuse"])
 def test_zero_rows_only_type_record_excuses_and_is_not_stale(
-    make_implementation: Callable[..., type[Implementation[Any]]],
+    make_implementation: Callable[..., type[Implementation[Any]]], record: DivergenceKind
 ) -> None:
     _require_backend(PyArrowAdapter)
     from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
     group = make_operation_group()
     impl = _serve_with(make_implementation, group, "loses_schema_on_zero_rows", PyArrowTable)
-    setattr(impl, "divergences", (_record(_TYPE),))
+    setattr(impl, "divergences", (_record(record),))
     result = check_feature_group_shape(group, input_data=_run_data(), adapter=PyArrowAdapter())
-    assert result.failures == (), result.failures
-    assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+    if record is _TYPE:
+        assert result.failures == (), result.failures
+        assert any(n.startswith("type: ") and "stores ints as strings" in n for n in result.notes), result.notes
+    else:
+        assert result.failures
+        assert all(f.startswith("zero_rows:") for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    ("kind", "prefix", "adapter_cls"),
+    [
+        ("wrong_type", "type:", PythonDictAdapter),
+        ("wrong_type", "type:", PyArrowAdapter),
+        ("drops_output", "outputs:", PythonDictAdapter),
+        ("loses_schema_on_zero_rows", None, PyArrowAdapter),
+        ("leaks_cell_in_error", None, PythonDictAdapter),
+        ("nondeterministic", None, PythonDictAdapter),
+        ("ok", None, PythonDictAdapter),
+    ],
+)
+def test_result_type_check_reports_only_run_and_type_failures(
+    kind: str, prefix: str | None, adapter_cls: type[Any]
+) -> None:
+    _require_backend(adapter_cls)
+    result = fgs.check_feature_group_result_types(make_run_group(kind), input_data=_run_data(), adapter=adapter_cls())
+    assert result.check == "feature_group_result_types"
+    if prefix is None:
+        assert result.failures == (), result.failures
+    else:
+        assert result.failures
+        assert all(f.startswith(prefix) for f in result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    ("case", "require_run"),
+    [
+        ("not_a_group", False),
+        ("string_requests", False),
+        ("empty_requests", False),
+        ("malformed_rule", False),
+        ("rule_excluded", False),
+        ("rule_excluded", True),
+    ],
+)
+def test_result_type_check_error_paths_carry_its_check_name(case: str, require_run: bool) -> None:
+    group = (
+        make_run_group("ok", rule={PandasDataFrame})
+        if case == "rule_excluded"
+        else make_run_group("ok")
+        if case == "empty_requests"
+        else make_broken_declaration(
+            "rule_list" if case == "malformed_rule" else "not_a_group" if case == "not_a_group" else "version_empty"
+        )
+    )
+    requests: Any = "x" if case == "string_requests" else [] if case == "empty_requests" else None
+    result = fgs.check_feature_group_result_types(
+        group, input_data=_run_data(), adapter=PythonDictAdapter(), requests=requests, require_run=require_run
+    )
+    assert result.check == "feature_group_result_types"
+    if case == "rule_excluded":
+        excluded = "run: PythonDictFramework excluded by compute_framework_rule"
+        assert (excluded in result.notes) is not require_run, result
+        assert any(f.startswith("run:") for f in result.failures) is require_run, result.failures
+    else:
+        assert result.failures, result
+    if case == "empty_requests":
+        assert any(f.startswith("names:") for f in result.failures), result.failures
+    if case == "malformed_rule":
+        assert "run: not run (compute_framework_rule is malformed)" in result.notes, result.notes
 
 
 @pytest.mark.parametrize("other_framework", [None, PandasDataFrame])

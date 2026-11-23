@@ -178,7 +178,6 @@ class SqliteFG(ReadDBFG):
         column_names, rows, arrow_types = cls._fetch(connection, table, features)
         data_types = {feature.name: feature.data_type for feature in features.features}
         arrays = []
-        fields = []
         for index, name in enumerate(column_names):
             values = [row[index] for row in rows]
             data_type = data_types.get(name)
@@ -190,8 +189,7 @@ class SqliteFG(ReadDBFG):
                 arrow_type = None
             array = arrow_array(values, type=arrow_type)
             arrays.append(array)
-            fields.append((name, array.type))
-        return pa.Table.from_arrays(arrays, schema=pa.schema(fields))
+        return pa.Table.from_arrays(arrays, names=column_names)
 
     @classmethod
     def describe_columns(cls, match: SourceMatch) -> dict[str, DataType | None]:

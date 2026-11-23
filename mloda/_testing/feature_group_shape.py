@@ -180,8 +180,7 @@ def _check_foreign(
         foreign_base = _without_key(base, in_features)
         base_label = "base options without in_features"
         notes.append(
-            f"foreign: in_features puts a mixin group on its configuration path, which matches any name, "
-            f"so '{name}' was probed without it"
+            f"foreign: in_features puts a mixin group on its configuration path, so '{name}' was probed without it"
         )
     for label, options in ((base_label, foreign_base), ("an undeclared option", Options(group={undeclared: "1"}))):
         matched, rejection, aborted, _ = _probe(cls, name, options, dac)
@@ -1054,7 +1053,8 @@ def check_feature_group_shape(
     note. An unresolved type on a framework with exact readback fails unless a GAP record covers it. A TYPE record
     on the serving Implementation whose columns all match exactly on a typed framework fails as stale (scope a
     data-dependent one with subtypes or outputs); a group-level one is only a note, since it applies on every framework.
-    On a mixin group's configuration path (in_features in base_options) the foreign name is probed without in_features.
+    On a mixin group's configuration path (in_features in base_options, NAME_ONLY_MATCH off) the foreign name
+    is probed without in_features.
     data_access_collection= is matched against by every match probe and checks a source's match_credentials.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them
     is a failure with the abort text.

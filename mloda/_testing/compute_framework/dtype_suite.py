@@ -66,7 +66,7 @@ _CASES: dict[str, tuple[DataType, tuple[Any, ...]]] = {
     "list_fixed_col": (DataType.LIST, ([1, 2], [3, 4], [5, 6])),
 }
 
-# Zoned case id -> (zone, zone string, expected instants); the aware values are built in that zone, no Arrow override.
+# Zoned case id -> (zone, zone string, instants).
 _INSTANTS_UTC: tuple[datetime, ...] = (datetime(2023, 3, 11, 17, tzinfo=UTC), datetime(2023, 3, 12, 16, tzinfo=UTC))
 _ZONED_CASES: dict[str, tuple[tzinfo, str, tuple[datetime | None, ...]]] = {
     "timestamp_us_dst_col": (ZoneInfo("America/New_York"), "America/New_York", (*_INSTANTS_UTC, None)),

@@ -125,10 +125,10 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
             q, f, p = neg, window_count(np.isfinite(values)), pos
             total = q + f + p
             lo, hi = (total - 1) // 2, total // 2
-            any_neg = (lo < q) | (hi < q)
-            any_pos = (lo >= q + f) | (hi >= q + f)
+            any_neg = lo < q
+            any_pos = hi >= q + f
             mixed = np.where(any_neg & any_pos, np.nan, np.where(any_neg, -np.inf, np.where(any_pos, np.inf, fixed)))
-            fixed = np.where(affected & (total > 0), mixed, fixed)
+            fixed = np.where(affected, mixed, fixed)
         elif window_function in ("sum", "avg", "mean"):
             inf_result = np.where(has_pos & ~has_neg, np.inf, np.where(has_neg & ~has_pos, -np.inf, np.nan))
             fixed = np.where(affected, inf_result, fixed)
@@ -148,7 +148,8 @@ class PandasTimeWindow(Implementation[TimeWindowFeatureGroup]):
         """Rolling aggregate for arbitrary starts, in layers of monotone starts (one pass per nesting level)."""
         n = len(starts)
         ends = np.arange(1, n + 1)
-        floor = np.minimum.accumulate(starts[::-1])[::-1]  # solved rows get a short window that keeps starts monotone
+        # pandas rolls incrementally only on non-decreasing starts; floor[j] is at most every later start
+        floor = np.minimum.accumulate(starts[::-1])[::-1]
         out = np.full(n, np.nan)
         pending = np.ones(n, dtype=bool)
         while pending.any():

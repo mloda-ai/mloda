@@ -4,12 +4,14 @@ from collections.abc import Callable
 from datetime import datetime
 from typing import Any, cast
 
+import pandas as pd
 import pyarrow as pa
 import pytest
 
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import (
     DuckdbRelation,
 )
+from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_type_semantics import is_tz_aware_type
 from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSuite
 from mloda._testing.framework_adapter import DuckDBAdapter, FrameworkAdapter
 
@@ -327,10 +329,32 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
         assert result.schema.field("ts").type == pa.timestamp(duckdb_unit, tz="+05:00")
         assert result.column("ts").cast(source.schema.field("ts").type).equals(source.column("ts"))
 
+    @pytest.mark.parametrize("session_zone", ["UTC", "America/Chicago"])
+    @pytest.mark.parametrize("unit", ["us", "ns"])
+    @pytest.mark.parametrize("zone", ["+05:00", "America/New_York"])
+    def test_df_returns_recorded_zone_with_same_instants(
+        self, connection: Any, zone: str, unit: str, session_zone: str
+    ) -> None:
+        connection.execute(f"SET TimeZone='{session_zone}'")
+        values = [datetime(2023, 3, 12, 6, 30), None, datetime(2023, 3, 12, 7, 30), datetime(2023, 3, 13, 12, 0)]
+        source = pa.table({"ts": pa.array(values, type=pa.timestamp(unit, tz=zone))})
+        rel = DuckdbRelation.from_arrow(connection, source)
+
+        frame = rel.df()
+        frame_values = [None if pd.isna(v) else v for v in frame["ts"]]
+        arrow_values = rel.to_arrow_table().column("ts").to_pylist()
+
+        assert str(frame["ts"].dt.tz) == str(pd.DatetimeTZDtype(tz=zone).tz)
+        assert frame_values == arrow_values
+        assert [None if v is None else v.utcoffset() for v in frame_values] == [
+            None if v is None else v.utcoffset() for v in arrow_values
+        ]
+
     def test_to_arrow_table_zero_rows_keeps_zone(self, connection: Any) -> None:
         rel = DuckdbRelation.from_arrow(connection, _tz_table().slice(0, 0))
 
         assert rel.to_arrow_table().schema.field("ts").type == pa.timestamp("us", tz="+05:00")
+        assert str(rel.df()["ts"].dt.tz) == str(pd.DatetimeTZDtype(tz="+05:00").tz)
 
     @pytest.mark.parametrize(
         ("op", "column", "expected"),
@@ -405,6 +429,13 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
             if pa.types.is_timestamp(field.type):
                 assert field.type == pa.timestamp("us", tz="+05:00")
 
+        frame = rel.df()
+        for i, dtype in enumerate(rel._relation.dtypes):
+            if is_tz_aware_type(dtype):
+                assert str(frame.iloc[:, i].dt.tz) == str(pd.DatetimeTZDtype(tz="+05:00").tz)
+            else:
+                assert str(frame.iloc[:, i].dtype).startswith("int")
+
     def test_append_columns_keeps_existing_zones(self, connection: Any) -> None:
         rel = DuckdbRelation.from_arrow(connection, _tz_table())
 
@@ -451,3 +482,4 @@ class TestDuckdbRelation(SqlRelationWindowSuite):
 
         assert rel.time_zone("ts") is None
         assert rel.to_arrow_table().schema == native.arrow().read_all().schema
+        assert rel.df().equals(native.df())

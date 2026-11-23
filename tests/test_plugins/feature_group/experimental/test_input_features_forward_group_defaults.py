@@ -300,6 +300,29 @@ class TestTimeWindowInputFeatureDefaults:
         assert by_name["time_filter"].forward_group is None
 
 
+class TestTimeRuleOptionStaysOffTheInputFeatures:
+    """The time_rule option applies to the feature that carries it and is not forwarded to its inputs."""
+
+    @pytest.mark.parametrize(
+        ("group", "name"),
+        [
+            (TimeWindowFeatureGroup, "sales__sum_2_day_window"),
+            (ForecastingFeatureGroup, "sales__linear_forecast_7day"),
+        ],
+        ids=["time_window", "forecasting"],
+    )
+    def test_the_rule_is_not_forwarded_but_other_options_are(self, group: Any, name: str) -> None:
+        consumer = Options(group={"time_rule": {"calendar_units": "fixed_length"}, "scope": "a"})
+
+        children = group().input_features(consumer, FeatureName(name))
+
+        assert children
+        for child in children:
+            preview = child.options_forwarded_from(consumer, group)
+            assert "time_rule" not in preview.group, str(child.name)
+            assert preview.group["scope"] == "a"
+
+
 class TestSourceInputFeatureCompositeDefaults:
     """SourceInputFeatureComposite.input_features must leave every source at the default None sentinel."""
 

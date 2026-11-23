@@ -111,6 +111,9 @@ from mloda.core.abstract_plugins.components.property_spec import (
     is_positive_int,
     property_spec,
 )
+
+# Time zone computation rule
+from mloda.core.abstract_plugins.components.contract.time_rule import DEFAULT_TIME_RULE, TimeRule
 from mloda.core.abstract_plugins.components.property_values_validation import (
     PropertyValidationError,
     validate_property_values,
@@ -129,6 +132,7 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 
 # Match-time misconfiguration escalation
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort as escalate_match_abort
+from mloda.core.abstract_plugins.components.utils import is_credential_abort as is_credential_abort
 from mloda.core.abstract_plugins.components.utils import is_match_abort as is_match_abort
 
 # Subtype declaration
@@ -240,6 +244,8 @@ __all__ = [
     "is_no_default",
     "is_positive_int",
     "property_spec",
+    "TimeRule",
+    "DEFAULT_TIME_RULE",
     "credential_handle_spec",
     "is_credential_handle_spec",
     "read_credential",
@@ -261,6 +267,7 @@ __all__ = [
     "record_match_rejection",
     # Match-time misconfiguration escalation
     "escalate_match_abort",
+    "is_credential_abort",
     "is_match_abort",
     # Subtype declaration
     "SubtypeDeclaration",

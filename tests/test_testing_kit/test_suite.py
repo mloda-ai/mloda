@@ -386,6 +386,12 @@ def _read_file_mixin() -> type:
     return ReadFileFGTestMixin
 
 
+def _time_window_suite() -> type:
+    from mloda._testing.compute_framework.time_window_suite import TimeWindowRuleSuite
+
+    return TimeWindowRuleSuite
+
+
 def _filter_suite() -> type:
     from mloda._testing.compute_framework.filter_suite import FilterEngineSuite
 
@@ -641,8 +647,9 @@ def test_every_adapter_was_closed_and_each_was_opened_once():
         _file_loads_mixin,
         _db_loads_mixin,
         _document_loads_mixin,
+        _time_window_suite,
     ],
-    ids=["filter", "file_loads", "db_loads", "document_loads"],
+    ids=["filter", "file_loads", "db_loads", "document_loads", "time_window"],
 )
 def test_compute_framework_host_without_adapter_class_fails_at_class_creation(get_suite: Any) -> None:
     suite = get_suite()
@@ -680,6 +687,16 @@ def test_compute_framework_host_missing_a_required_hook_fails_naming_it() -> Non
             return [1]
 
     assert _Provided.adapter_class is PythonDictAdapter
+
+
+def test_time_window_host_without_implementation_fails_naming_it() -> None:
+    from mloda._testing.framework_adapter import PythonDictAdapter
+
+    with pytest.raises(HookError) as excinfo:
+        type("_NoImplementation", (_time_window_suite(),), {"adapter_class": PythonDictAdapter})
+
+    assert "_NoImplementation" in str(excinfo.value)
+    assert "implementation" in str(excinfo.value)
 
 
 _RELATION_WIRING_MODULE = """
@@ -813,3 +830,51 @@ def test_unsupported_cases_are_validated_at_class_creation() -> None:
         class _BadReason(DataTypeValidatorSuite):
             adapter_class = PandasAdapter
             unsupported_cases = {"int8_col": (Cause.BACKEND, 5)}  # type: ignore[dict-item]
+
+
+ZONED_INNER = """
+import pyarrow as pa
+
+from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite
+from mloda._testing.framework_adapter import PyArrowAdapter
+
+
+class _UtcAdapter(PyArrowAdapter):
+    def from_arrow(self, table):
+        fields = [pa.field(f.name, pa.timestamp("us", tz="UTC")) if pa.types.is_timestamp(f.type) else f for f in table.schema]
+        return table.cast(pa.schema(fields))
+
+
+class _BoomAdapter(PyArrowAdapter):
+    def from_arrow(self, table):
+        raise ValueError("boom")
+
+
+class TestFaithful(DataTypeValidatorSuite):
+    adapter_class = PyArrowAdapter
+
+
+class TestUtcOnly(DataTypeValidatorSuite):
+    adapter_class = _UtcAdapter
+
+
+class TestBoom(DataTypeValidatorSuite):
+    adapter_class = _BoomAdapter
+"""
+
+
+def test_zoned_column_test_fails_hosts_that_lose_the_zone_or_raise_without_naming_it(
+    pytester: pytest.Pytester,
+) -> None:
+    pytester.makepyfile(test_inner=ZONED_INNER)
+
+    result = pytester.runpytest_inprocess(
+        "-p", "no:cacheprovider", "-p", "no:randomly", "--tb=short", "-rf", "-k", "zoned"
+    )
+
+    failed = [line for line in result.stdout.str().splitlines() if line.startswith("FAILED ")]
+    assert failed
+    assert all("TestFaithful" not in line for line in failed), failed
+    assert any("TestUtcOnly" in line for line in failed), failed
+    assert any("TestBoom" in line for line in failed), failed
+    assert result.parseoutcomes().get("passed", 0) > 0

@@ -72,9 +72,13 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
-from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION, HANDLE_OPTION_NAMES
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.property_spec import runtime_parameter_keys, unforwarded_keys
+from mloda.core.abstract_plugins.components.property_spec import (
+    group_only_keys,
+    runtime_parameter_keys,
+    unforwarded_keys,
+)
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import SourceFeatureGroup
 from mloda.core.abstract_plugins.components.credential_scrub import scrub_credentials
 from mloda.core.abstract_plugins.components.credential_handle import (
@@ -1223,6 +1227,14 @@ class Engine:
                         f"Option '{key}' is a runtime parameter of {feature_group_class.__name__} and must be a "
                         f"context option, or passed per run with run(parameters=...), not a group option."
                     )
+            # an index twin carries the host's resolved options, already checked at the host's intake
+            for key in () if if_index_feature else group_only_keys(feature_group_class):
+                if key in declared_options.context:
+                    raise ValueError(
+                        f"Option '{key}' of feature '{feature.name}' is group-only for "
+                        f"{feature_group_class.__name__} and must be a group option, not a context option: "
+                        f"only group options are part of a feature's identity."
+                    )
             if handle_keys:
                 validate_credential_handles(feature_group_class, resolved, self.data_access_collection)
             named_handles = {key: value for key in HANDLE_OPTION_NAMES if isinstance(value := resolved.get(key), str)}
@@ -1393,7 +1405,7 @@ class Engine:
             if isinstance(entry, Feature) and entry.connection is not None:
                 raise ValueError(
                     f"{feature_group_class.get_class_name()}.input_features returned '{entry.name}' with a "
-                    "connection; register it in the DataAccessCollection and set the 'connection_handle' option."
+                    f"connection; register it in the DataAccessCollection and set the '{CONNECTION_HANDLE_OPTION}' option."
                 )
 
         ordered: list[Feature | str] = list(input_features)
@@ -1500,7 +1512,7 @@ class Engine:
                     if cfw._connection_matches(value):
                         raise ValueError(
                             f"Option '{key}' of feature '{feature.name}' holds a {cfw.get_class_name()} connection. "
-                            "Put it in the DataAccessCollection and select it with the 'connection_handle' option."
+                            f"Put it in the DataAccessCollection and select it with the '{CONNECTION_HANDLE_OPTION}' option."
                         )
 
     def _resolve_handle(self, framework: type[ComputeFramework], options: Any) -> tuple[str | None, bool]:

@@ -4,7 +4,8 @@ Base implementation for time window feature groups.
 
 from __future__ import annotations
 
-import datetime
+from dataclasses import dataclass
+from datetime import tzinfo
 from typing import Any, Callable, cast
 
 from mloda.provider import OperationFeatureGroup, SubtypeDeclaration
@@ -17,9 +18,26 @@ from mloda.user import FeatureName
 from mloda.provider import FeatureSet
 from mloda.user import Options
 from mloda.provider import DefaultOptionKeys
-from mloda.provider import PropertySpec, is_positive_int
+from mloda.provider import DEFAULT_TIME_RULE, PropertySpec, TimeRule, is_positive_int
 from mloda_plugins.feature_group.experimental.key_features import with_key_features
 from mloda_plugins.feature_group.experimental.time_reference_mixin import TimeReferenceMixin
+
+
+@dataclass(frozen=True)
+class WindowSpan:
+    """A window width: size units of unit, computed under rule."""
+
+    size: int
+    unit: str
+    rule: TimeRule = DEFAULT_TIME_RULE
+
+    def fixed_ns(self, zone: tzinfo | None) -> int | None:
+        """The width as constant nanoseconds, or None when it depends on the calendar."""
+        return self.rule.fixed_ns(self.size, self.unit, zone)
+
+    def lower_ns(self, instant_ns: int, zone: tzinfo | None) -> int:
+        """The window's lower bound for an instant."""
+        return self.rule.shift_ns(instant_ns, -self.size, self.unit, zone)
 
 
 class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, OperationFeatureGroup):
@@ -64,13 +82,9 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
 
     ## Supported Time Units
 
-    - `second`: Seconds
-    - `minute`: Minutes
-    - `hour`: Hours
-    - `day`: Days
-    - `week`: Weeks
-    - `month`: Months
-    - `year`: Years
+    - `second`, `minute`, `hour`: elapsed time
+    - `day`, `week`, `month`, `year`: calendar units on the reference column's own wall clock
+    - the `time_rule` group option (a mapping of `TimeRule` knobs) changes the rule for the feature carrying it
 
     ## Requirements
     - The input data must have a datetime column that can be used for time-based operations
@@ -79,7 +93,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
 
     """
 
-    CONTRACT_VERSION = 1
+    CONTRACT_VERSION = 2
 
     # Option keys for time window configuration
     WINDOW_FUNCTION = "window_function"
@@ -129,6 +143,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             strict_validation=False,
         ),
         DefaultOptionKeys.reference_time: TimeReferenceMixin.REFERENCE_TIME_SPEC,
+        TimeReferenceMixin.TIME_RULE: TimeReferenceMixin.TIME_RULE_SPEC,
     }
 
     # Named captures bind window_function/window_size/time_unit; core validates them at match time.
@@ -248,29 +263,10 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
         return cls.parse_time_window_prefix(feature_name)[2]
 
     @classmethod
-    def _get_time_delta(cls, window_size: int, time_unit: str) -> datetime.timedelta:
-        """
-        Convert window size and time unit into the window span as a timedelta.
-
-        Shared by both backends so the time-based window is IDENTICAL across them.
-        week/month/year use fixed day approximations (7 / 30 / 365 days).
-        """
-        if time_unit == "second":
-            return datetime.timedelta(seconds=window_size)
-        elif time_unit == "minute":
-            return datetime.timedelta(minutes=window_size)
-        elif time_unit == "hour":
-            return datetime.timedelta(hours=window_size)
-        elif time_unit == "day":
-            return datetime.timedelta(days=window_size)
-        elif time_unit == "week":
-            return datetime.timedelta(weeks=window_size)
-        elif time_unit == "month":
-            return datetime.timedelta(days=30 * window_size)
-        elif time_unit == "year":
-            return datetime.timedelta(days=365 * window_size)
-        else:
-            raise ValueError(f"Unsupported time unit: {time_unit}")
+    def _window_span(cls, window_size: int, time_unit: str, rule: TimeRule = DEFAULT_TIME_RULE) -> WindowSpan:
+        """Validate the unit and return the window span, shared by both backends."""
+        rule.clock(time_unit)
+        return WindowSpan(window_size, time_unit, rule)
 
     # match_feature_group_criteria() inherited from FeatureChainParserMixin
 
@@ -280,7 +276,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
         data: Any,
         features: FeatureSet,
         *,
-        perform: Callable[[Any, str, datetime.timedelta, list[str], str], Any],
+        perform: Callable[[Any, str, WindowSpan, list[str], str], Any],
         add_column: Callable[[Any, str, Any], Any],
         columns: Callable[[Any], set[str]],
         column_semantics: Callable[[Any, str], Any],
@@ -294,6 +290,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             _options = feature.options
 
         reference_time_column = cls.get_reference_time_column(_options)
+        rule = cls.get_time_rule(_options)
 
         cls._validate_reference_time_column(column_semantics(data, reference_time_column), reference_time_column)
 
@@ -303,7 +300,7 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
             )
             available = columns(data)
             resolved = cls.resolve_multi_column_feature(in_features, available)
-            span = cls._get_time_delta(window_size, time_unit)
+            span = cls._window_span(window_size, time_unit, rule)
             result = perform(data, window_function, span, resolved, reference_time_column)
             data = add_column(data, feature.name, result)
 

@@ -1,5 +1,6 @@
 from typing import Any
 
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.provider import BaseTransformer
 
 try:
@@ -49,7 +50,7 @@ class SqlBasePyArrowTransformer(BaseTransformer):
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
         if framework_connection_object is None:
             raise ValueError(
-                "A connection object is required for this transformation. Put the connection in the DataAccessCollection and select it with connection_handle."
+                f"A connection object is required for this transformation. Put the connection in the DataAccessCollection and select it with {CONNECTION_HANDLE_OPTION}."
             )
 
         cls._validate_connection(framework_connection_object)

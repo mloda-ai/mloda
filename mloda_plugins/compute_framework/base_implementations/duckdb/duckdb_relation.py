@@ -238,7 +238,18 @@ class DuckdbRelation(SqlBaseRelation):
         return table
 
     def df(self) -> Any:
-        return self._relation.df()
+        """Tz-aware columns come back in their recorded zone; DuckDB hands ns tz columns back naive in UTC."""
+        frame = self._relation.df()
+        if not self._time_zones:
+            return frame
+        for i, (name, dtype) in enumerate(zip(self._relation.columns, self._relation.dtypes)):
+            zone = self._time_zones.get(name)
+            if zone is not None and is_tz_aware_type(dtype):
+                col = frame.iloc[:, i]
+                if col.dt.tz is None:
+                    col = col.dt.tz_localize("UTC")
+                frame.isetitem(i, col.dt.tz_convert(zone))
+        return frame
 
     def __len__(self) -> int:
         return len(self._relation)

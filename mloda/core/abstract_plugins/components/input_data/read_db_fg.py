@@ -437,7 +437,7 @@ class ReadDBFG(SourceFeatureGroup):
             )
             hint = f" (credential handles: {_capped(handles)})" if handles else ""
             what = "one database" if len(identities) > 1 else "one credential handle"
-            return f"select {what} with data_access_handle{hint}, or point {name} at one credential."
+            return f"select {what} with {HANDLE_OPTION}{hint}, or point {name} at one credential."
         return (
             f"point {name} at one table with options={{{name!r}: "
             f"Credential({cls.CREDENTIAL_KEY}=<value>, {cls.TABLE_KEY}=<table>)}}, "

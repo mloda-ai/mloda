@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import bisect
-import datetime
 from typing import Any
 
 import pyarrow as pa
@@ -14,7 +13,11 @@ from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
 from mloda.user.pyarrow import PyArrowTable
-from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup, raise_null_reference_time
+from mloda_plugins.feature_group.experimental.time_window.base import (
+    TimeWindowFeatureGroup,
+    WindowSpan,
+    raise_null_reference_time,
+)
 from mloda_plugins.feature_group.experimental.nan_safe_reduction import (
     reduce_without_nan_warning,
     sample_variance_skipping_nan,
@@ -60,7 +63,7 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
         cls,
         data: pa.Table,
         window_function: str,
-        span: datetime.timedelta,
+        span: WindowSpan,
         in_features: list[str],
         time_filter_feature: str,
     ) -> pa.Array:
@@ -104,12 +107,14 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
             ]
 
         # Time-based (not row-count) window: include rows in (t - span, t].
-        # Bound each window by ABSOLUTE integer nanoseconds (not Python datetimes):
-        # wall-clock datetime subtraction is wrong across a DST transition, whereas
-        # int64 ns since epoch is DST-safe, unit-uniform, and works for tz-aware
-        # timestamps and date32/date64 too.
+        # Membership is decided on absolute instants (int64 ns since the epoch).
         sorted_times_ns = pc.take(time_column, sorted_indices).cast(pa.timestamp("ns")).cast(pa.int64()).to_pylist()
-        span_ns = span.days * 86_400_000_000_000 + span.seconds * 1_000_000_000 + span.microseconds * 1_000
+        zone = (
+            pa.lib.string_to_tzinfo(time_column.type.tz)
+            if pa.types.is_timestamp(time_column.type) and time_column.type.tz
+            else None
+        )
+        width = span.fixed_ns(zone)
 
         # Create a list to store the results
         results = []
@@ -121,7 +126,9 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
             # Rows are time-sorted ascending, so the window is a contiguous slice
             # ending at i. bisect_right of (t_i - span) gives the first index strictly
             # greater than the lower bound, implementing the left-open boundary.
-            start_idx = bisect.bisect_right(sorted_times_ns, sorted_times_ns[i] - span_ns)
+            t = sorted_times_ns[i]
+            lower = t - width if width is not None else span.lower_ns(t, zone)
+            start_idx = bisect.bisect_right(sorted_times_ns, lower)
             length = i - start_idx + 1
 
             # Zero-copy slice of each sorted source column for the current window.

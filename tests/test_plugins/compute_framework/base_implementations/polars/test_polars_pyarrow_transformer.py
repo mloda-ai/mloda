@@ -1,3 +1,7 @@
+import re
+from datetime import datetime, UTC
+from typing import Any
+
 import pytest
 from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
     PolarsPyArrowTransformer,
@@ -129,3 +133,59 @@ class TestPolarsPyArrowTransformer:
 
         with pytest.raises(ValueError):
             PolarsPyArrowTransformer.transform(list, dict, df, None)
+
+    @pytest.mark.parametrize("tz", ["-03:30", "+05:30", "+0545", "-00:30"])
+    def test_sub_hour_offset_raises_value_error(self, tz: str) -> None:
+        table = pa.table(
+            {"id": [1], "ts": pa.array([datetime(2024, 1, 1, tzinfo=UTC)], type=pa.timestamp("us", tz=tz))}
+        )
+
+        with pytest.raises(ValueError, match=re.escape("'ts'")) as exc_info:
+            PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
+
+        assert f"'{tz}'" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "arrow_type, values",
+        [
+            pytest.param(
+                pa.struct([("ts", pa.timestamp("us", tz="+05:30"))]) if pa else None,
+                [{"ts": datetime(2024, 1, 1, tzinfo=UTC)}],
+                id="struct",
+            ),
+            pytest.param(
+                pa.list_(pa.timestamp("us", tz="+05:30")) if pa else None,
+                [[datetime(2024, 1, 1, tzinfo=UTC)]],
+                id="list",
+            ),
+        ],
+    )
+    def test_nested_sub_hour_offset_raises_value_error(self, arrow_type: pa.DataType, values: list[Any]) -> None:
+        table = pa.table({"id": [1], "s": pa.array(values, type=arrow_type)})
+
+        with pytest.raises(ValueError, match=re.escape("'s'")) as exc_info:
+            PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
+
+        assert "'+05:30'" in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "tz, expected_zone",
+        [
+            ("+05:00", "Etc/GMT-5"),
+            ("+0500", "Etc/GMT-5"),
+            ("+00:00", "UTC"),
+            ("UTC", "UTC"),
+            ("Asia/Kolkata", "Asia/Kolkata"),
+            (None, None),
+        ],
+    )
+    def test_whole_hour_named_and_naive_timestamps_transfer(self, tz: str | None, expected_zone: str | None) -> None:
+        table = pa.table(
+            {"id": [1], "ts": pa.array([datetime(2024, 1, 1, tzinfo=UTC)], type=pa.timestamp("us", tz=tz))}
+        )
+
+        result = PolarsPyArrowTransformer.transform_other_fw_to_fw(table, None)
+
+        assert isinstance(result, pl.DataFrame)
+        assert isinstance(result.schema["ts"], pl.Datetime)
+        assert result.schema["ts"].time_zone == expected_zone

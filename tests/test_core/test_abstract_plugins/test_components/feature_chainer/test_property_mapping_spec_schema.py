@@ -61,6 +61,7 @@ class TestTheConstructorIsTheSchema:
             "forward_to_inputs",
             "runtime",
             "scalar",
+            "group_only",
             "name_converter",
             "expected",
         }

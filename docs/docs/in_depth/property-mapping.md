@@ -44,9 +44,10 @@ PROPERTY_MAPPING = {
 | `name_converter` | `Callable[[str], Any] \| None` | `None` | Converts the captured text of a named capture bound to this key (e.g. `int`), before validation. Never applied to explicit options or the legacy positional fallback. |
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
 | `forward_to_inputs` | `bool` | `True` | `False`: input features do not inherit the key unless an explicit `forward_group` allowlist names it. Context is unaffected. |
+| `group_only` | `bool` | `False` | `True`: the key is a group option and a caller placing it in `Options(context=...)` is refused at plan time. Requires `context=False`. |
 | `scalar` | `bool` | `False` | `validate_property_values` rejects container values for this key, independently of `strict_validation`. Container defaults are refused at construction. |
 
-A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
+A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `group_only=True` key is refused in the context the same way. A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
 
 **`property_spec(...)` is the authoring path to reach for.** It is a thin builder over the
 same fields, its keyword is `strict=` (which sets `strict_validation`), and it keeps the
@@ -446,7 +447,7 @@ PROPERTY_MAPPING = {
 ```
 
 A caller who places the key explicitly in `Options(group=...)` or `Options(context=...)`
-overrides the spec's classification.
+overrides the spec's classification, except that a `group_only=True` key in the context is refused.
 
 ## How a name-parsed value binds to a key
 
@@ -717,6 +718,7 @@ if it really is a whole-value check.
 | `required_when` end to end, including the context-key remedy in the failure report | `tests/.../feature_chainer/test_property_mapping_required_when.py` |
 | Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |
 | `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
+| A `group_only` key in the context is refused at plan time | `tests/test_core/test_api/test_prepare_run.py` |
 | Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
 | The all-optional universal-matcher diagnostic and its `ALLOW_UNIVERSAL_MATCHER` escape hatch | `tests/.../feature_chainer/test_universal_optional_matcher.py` |
 | `NAME_ONLY_MATCH` (name-owned match only, no configuration path) | `tests/.../feature_chainer/test_feature_chain_parser_mixin.py` (`TestNameOnlyMatch`) |

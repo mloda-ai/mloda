@@ -6,6 +6,7 @@ See ``docs/docs/in_depth/named-data-access-handles.md`` for the user-facing guid
 import ast
 import json
 import logging
+import re
 import sqlite3
 import threading
 from pathlib import Path
@@ -338,21 +339,40 @@ class TestConnectionHandleResolver:
         assert duckdb_fg.HANDLE_KEY == CONNECTION_HANDLE_OPTION
 
     def test_handle_option_names_are_spelled_only_in_their_module(self) -> None:
-        """Only handle_option_names.py may spell the option names as string literals."""
+        """Only handle_option_names.py may spell the option names in string constants; prose formats them in."""
 
         from mloda.core.abstract_plugins.components.handle_option_names import HANDLE_OPTION_NAMES
 
+        word = re.compile(r"\b(?:" + "|".join(re.escape(n) for n in sorted(HANDLE_OPTION_NAMES)) + r")\b")
         root = Path(__file__).resolve().parents[4]
         home = (root / "mloda/core/abstract_plugins/components/handle_option_names.py").resolve()
         files = [p for d in ("mloda", "mloda_plugins") for p in (root / d).rglob("*.py") if p.resolve() != home]
         assert files, "no source files found; the repo root anchor is wrong"
-        hits = [
-            f"{p.relative_to(root)}:{n.lineno}"
-            for p in files
-            for n in ast.walk(ast.parse(p.read_text(encoding="utf-8")))
-            if isinstance(n, ast.Constant) and isinstance(n.value, str) and n.value in HANDLE_OPTION_NAMES
-        ]
-        assert not hits, f"handle option names spelled as bare literals: {sorted(hits)}"
+        hits: list[str] = []
+        for p in files:
+            text = p.read_text(encoding="utf-8")
+            if not word.search(text):
+                continue
+            tree = ast.parse(text)
+            docs: set[int] = set()
+            for n in ast.walk(tree):
+                if isinstance(n, (ast.Module, ast.ClassDef, ast.FunctionDef, ast.AsyncFunctionDef)) and n.body:
+                    first = n.body[0]
+                    if (
+                        isinstance(first, ast.Expr)
+                        and isinstance(first.value, ast.Constant)
+                        and isinstance(first.value.value, str)
+                    ):
+                        docs.add(id(first.value))
+            hits.extend(
+                f"{p.relative_to(root)}:{n.lineno}"
+                for n in ast.walk(tree)
+                if isinstance(n, ast.Constant)
+                and isinstance(n.value, str)
+                and id(n) not in docs
+                and word.search(n.value)
+            )
+        assert not hits, f"handle option names spelled in string constants: {sorted(hits)}"
 
     def test_connection_handle_is_explicit_and_picks_the_named_one(self) -> None:
         dac = DataAccessCollection(connections={"a": _Conn(), "b": _Conn()})

@@ -9,13 +9,19 @@ from typing import Any
 import pytest
 
 from mloda._testing.framework_adapter import PandasAdapter, PythonDictAdapter
-from mloda._testing.subclass_scope import assert_subclass_scope, check_subclass_scope
+from mloda._testing.subclass_scope import (
+    assert_sibling_scope,
+    assert_subclass_scope,
+    check_sibling_scope,
+    check_subclass_scope,
+)
 from mloda._testing.typed_data import TypedTestData
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.divergence import Cause, Divergence, DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode, record_match_rejection
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec
 from mloda.core.abstract_plugins.components.utils import escalate_match_abort
@@ -227,18 +233,111 @@ def make_nameless_pair() -> Pair:
     return NamelessParent, NamelessChild
 
 
-def make_keyed_pair() -> Pair:
+def make_keyed_pair(
+    spec: dict[str, PropertySpec] | None = None,
+    child_mapping: dict[str, PropertySpec] | None = None,
+    gate: Callable[[Options], bool] | None = None,
+) -> Pair:
+    mapping = spec or {"variant": PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True)}
+
     class KeyedParent(FeatureGroup):
-        PROPERTY_MAPPING = {"variant": PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True)}
+        PROPERTY_MAPPING = mapping
 
         @classmethod
         def feature_names_supported(cls) -> set[str]:
             return {"kp_a"}
 
     class KeyedChild(KeyedParent):
-        pass
+        if child_mapping is not None:
+            PROPERTY_MAPPING = child_mapping
+        if gate is not None:
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                if not gate(options):
+                    return False
+                return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 
     return KeyedParent, KeyedChild
+
+
+DEFERRED = PropertySpec("Variant.", allowed_values=("x", "y"), strict_validation=True, deferred_binding=True)
+NARROWED = PropertySpec("Variant.", allowed_values=("x",), strict_validation=True, deferred_binding=True)
+MODE = PropertySpec("Mode.", allowed_values=("m", "n"), strict_validation=True, default=None)
+MODE_NARROWED = PropertySpec("Mode.", allowed_values=("m",), strict_validation=True, default=None)
+OPT = PropertySpec("Optional.", allowed_values=("a", "b"), default=None)
+
+
+def _claims_option_or_variant(options: Options) -> bool:
+    return bool({"opt", "variant"} & {*options.group, *options.context})
+
+
+def _not_variant_y(options: Options) -> bool:
+    return bool(options.get("variant") != "y")
+
+
+Family = tuple[type[FeatureGroup], dict[type[FeatureGroup], dict[Any, str]]]
+
+
+def make_backend_family(
+    key: str = "backend",
+    values: tuple[Any, Any] = ("a", "b"),
+    *,
+    declared: bool = False,
+    parent_backends: tuple[Any, ...] = (),
+    parent_records: bool = False,
+    ungated_second: bool = False,
+    needs: str | None = None,
+    aborts: Callable[[Any, Options], bool] | None = None,
+    parent_ungated: bool = False,
+    spec: PropertySpec | None = None,
+) -> Family:
+    """Inert parent and two siblings; a sibling matches the bare name only with its own BACKENDS value."""
+
+    class BackendParent(FeatureGroup):
+        BACKENDS: dict[Any, str] = dict.fromkeys(parent_backends, "")
+        if declared or spec is not None:
+            PROPERTY_MAPPING = {key: spec or PropertySpec("Backend.", default=None)}
+
+        @classmethod
+        def feature_names_supported(cls) -> set[str]:
+            return {"bf_a"}
+
+        @classmethod
+        def match_feature_group_criteria(
+            cls, feature_name: Any, options: Options, data_access_collection: Any = None
+        ) -> bool:
+            if aborts is not None and aborts(feature_name, options):
+                raise escalate_match_abort(ValueError("match aborted"))
+            if str(feature_name) not in cls.feature_names_supported():
+                return False
+            if needs is not None and options.get(needs) is None:
+                return False
+            if parent_ungated and cls is BackendParent:
+                return True
+            section = options.context if declared else options.group
+            if key in section and section[key] in cls.BACKENDS:
+                return True
+            if cls.BACKENDS or parent_records:
+                record_match_rejection(cls.__name__, "backend not served", code=CoreDeclineCode.OPTION_VALUE_REJECTED)
+            return False
+
+    class BackendA(BackendParent):
+        BACKENDS = {values[0]: "a"}
+
+    class BackendB(BackendParent):
+        BACKENDS = {values[1]: "b"}
+        if ungated_second:
+
+            @classmethod
+            def match_feature_group_criteria(
+                cls, feature_name: Any, options: Options, data_access_collection: Any = None
+            ) -> bool:
+                return str(feature_name) in cls.feature_names_supported()
+
+    return BackendParent, {BackendA: BackendA.BACKENDS, BackendB: BackendB.BACKENDS}
 
 
 def make_request_pair() -> Pair:
@@ -374,6 +473,7 @@ def test_presence_gated_subclass_steals(
     assert phrase in " ".join(result.failures), result.failures
     if absent:
         assert absent not in " ".join(result.failures), result.failures
+    assert not any("deferred_binding" in n for n in result.notes), result.notes
 
 
 @pytest.mark.parametrize(
@@ -967,3 +1067,246 @@ def test_name_path_scaling_parent_values_path_passes_for_a_non_first_scaler() ->
         sub, ScalingFeatureGroup, SELECTING, requests=["x__minmax_scaled"], input_data=data, adapter=PandasAdapter()
     )
     assert result.passed, result.failures
+
+
+@pytest.mark.parametrize(
+    ("make", "selecting", "phrase", "noted"),
+    [
+        pytest.param(
+            functools.partial(make_keyed_pair, {"variant": DEFERRED}, {"variant": NARROWED}),
+            SELECTING,
+            None,
+            True,
+            id="deferred_narrowed",
+        ),
+        pytest.param(
+            functools.partial(make_keyed_pair, {"variant": DEFERRED}, gate=_not_variant_y),
+            SELECTING,
+            None,
+            True,
+            id="inherited_deferred_spec",
+        ),
+        pytest.param(
+            functools.partial(make_keyed_pair, {"variant": DEFERRED}),
+            SELECTING,
+            "'y'",
+            True,
+            id="ungated_still_steals_other_value",
+        ),
+        pytest.param(
+            functools.partial(
+                make_keyed_pair,
+                {"variant": DEFERRED, "mode": MODE},
+                {"variant": NARROWED, "mode": MODE_NARROWED},
+            ),
+            TWO_KEYS,
+            "without ['mode', 'variant']",
+            False,
+            id="mixed_non_deferred_key",
+        ),
+        pytest.param(
+            functools.partial(
+                make_keyed_pair,
+                {"variant": DEFERRED, "opt": OPT},
+                {"variant": NARROWED, "opt": OPT},
+                _claims_option_or_variant,
+            ),
+            SELECTING,
+            "with option 'opt'",
+            False,
+            id="optional_option_steal_without_bare_steal",
+        ),
+        pytest.param(
+            functools.partial(
+                make_keyed_pair,
+                {"variant": DEFERRED, "opt": OPT},
+                {"variant": NARROWED, "opt": OPT},
+            ),
+            SELECTING,
+            None,
+            True,
+            id="deferred_skips_optional_probes",
+        ),
+        pytest.param(
+            functools.partial(
+                make_keyed_pair,
+                {"variant": DEFERRED},
+                {
+                    "variant": PropertySpec(
+                        "Variant.", allowed_values=("x",), strict_validation=True, default="x", deferred_binding=True
+                    )
+                },
+            ),
+            SELECTING,
+            "without ['variant']",
+            False,
+            id="deferred_with_default_still_steals",
+        ),
+    ],
+)
+def test_deferred_selecting_keys_note_the_bare_steal(
+    make: Callable[[], Pair], selecting: Options, phrase: str | None, noted: bool
+) -> None:
+    parent, sub = make()
+    result = check_subclass_scope(sub, parent, selecting)
+    if phrase is None:
+        assert result.failures == (), result.failures
+    else:
+        assert not result.passed
+        assert all(f.startswith("steals:") for f in result.failures), result.failures
+        assert phrase in " ".join(result.failures), result.failures
+    deferred = [n for n in result.notes if "deferred_binding" in n]
+    if noted:
+        assert len(deferred) == 1, result.notes
+        assert deferred[0].startswith("scope:"), deferred
+        assert "'kp_a'" in deferred[0] and "variant" in deferred[0] and sub.__name__ in deferred[0], deferred
+    else:
+        assert deferred == [], result.notes
+
+
+@pytest.mark.parametrize(
+    ("kwargs", "as_str"),
+    [
+        pytest.param({}, False, id="group_key"),
+        pytest.param({"declared": True}, False, id="context_key"),
+        pytest.param({}, True, id="bare_str_value"),
+        pytest.param({"values": (1, 2)}, False, id="non_str_values"),
+        pytest.param({"spec": PropertySpec("Backend.", context=False)}, False, id="required_group_key"),
+    ],
+)
+def test_well_scoped_inert_family_passes(kwargs: dict[str, Any], as_str: bool) -> None:
+    parent, siblings = make_backend_family(**kwargs)
+    claims: dict[type[FeatureGroup], Any] = {s: next(iter(v)) if as_str else v for s, v in siblings.items()}
+    result = check_sibling_scope(parent, claims, "backend")
+    assert result.check == "sibling_scope"
+    assert result.subject == parent.__name__
+    assert result.failures == (), result.failures
+
+
+def test_base_options_supply_another_required_key() -> None:
+    parent, siblings = make_backend_family(needs="tenant")
+    with_it = check_sibling_scope(parent, siblings, "backend", base_options=Options(group={"tenant": "t"}))
+    assert with_it.failures == (), with_it.failures
+    without = check_sibling_scope(parent, siblings, "backend")
+    assert not without.passed
+    assert all(f.startswith("misses:") for f in without.failures), without.failures
+
+
+def _overlapping() -> tuple[Family, Any]:
+    family = make_backend_family()
+    first, second = family[1]
+    return family, {first: ["a"], second: ["a", "b"]}
+
+
+def _missing_own_value() -> tuple[Family, Any]:
+    family = make_backend_family()
+    first, second = family[1]
+    return family, {first: ["a", "c"], second: ["b"]}
+
+
+@pytest.mark.parametrize(
+    ("make", "prefix", "phrases"),
+    [
+        pytest.param(_overlapping, "overlap:", ("'a'",), id="overlap"),
+        pytest.param(_missing_own_value, "misses:", ("'backend'='c'",), id="sibling_misses_own_value"),
+        pytest.param(
+            lambda: (make_backend_family(ungated_second=True), None),
+            "steals:",
+            ("without 'backend'", "'backend'='conformance_unknown_value'", "'backend'='a'"),
+            id="ungated_sibling",
+        ),
+        pytest.param(
+            lambda: (make_backend_family(parent_backends=("a",)), None),
+            "inert:",
+            ("matches",),
+            id="parent_matches",
+        ),
+        pytest.param(
+            lambda: (make_backend_family(parent_records=True), None),
+            "inert:",
+            ("records a rejection",),
+            id="parent_records_rejection",
+        ),
+        pytest.param(
+            lambda: (make_backend_family(parent_ungated=True), None),
+            "inert:",
+            ("matches",),
+            id="parent_matches_unclaimed",
+        ),
+    ],
+)
+def test_broken_family_fails_only_its_prefix(
+    make: Callable[[], tuple[Family, Any]], prefix: str, phrases: tuple[str, ...]
+) -> None:
+    (parent, siblings), claims = make()
+    result = check_sibling_scope(parent, claims or siblings, "backend")
+    assert not result.passed
+    assert all(f.startswith(prefix) for f in result.failures), result.failures
+    for phrase in phrases:
+        assert phrase in " ".join(result.failures), result.failures
+
+
+@pytest.mark.parametrize(
+    "case", ["non_subclass", "no_siblings", "no_values", "no_names", "key_in_base", "aborts", "is_parent"]
+)
+def test_sibling_setup_failures(case: str) -> None:
+    aborts = _aborts_always if case == "aborts" else None
+    parent, siblings = make_backend_family(aborts=aborts)
+    first, second = siblings
+    claims: dict[type[FeatureGroup], Any] = dict(siblings)
+    requests: list[str] | None = None
+    base: Options | None = None
+    if case == "non_subclass":
+        claims = {make_parent(): ["a"]}
+    elif case == "is_parent":
+        claims = {parent: ["a"]}
+    elif case == "no_siblings":
+        claims = {}
+    elif case == "no_values":
+        claims = {first: [], second: ["b"]}
+    elif case == "no_names":
+        requests = []
+    elif case == "key_in_base":
+        base = Options(group={"backend": "a"})
+    result = check_sibling_scope(parent, claims, "backend", requests, base_options=base)
+    assert not result.passed
+    expected = "names:" if case == "no_names" else "setup:"
+    assert all(f.startswith(expected) for f in result.failures), result.failures
+    if case == "aborts":
+        assert any("match aborted" in f for f in result.failures), result.failures
+
+
+def test_sibling_unloaded_compute_framework_is_a_setup_failure_naming_the_class(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    parent, siblings = make_backend_family()
+
+    class UnloadedFramework(ComputeFramework):
+        pass
+
+    class UnloadedSibling(parent):  # type: ignore[valid-type, misc]
+        BACKENDS = {"c": "c"}
+
+        @classmethod
+        def compute_framework_rule(cls) -> set[type[ComputeFramework]] | None:
+            return {UnloadedFramework}
+
+    loaded = PreFilterPlugins.get_cfw_subclasses()
+    monkeypatch.setattr(
+        PreFilterPlugins, "get_cfw_subclasses", staticmethod(lambda: {c for c in loaded if c is not UnloadedFramework})
+    )
+    result = check_sibling_scope(parent, {**siblings, UnloadedSibling: ["c"]}, "backend")
+    assert not result.passed
+    assert any(f.startswith("setup:") and UnloadedSibling.__name__ in f for f in result.failures), result.failures
+
+
+def test_assert_sibling_scope_passes_silently_for_a_well_scoped_family() -> None:
+    parent, siblings = make_backend_family()
+    assert_sibling_scope(parent, siblings, "backend")
+
+
+def test_assert_sibling_scope_raises_for_a_broken_family() -> None:
+    parent, siblings = make_backend_family(ungated_second=True)
+    with pytest.raises(pytest.fail.Exception) as excinfo:
+        assert_sibling_scope(parent, siblings, "backend")
+    assert "steals:" in str(excinfo.value)

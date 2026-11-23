@@ -59,7 +59,7 @@ def _as_floats(result: Any) -> list[float]:
 def test_pandas_sum_hour_window_is_time_based_not_row_count() -> None:
     """sum_3_hour_window must sum all rows within 3h, not just the last 3 rows."""
     result = PandasTimeWindow._perform_window_operation(
-        _minute_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "hour"), ["value"], REFERENCE_TIME
+        _minute_dataframe(), "sum", TimeWindowFeatureGroup._window_span(3, "hour"), ["value"], REFERENCE_TIME
     )
     assert _as_floats(result) == pytest.approx(EXPECTED_SUM_3_HOUR)
 
@@ -67,10 +67,10 @@ def test_pandas_sum_hour_window_is_time_based_not_row_count() -> None:
 def test_pandas_time_unit_changes_result() -> None:
     """3_second and 3_hour must differ on identical data (time_unit matters)."""
     hour = PandasTimeWindow._perform_window_operation(
-        _minute_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "hour"), ["value"], REFERENCE_TIME
+        _minute_dataframe(), "sum", TimeWindowFeatureGroup._window_span(3, "hour"), ["value"], REFERENCE_TIME
     )
     second = PandasTimeWindow._perform_window_operation(
-        _minute_dataframe(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "second"), ["value"], REFERENCE_TIME
+        _minute_dataframe(), "sum", TimeWindowFeatureGroup._window_span(3, "second"), ["value"], REFERENCE_TIME
     )
     assert _as_floats(hour) == pytest.approx(EXPECTED_SUM_3_HOUR)
     assert _as_floats(second) == pytest.approx(EXPECTED_SUM_3_SECOND)
@@ -80,7 +80,7 @@ def test_pandas_time_unit_changes_result() -> None:
 def test_pyarrow_sum_hour_window_is_time_based_not_row_count() -> None:
     """PyArrow must match the pandas time-based result for sum_3_hour_window."""
     result = PyArrowTimeWindow._perform_window_operation(
-        _minute_table(), "sum", TimeWindowFeatureGroup._get_time_delta(3, "hour"), ["value"], REFERENCE_TIME
+        _minute_table(), "sum", TimeWindowFeatureGroup._window_span(3, "hour"), ["value"], REFERENCE_TIME
     )
     assert _as_floats(result) == pytest.approx(EXPECTED_SUM_3_HOUR)
 
@@ -98,7 +98,7 @@ def test_pandas_and_pyarrow_agree_time_based(window_function: str, expected: lis
         PandasTimeWindow._perform_window_operation(
             _minute_dataframe(),
             window_function,
-            TimeWindowFeatureGroup._get_time_delta(3, "hour"),
+            TimeWindowFeatureGroup._window_span(3, "hour"),
             ["value"],
             REFERENCE_TIME,
         )
@@ -107,7 +107,7 @@ def test_pandas_and_pyarrow_agree_time_based(window_function: str, expected: lis
         PyArrowTimeWindow._perform_window_operation(
             _minute_table(),
             window_function,
-            TimeWindowFeatureGroup._get_time_delta(3, "hour"),
+            TimeWindowFeatureGroup._window_span(3, "hour"),
             ["value"],
             REFERENCE_TIME,
         )
@@ -126,10 +126,10 @@ def test_month_and_year_units_run_to_completion(time_unit: str) -> None:
     table = pa.Table.from_pandas(df)
 
     pandas_result = PandasTimeWindow._perform_window_operation(
-        df.copy(), "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
+        df.copy(), "sum", TimeWindowFeatureGroup._window_span(3, time_unit), ["value"], REFERENCE_TIME
     )
     pyarrow_result = PyArrowTimeWindow._perform_window_operation(
-        table, "sum", TimeWindowFeatureGroup._get_time_delta(3, time_unit), ["value"], REFERENCE_TIME
+        table, "sum", TimeWindowFeatureGroup._window_span(3, time_unit), ["value"], REFERENCE_TIME
     )
 
     assert len(_as_floats(pandas_result)) == len(values)
@@ -177,7 +177,7 @@ def test_std_and_var_use_ddof_one_on_both_frameworks(
     """A one-value window is NaN (Pandas) or null (PyArrow), and wider windows use the sample statistic."""
     df = pd.DataFrame({**columns, REFERENCE_TIME: _MINUTE_TIMES})
     data = df if implementation is PandasTimeWindow else pa.Table.from_pandas(df)
-    span = TimeWindowFeatureGroup._get_time_delta(3, "hour")
+    span = TimeWindowFeatureGroup._window_span(3, "hour")
 
     result = implementation._perform_window_operation(data, window_function, span, list(columns), REFERENCE_TIME)
 
@@ -189,7 +189,7 @@ def test_pyarrow_all_single_row_windows_keep_float64_type(window_function: str) 
     """Every window holds one row: the result is all null but still float64, not the null type."""
     times = pd.to_datetime(["2023-01-01", "2023-01-05", "2023-01-09"])
     table = pa.Table.from_pandas(pd.DataFrame({"a": [1.0, 2.0, 4.0], REFERENCE_TIME: times}))
-    span = TimeWindowFeatureGroup._get_time_delta(1, "day")
+    span = TimeWindowFeatureGroup._window_span(1, "day")
 
     result = PyArrowTimeWindow._perform_window_operation(table, window_function, span, ["a"], REFERENCE_TIME)
 
@@ -208,7 +208,7 @@ def test_multi_column_window_skips_all_null_column_like_pandas(window_function: 
             REFERENCE_TIME: _MINUTE_TIMES,
         }
     )
-    span = TimeWindowFeatureGroup._get_time_delta(3, "hour")
+    span = TimeWindowFeatureGroup._window_span(3, "hour")
     columns = ["a", "b"]
 
     expected = _nulls_as_nan(

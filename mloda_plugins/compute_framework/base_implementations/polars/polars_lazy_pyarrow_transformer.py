@@ -1,6 +1,9 @@
 from typing import Any
 
 from mloda.provider import BaseTransformer
+from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
+    PolarsPyArrowTransformer,
+)
 
 try:
     import polars as pl
@@ -56,14 +59,7 @@ class PolarsLazyPyArrowTransformer(BaseTransformer):
 
     @classmethod
     def transform_other_fw_to_fw(cls, data: Any, framework_connection_object: Any | None = None) -> Any:
-        """
-        Transform a PyArrow Table to a Polars LazyFrame.
-
-        This method uses Polars' native from_arrow() method to create a DataFrame,
-        then converts it to a LazyFrame.
-        """
+        """Transform a PyArrow Table to a Polars LazyFrame."""
         if pl is None:
             raise ImportError("Polars is not installed. To be able to use this framework, please install polars.")
-        # Convert PyArrow to DataFrame, then make it lazy
-        df = pl.from_arrow(data)
-        return df.lazy()  # type: ignore[union-attr]
+        return PolarsPyArrowTransformer.transform_other_fw_to_fw(data).lazy()

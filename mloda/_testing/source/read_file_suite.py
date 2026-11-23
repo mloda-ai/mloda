@@ -165,7 +165,7 @@ class ReadFileFGTestMixin(SourceFeatureGroupTestMixin, suite_base=True):
         assert os.path.abspath(folder / f"two{self._suffix()}") in message
         assert "column_to_file" in message
         assert self._group_name() in message
-        assert "narrow with a data_access_handle or column_to_file." not in message
+        assert f"narrow with a {HANDLE_OPTION} or column_to_file." not in message
         assert HANDLE_OPTION not in message  # a folder handle still holds both files, so it cannot pick one
         assert "file handles" not in message
         assert "toyfmt-secret-value" not in message

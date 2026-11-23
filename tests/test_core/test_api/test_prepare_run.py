@@ -565,7 +565,8 @@ class TestConcurrentRunsOnOneSession:
         assert seen == [{ParallelizationMode.THREADING}]
         assert [f["PrepareRunApiFeature"].tolist() for f in frames] == [["3_v3", "103_w3"]]
 
-    @pytest.mark.timeout(30)
+    # Two MULTIPROCESSING runs; the first may pay the Manager, forkserver and flight server cold starts.
+    @pytest.mark.timeout(60)
     def test_repeated_multiprocessing_runs_get_their_own_results_and_session_is_unchanged(
         self, flight_server: Any
     ) -> None:
@@ -1334,6 +1335,24 @@ def _rtp_session(*features: Feature | str, extender: Extender | None = None) -> 
     )
 
 
+class GroupOnlyKeyFG(DataCreatorFeatureGroup):
+    """Root group declaring the group-only key 'go_key'."""
+
+    PROPERTY_MAPPING = {"go_key": property_spec("A group-only key.", context=False, group_only=True, default="d")}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"go_key_col"}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {"go_key_col": [1]}
+
+
 def _rtp_values(result: Any) -> dict[str, Any]:
     return {name: values[0] for frame in result for name, values in frame.items()}
 
@@ -1518,6 +1537,30 @@ class TestRuntimeParametersAreValidatedBeforeTheRun:
 
         with pytest.raises(ValueError, match="rtp_level"):
             _rtp_session(feature)
+
+    def test_a_group_only_key_in_the_context_is_refused_at_prepare(self) -> None:
+        feature = Feature("go_key_col", Options(context={"go_key": "x"}))
+
+        with pytest.raises(ValueError, match=r"Option 'go_key' .*group-only") as caught:
+            mloda.prepare(
+                [feature],
+                compute_frameworks=["PythonDictFramework"],
+                plugin_collector=PluginCollector.enabled_feature_groups({GroupOnlyKeyFG}),
+            )
+
+        assert "go_key_col" in str(caught.value)
+        assert "GroupOnlyKeyFG" in str(caught.value)
+
+    def test_a_group_only_key_in_the_group_prepares_and_runs(self) -> None:
+        feature = Feature("go_key_col", Options(group={"go_key": "x"}))
+
+        results = mloda.run_all(
+            [feature],
+            compute_frameworks=["PythonDictFramework"],
+            plugin_collector=PluginCollector.enabled_feature_groups({GroupOnlyKeyFG}),
+        )
+
+        assert len(results) == 1
 
     def test_runtime_parameter_of_an_undeclared_key_raises(self) -> None:
         with pytest.raises(ValueError, match="rtp_level"):

@@ -6,6 +6,7 @@ from collections.abc import Sequence
 from typing import Any
 
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.provider import BaseMergeEngine
 from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import OutputSchema
@@ -39,7 +40,7 @@ class SqliteFramework(ComputeFramework):
     def set_framework_connection_object(self, framework_connection_object: Any | None = None) -> None:
         if framework_connection_object is None:
             raise ValueError(
-                "A sqlite3.Connection object is required. Put the connection in the DataAccessCollection and select it with connection_handle."
+                f"A sqlite3.Connection object is required. Put the connection in the DataAccessCollection and select it with {CONNECTION_HANDLE_OPTION}."
             )
         if not isinstance(framework_connection_object, sqlite3.Connection):
             raise ValueError(f"Expected a sqlite3.Connection object, got {type(framework_connection_object)}")

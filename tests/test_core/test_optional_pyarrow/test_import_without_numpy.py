@@ -65,7 +65,7 @@ table = pa.table({
 
 try:
     PyArrowTimeWindow._perform_window_operation(
-        table, "sum", TimeWindowFeatureGroup._get_time_delta(1, "second"), ["a", "b"], "event_time"
+        table, "sum", TimeWindowFeatureGroup._window_span(1, "second"), ["a", "b"], "event_time"
     )
     print("NO_RAISE")
 except ImportError as e:

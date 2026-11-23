@@ -2,6 +2,7 @@ import logging
 from collections.abc import Sequence
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.hook_context import OutputSchema
 from mloda.provider import BaseMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
@@ -84,7 +85,7 @@ class DuckDBFramework(ComputeFramework):
             raise ImportError("DuckDB is not installed. To be able to use this framework, please install duckdb.")
         if framework_connection_object is None:
             raise ValueError(
-                "A DuckDB connection object is required. Put the connection in the DataAccessCollection and select it with connection_handle."
+                f"A DuckDB connection object is required. Put the connection in the DataAccessCollection and select it with {CONNECTION_HANDLE_OPTION}."
             )
         if not isinstance(framework_connection_object, duckdb.DuckDBPyConnection):
             raise ValueError(f"Expected a DuckDB connection object, got {type(framework_connection_object)}")

@@ -80,8 +80,9 @@ nopyarrow_test = [
 ]
 docs = [
     "mkdocs",
-    "mkdocs-jupyter",
-    "notebook",
+    # Their nbconvert -> beautifulsoup4 -> soupsieve chain has no patched soupsieve below Python 3.11.5.
+    "mkdocs-jupyter; python_full_version >= '3.11.5'",
+    "notebook; python_full_version >= '3.11.5'",
     "mermaid-py",
     "marimo",
     # Backends the example notebooks execute during the docs build.
@@ -204,21 +205,22 @@ exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
 # - idna   >= 3.15:   idna.encode() bypass of CVE-2024-3651 fix
 # - mistune >= 3.3.3: RecursionError DoS via excessive emphasis markers. Also covers the earlier
 #   quadratic-time parsing DoS in parse_link_text and heading ID injection XSS (CVE-2026-33079).
-# - soupsieve >= 2.10: memory exhaustion via large comma-separated selector lists; ReDoS in the selector
+# - soupsieve >= 4.0: memory exhaustion via large comma-separated selector lists; ReDoS in the selector
 #   parser, including the IDENTIFIER/VALUE sub-patterns and the RE_WS_END whitespace/comment trimming regex;
-#   quadratic-time matching of a general sibling combinator inside :has()
+#   quadratic-time matching of a general sibling combinator inside :has(); polynomial-time DoS in the
+#   descendant combinator; ReDoS in CSS escapes; uncontrolled recursion on nested pseudo-classes
 # - nbconvert >= 7.17.1: arbitrary file read/write via path traversal; uncontrolled search path on Windows
 # - anyio >= 4.14.2: TLSStream IDNA 2003 host name encoding allows TLS certificate spoofing; process-pool
 #   workers can block indefinitely on undrained stderr
 # - fsspec >= 2026.6.0: template injection in ReferenceFileSystem
 # - certifi >= 2026.10.19: bundled emSign root CAs with compromised intermediate CA keys
-# - beautifulsoup4 >= 4.13: keeps the resolver from falling back to the 2018 release on Python 3.11.0 to
-#   3.11.4 when soupsieve 4 drops those versions
+# - beautifulsoup4 >= 4.13: makes the lock fail instead of falling back to the 2018 release (which predates
+#   soupsieve) if the docs-extra 3.11.5 markers are lost
 constraint-dependencies = [
     "urllib3>=2.7.0",
     "idna>=3.15",
     "mistune>=3.3.3",
-    "soupsieve>=2.10",
+    "soupsieve>=4.0",
     "nbconvert>=7.17.1",
     "anyio>=4.14.2",
     "fsspec>=2026.6.0",

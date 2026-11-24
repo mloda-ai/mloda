@@ -10,7 +10,7 @@ After completing [the setup in CONTRIBUTING.md](https://github.com/mloda-ai/mlod
 mkdocs serve --config-file docs/mkdocs.yml
 ```
 
-The build executes the example notebooks to capture their outputs, so it needs the example notebooks' compute backends. `uv sync --all-extras` (or installing `mloda[docs]`) provides them.
+The build executes the example notebooks to capture their outputs, so it needs the example notebooks' compute backends. `uv sync --all-extras` (or installing `mloda[docs]`) provides them. The docs build needs Python 3.11.5 or newer.
 
 #### Authoring example notebooks (marimo)
 

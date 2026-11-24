@@ -12,7 +12,12 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 )
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.utils import contained_raise_log_level, is_match_abort
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import (
+    PropertySpec,
+    element_admitted,
+    is_no_default,
+    scalar_refuses,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +57,9 @@ def _rejection(key: str, spec: PropertySpec, value: Any, options: Options) -> st
                 return "required_when raised, so the key is rejected"
             return "is required but absent" if verdict else None
         return "is required but absent" if is_no_default(spec.default) else None
+
+    if scalar_refuses(spec, value):
+        return f"must be a scalar, got a {type(value).__name__}"
 
     if not spec.strict_validation:
         return None

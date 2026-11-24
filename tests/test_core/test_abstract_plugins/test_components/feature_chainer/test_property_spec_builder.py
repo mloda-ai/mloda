@@ -770,6 +770,31 @@ class TestPropertySpecCallerSettable:
             property_spec("d", forward_to_inputs=not_a_bool)
 
 
+class TestPropertySpecScalar:
+    """The scalar flag opts into a shape constraint through either authoring surface."""
+
+    def test_defaults_false_and_passes_through_builder(self) -> None:
+        assert PropertySpec("d").scalar is False
+        assert property_spec("d").scalar is False
+        assert property_spec("d", scalar=True).scalar is True
+        assert property_spec("d", scalar=True) == PropertySpec("d", scalar=True)
+
+    @pytest.mark.parametrize("flag", [1, "yes", None])
+    def test_scalar_requires_a_bool(self, flag: Any) -> None:
+        with pytest.raises(ValueError, match="scalar must be a bool"):
+            PropertySpec("d", scalar=flag)
+        with pytest.raises(ValueError, match="scalar must be a bool"):
+            property_spec("d", scalar=flag)
+
+    @pytest.mark.parametrize("default", [[], {"entry": "valid"}], ids=["empty-list", "mapping"])
+    @pytest.mark.parametrize("strict", [False, True], ids=["non-strict", "strict"])
+    def test_container_default_is_refused(self, default: Any, strict: bool) -> None:
+        with pytest.raises(ValueError, match="scalar"):
+            PropertySpec("d", scalar=True, default=default, strict_validation=strict, allowed_values=("valid",))
+        with pytest.raises(ValueError, match="scalar"):
+            property_spec("d", scalar=True, default=default, strict=strict, allowed_values=("valid",))
+
+
 class TestCredentialHandleSpecBuilder:
     """``credential_handle_spec`` is a PropertySpec builder with the handle fields fixed."""
 

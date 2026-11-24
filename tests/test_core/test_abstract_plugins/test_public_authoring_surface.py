@@ -32,6 +32,7 @@ class TestAuthoringSurfaceIsExported:
             "divergence_dicts",
             "TimeRule",
             "DEFAULT_TIME_RULE",
+            "is_non_negative_number",
         ],
     )
     def test_name_is_public(self, name: str) -> None:

@@ -8,6 +8,7 @@ its ``strict=`` keyword maps to the ``strict_validation=`` field.
 from __future__ import annotations
 
 import numbers
+import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -33,6 +34,13 @@ def is_positive_int(value: Any) -> bool:
     if isinstance(value, numbers.Integral):
         return int(value) > 0
     return isinstance(value, str) and value.isdecimal() and int(value) > 0
+
+
+def is_non_negative_number(value: Any) -> bool:
+    """Real number >= 0 within float range; refuses bool, NaN, infinities, values beyond the float range, Decimal, strings."""
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return False
+    return bool(not value < 0 and value <= sys.float_info.max)
 
 
 class _NoDefault:
@@ -103,6 +111,8 @@ class PropertySpec:
     runtime: bool = False
     # A group option a caller may not move to the context; refused at plan time.
     group_only: bool = False
+    # One value only: a list, tuple, set, frozenset or mapping is refused.
+    scalar: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -157,6 +167,9 @@ class PropertySpec:
         if self.group_only and self.context:
             raise ValueError(f"{prefix}: group_only=True requires context=False.")
 
+        if not isinstance(self.scalar, bool):
+            raise ValueError(f"{prefix}: scalar must be a bool, got {type(self.scalar).__name__}.")
+
         if self.runtime:
             if not self.context:
                 raise ValueError(f"{prefix}: runtime=True requires context=True.")
@@ -208,11 +221,10 @@ class PropertySpec:
             )
 
     def _check_declared_default(self, prefix: str) -> None:
-        """A strict spec's declared default must be within its own value space (issue #530 semantics).
+        """A declared default must satisfy scalar shape and, when strict, the key's value space."""
+        if scalar_refuses(self, self.default):
+            raise ValueError(f"{prefix}: scalar=True requires a scalar default.")
 
-        ``NO_DEFAULT`` declares no default, and a declared ``None`` applies no value: neither has
-        anything to check.
-        """
         if is_no_default(self.default) or self.default is None or not self.strict_validation:
             return
 
@@ -238,6 +250,11 @@ class PropertySpec:
             is_member = False
         if not is_member:
             raise ValueError(f"{prefix}: default {self.default!r} is not within the declared allowed_values.")
+
+
+def scalar_refuses(spec: PropertySpec, value: Any) -> bool:
+    """Does a scalar-only spec refuse this container value?"""
+    return spec.scalar and isinstance(value, (list, tuple, set, frozenset, Mapping))
 
 
 def element_admitted(spec: PropertySpec, element: Any, on_raise: Callable[[Exception], None]) -> bool:
@@ -283,6 +300,7 @@ def property_spec(
     forward_to_inputs: bool = True,
     runtime: bool = False,
     group_only: bool = False,
+    scalar: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -302,6 +320,7 @@ def property_spec(
         forward_to_inputs=forward_to_inputs,
         runtime=runtime,
         group_only=group_only,
+        scalar=scalar,
     )
 
 

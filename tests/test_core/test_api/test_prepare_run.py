@@ -1283,7 +1283,7 @@ class RtpTightFG(DataCreatorFeatureGroup):
         return {"rtp_tight_col": [features.runtime_parameter("rtp_level")]}
 
 
-_RTP_EDGE_KEYS = ("rtp_coll", "rtp_none_no", "rtp_none_ok", "rtp_zero")
+_RTP_EDGE_KEYS = ("rtp_coll", "rtp_none_no", "rtp_none_ok", "rtp_zero", "rtp_scalar")
 
 
 class RtpEdgeFG(DataCreatorFeatureGroup):
@@ -1294,6 +1294,7 @@ class RtpEdgeFG(DataCreatorFeatureGroup):
         "rtp_none_no": property_spec("No None.", runtime=True, default="base"),
         "rtp_none_ok": property_spec("None ok.", runtime=True, default="base", allow_explicit_none=True),
         "rtp_zero": property_spec("Falsy.", runtime=True, default="base"),
+        "rtp_scalar": property_spec("S.", runtime=True, default="a", scalar=True),
     }
 
     @classmethod
@@ -1427,6 +1428,16 @@ class TestRuntimeParametersPerRun:
         assert _rtp_values(session.run(parameters={"rtp_coll": ["a", "b"]}))["rtp_edge_col"]["rtp_coll"] == ["a", "b"]
         with pytest.raises(ValueError, match="rtp_coll"):
             session.run(parameters={"rtp_coll": ["a", "x"]})
+
+    @pytest.mark.parametrize("container", [["a"], (), {}], ids=["list", "tuple", "dict"])
+    def test_a_container_run_value_is_refused_for_a_scalar_key(self, container: Any) -> None:
+        session = _edge_session()
+
+        assert _rtp_values(session.run(parameters={"rtp_scalar": "a"}))["rtp_edge_col"]["rtp_scalar"] == "a"
+        with pytest.raises(ValueError, match="rtp_scalar") as caught:
+            session.run(parameters={"rtp_scalar": container})
+        assert "scalar" in str(caught.value)
+        assert f"got a {type(container).__name__}" in str(caught.value)
 
     def test_none_is_refused_unless_the_spec_allows_it(self) -> None:
         session = _edge_session()

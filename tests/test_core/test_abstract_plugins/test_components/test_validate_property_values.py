@@ -132,6 +132,68 @@ class TestSequenceUnpacking:
         validate_property_values({"k": "abc"}, _strict(allowed_values=("abc",)), closed_world=True)
 
 
+class TestScalarValues:
+    @pytest.mark.parametrize("value", [0.5, "abc", b"abc"], ids=["number", "str", "bytes"])
+    def test_permitted_scalar_is_accepted(self, value: Any) -> None:
+        mapping = _strict(scalar=True, allowed_values=(0.5, "abc", b"abc"))
+        validate_property_values({"k": value}, mapping, closed_world=True)
+
+    def test_scalar_still_runs_its_element_validator(self) -> None:
+        mapping = _strict(scalar=True, element_validator=lambda v: isinstance(v, float) and v >= 0)
+        validate_property_values({"k": 0.5}, mapping, closed_world=True)
+        with pytest.raises(PropertyValidationError):
+            validate_property_values({"k": -0.5}, mapping, closed_world=True)
+
+    @pytest.mark.parametrize(
+        "value",
+        [
+            pytest.param([SECRET], id="list"),
+            pytest.param((SECRET,), id="tuple"),
+            pytest.param({SECRET}, id="set"),
+            pytest.param(frozenset({SECRET}), id="frozenset"),
+            pytest.param({"entry": SECRET}, id="dict"),
+            pytest.param(types.MappingProxyType({"entry": SECRET}), id="mapping-proxy"),
+            pytest.param([], id="empty-list"),
+            pytest.param((), id="empty-tuple"),
+            pytest.param(set(), id="empty-set"),
+            pytest.param(frozenset(), id="empty-frozenset"),
+            pytest.param({}, id="empty-dict"),
+            pytest.param(types.MappingProxyType({}), id="empty-mapping-proxy"),
+        ],
+    )
+    def test_containers_are_rejected_before_validation_without_echoing_values(
+        self, value: Any, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        seen: list[Any] = []
+
+        def accept(element: Any) -> bool:
+            seen.append(element)
+            return True
+
+        mapping = _strict(scalar=True, element_validator=accept)
+        with caplog.at_level(logging.DEBUG):
+            with pytest.raises(PropertyValidationError, match="scalar") as exc:
+                validate_property_values({"k": value}, mapping, closed_world=True)
+        assert exc.value.key == "k"
+        assert f"got a {type(value).__name__}" in exc.value.reason
+        assert SECRET not in str(exc.value)
+        assert SECRET not in caplog.text
+        assert exc.value.__cause__ is None
+        assert exc.value.__context__ is None
+        assert seen == []
+
+    def test_shape_is_enforced_without_strict_value_validation(self) -> None:
+        mapping = {"k": PropertySpec("k", scalar=True)}
+        validate_property_values({"k": "abc"}, mapping, closed_world=True)
+        with pytest.raises(PropertyValidationError, match="scalar"):
+            validate_property_values({"k": []}, mapping, closed_world=True)
+
+    def test_allowed_explicit_none_still_needs_to_pass_value_validation(self) -> None:
+        mapping = _strict(scalar=True, allow_explicit_none=True, allowed_values=("abc",))
+        with pytest.raises(PropertyValidationError, match="not accepted"):
+            validate_property_values({"k": None}, mapping, closed_world=True)
+
+
 class TestNonStrict:
     def test_never_validates_value(self) -> None:
         mapping = {"k": PropertySpec("k", allowed_values=("a",), default=None)}

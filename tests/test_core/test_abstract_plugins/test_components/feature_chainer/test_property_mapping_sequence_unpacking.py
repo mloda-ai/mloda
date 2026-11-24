@@ -22,7 +22,9 @@ from typing import Any
 import pytest
 
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
+from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
 from mloda.core.abstract_plugins.components.options import Options
+from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.provider import PropertySpec
 
 
@@ -290,3 +292,64 @@ class TestMatchGuardSeesTheRawValue:
         assert set(validator.calls) == {"a", "b"}, "the element_validator sees elements"
         assert guard.calls == [value], "the match_guard sees the raw tuple"
         assert type(guard.calls[0]) is tuple
+
+
+def _scalar_group(strict: bool) -> type[FeatureChainParserMixin]:
+    """A feature group whose single key is scalar-only, strictly validated or not."""
+
+    class ScalarFeatureGroup(FeatureChainParserMixin):
+        MIN_IN_FEATURES = 0
+        PROPERTY_MAPPING = {
+            "ops": PropertySpec(
+                "Operation to apply",
+                allowed_values={"a": "A", "b": "B"} if strict else None,
+                context=True,
+                strict_validation=strict,
+                scalar=True,
+            )
+        }
+
+    return ScalarFeatureGroup
+
+
+class TestScalarKeyRefusesContainersAtMatch:
+    """``scalar=True`` refuses any container at match time, strict or not."""
+
+    @pytest.mark.parametrize("strict", [True, False], ids=["strict", "non-strict"])
+    @pytest.mark.parametrize(
+        "value",
+        [
+            *(pytest.param(value, id=label) for label, value in CONTAINERS),
+            *(pytest.param(value, id=f"empty-{label}") for label, value in EMPTY_CONTAINERS),
+            pytest.param(["a"], id="singleton"),
+            pytest.param({"a": 1}, id="dict"),
+        ],
+    )
+    def test_container_is_a_recorded_non_match(
+        self, strict: bool, value: Any, rejection_window: dict[str, Any]
+    ) -> None:
+        group = _scalar_group(strict)
+
+        assert group.match_feature_group_criteria("any_feature", Options(context={"ops": value})) is False
+
+        rejection = rejection_window[group.__name__]
+        assert rejection.code == CoreDeclineCode.OPTION_VALUE_REJECTED
+        assert "ops" in rejection.reason
+        assert f"got a {type(value).__name__}" in rejection.reason
+        assert "'a'" not in rejection.reason
+
+    @pytest.mark.parametrize("strict", [True, False], ids=["strict", "non-strict"])
+    def test_a_scalar_still_matches(self, strict: bool) -> None:
+        group = _scalar_group(strict)
+
+        assert group.match_feature_group_criteria("any_feature", Options(context={"ops": "a"})) is True
+
+    def test_a_plain_feature_group_refuses_a_container_too(self, rejection_window: dict[str, Any]) -> None:
+        class PlainScalarFeatureGroup(FeatureGroup):
+            PROPERTY_MAPPING = {"ops": PropertySpec("Operation to apply", context=True, scalar=True)}
+
+        name = PlainScalarFeatureGroup.get_class_name()
+
+        assert PlainScalarFeatureGroup.match_feature_group_criteria(name, Options(context={"ops": "a"})) is True
+        assert PlainScalarFeatureGroup.match_feature_group_criteria(name, Options(context={"ops": ["a"]})) is False
+        assert rejection_window[name].code == CoreDeclineCode.OPTION_VALUE_REJECTED

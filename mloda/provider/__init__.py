@@ -108,6 +108,7 @@ from mloda.core.abstract_plugins.components.property_spec import (
     NO_DEFAULT,
     PropertySpec,
     is_no_default,
+    is_non_negative_number,
     is_positive_int,
     property_spec,
 )
@@ -243,6 +244,7 @@ __all__ = [
     # Property specs
     "PropertySpec",
     "is_no_default",
+    "is_non_negative_number",
     "is_positive_int",
     "property_spec",
     "TimeRule",

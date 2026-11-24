@@ -477,9 +477,9 @@ isolated = Feature("knowledge_graph", forward_group=False)
 - `forward_group=False` combined with a non-empty `forward_group_exclude` is
   contradictory and raises a `ValueError`.
 - Merge directives (`forward_group`, `forward_group_exclude`, `inherit_context_keys`,
-  `split_context_keys`)
-  are not part of `Feature` identity (duplicate requests union `split_context_keys`), so declare at most one child per upstream feature
-  name in a single `input_features` return; duplicates collapse like link/index.
+  `split_context_keys`) are not part of `Feature` identity, so declare at most one child
+  per upstream feature name in a single `input_features` return; duplicates collapse like
+  link/index (duplicate `split_context_keys` are unioned).
 
 ### Pulling context with `inherit_context_keys`
 

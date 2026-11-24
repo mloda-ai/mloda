@@ -796,8 +796,8 @@ child `Feature`. `propagate_context_keys` (or `cascade_context_keys`) is the cal
 flows see
 [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
-A forwarded or declared key also splits FeatureSets by value. A key declared on a
-feature with `Feature(..., split_context_keys=...)` (see
+A forwarded or declared key also splits FeatureSets by value. A key declared with
+`Feature(..., split_context_keys=...)` (see
 [Splitting on hand-set context](feature-chain-parser.md#splitting-on-hand-set-context-with-split_context_keys))
 splits the same way. A context key delivered via the
 push (`propagate_context_keys` or `cascade_context_keys`) or the pull
@@ -807,12 +807,13 @@ child's `inherited_context_keys`, and features whose value for that key differs 
 equal values still share one computation. The split is per-FeatureGroup and by value,
 not by provenance: once any feature in that scope forwards the key, every feature in
 scope splits on it, including a sibling that set the same key directly in plain
-context. A key that no feature in scope ever forwards or declares stays metadata and does not
-split. This isolates per-value results that previously collapsed into one computation
+context. A key that no feature in scope ever forwards or declares stays metadata and does
+not split. This isolates per-value results that previously collapsed into one computation
 where a single value silently won. Same-named copies that differ in undeclared context keys
 but read the same inputs on one framework are rejected; use the same values,
 `cascade_context_keys`, or a forwarded group option. This also covers root features requested directly more than once
-and declared option keys that the feature name does not bind; context a consumer pushes onto a root input is not checked; declare it with `split_context_keys` to split it.
+and declared option keys that the feature name does not bind. Context a consumer pushes
+onto a root input is not checked; declare it with `split_context_keys` to split it.
 
 ### Previewing the forwarded options
 

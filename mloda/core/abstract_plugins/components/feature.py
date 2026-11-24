@@ -119,8 +119,7 @@ class Feature:
     feature group resolution). Use ``Options(context={...})`` for metadata
     that should not affect grouping.
 
-    ``split_context_keys`` locally declares keys already present in context. Their values
-    split all copies in the feature group's call scope; declaring them does not forward values.
+    ``split_context_keys`` marks context keys whose values split the feature group's copies; nothing is forwarded.
 
     Class Methods (Convenience):
         not_typed(name, options): Creates a Feature instance without specifying a data type.

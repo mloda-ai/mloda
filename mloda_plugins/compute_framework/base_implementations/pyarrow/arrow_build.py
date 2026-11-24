@@ -67,7 +67,7 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
 def is_gap(v: Any) -> bool:
     """True for None and pd.NaT."""
     # NaT is the only datetime unequal to itself (no pandas import).
-    return v is None or (isinstance(v, datetime) and v != v)  # noqa: PLR0124
+    return v is None or (isinstance(v, datetime) and v != v)
 
 
 def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:

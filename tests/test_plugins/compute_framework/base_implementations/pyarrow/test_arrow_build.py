@@ -405,8 +405,13 @@ class TestEntryPointsKeepNonUtcInstants:
 
     @pytest.mark.parametrize(
         "values",
-        [[NOON_NY, LATER_NY], [NOON_NY.astimezone(KOLKATA), LATER_NY], [NOON_NY.astimezone(KOLKATA), None, LATER_NY]],
-        ids=["same_zone", "kolkata_and_ny", "kolkata_none_ny"],
+        [
+            [NOON_NY, LATER_NY],
+            [NOON_NY.astimezone(KOLKATA), LATER_NY],
+            [NOON_NY.astimezone(KOLKATA), None, LATER_NY],
+            [NOON_NY.astimezone(KOLKATA), pd.NaT, LATER_NY],
+        ],
+        ids=["same_zone", "kolkata_and_ny", "kolkata_none_ny", "kolkata_nat_ny"],
     )
     def test_value_set_keeps_instants_and_zone(self, values: list[Any]) -> None:
         column = pa.array([NOON_NY.astimezone(UTC)], type=pa.timestamp("us", tz="America/New_York"))

@@ -11,8 +11,8 @@ from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss, Na
 from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, FeatureSet
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 _NAN = float("nan")
 _VALUES: dict[str, list[float | None]] = {
@@ -61,26 +61,26 @@ class NlPandasConsumer(_NlConsumer):
         return data
 
 
-class NlPolarsConsumer(_NlConsumer):
-    SUFFIX = "__pl"
+class NlDictConsumer(_NlConsumer):
+    SUFFIX = "__pd_dict"
 
     @classmethod
     def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {PolarsDataFrame}
+        return {PythonDictFramework}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         name = str(features.get_name_of_one_feature())
-        return data.with_columns(data[name.removesuffix(cls.SUFFIX)].alias(name))
+        return {**data, name: list(data[name.removesuffix(cls.SUFFIX)])}
 
 
-_GROUPS = {NlArrowSource, NlPandasConsumer, NlPolarsConsumer}
+_GROUPS = {NlArrowSource, NlPandasConsumer, NlDictConsumer}
 
 
 def _run(feature: str, *, mode: ParallelizationMode = ParallelizationMode.SYNC, **kwargs: Any) -> Any:
     return mloda.run_all(
         [feature],
-        compute_frameworks=[PyArrowTable, PandasDataFrame, PolarsDataFrame],
+        compute_frameworks=[PyArrowTable, PandasDataFrame, PythonDictFramework],
         plugin_collector=PluginCollector.enabled_feature_groups(_GROUPS),
         parallelization_modes={mode},
         **kwargs,
@@ -117,7 +117,7 @@ class TestTransferReport:
         assert _run(feature, mode=mode, refuse_nan_null_loss=refuse).nan_null_losses == ()
 
     def test_a_pair_that_does_not_fold_nan_into_null_never_reports(self, mode: ParallelizationMode) -> None:
-        result = _run("nl_both__pl", mode=mode, refuse_nan_null_loss=True)
+        result = _run("nl_both__pd_dict", mode=mode, refuse_nan_null_loss=True)
 
         assert result.nan_null_losses == ()
 

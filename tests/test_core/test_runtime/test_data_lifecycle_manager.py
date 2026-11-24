@@ -613,11 +613,13 @@ class TestDataLifecycleManagerOutputFramework:
         assert reported == []
         assert isinstance(manager.result_data_collection[step_uuid], pd.DataFrame)
 
-    @pytest.mark.parametrize("output", [None, "polars", "arrow"])
+    @pytest.mark.parametrize("output", [None, "python_dict", "arrow"])
     def test_an_unmarked_conversion_never_reports_or_refuses(self, output: str | None) -> None:
-        from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
+            PythonDictFramework,
+        )
 
-        target = {None: None, "polars": PolarsDataFrame, "arrow": PyArrowTable}[output]
+        target = {None: None, "python_dict": PythonDictFramework, "arrow": PyArrowTable}[output]
 
         _, _, reported = self._collect(target, self._BOTH, refuse=True)
 

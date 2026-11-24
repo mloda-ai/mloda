@@ -870,7 +870,11 @@ def _cut_path_parameter_regions(uri: str) -> str:
 
 
 def source_identity(text: str) -> str:
-    """Apply the file-source recipe without resolving paths or consulting registered credential literals."""
+    """The identity core's file groups give a URI; it does not depend on registered credential literals.
+
+    Drops userinfo, query and fragment, masks credential-shaped path segments, cuts path parameter regions to `;***`.
+    Text is not resolved to an absolute path.
+    """
     return _cut_path_parameter_regions(
         mask_identity_credentials(strip_uri_userinfo(text)).partition("?")[0].partition("#")[0]
     )

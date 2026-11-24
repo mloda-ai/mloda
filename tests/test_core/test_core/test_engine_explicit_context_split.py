@@ -92,7 +92,7 @@ def _raise_patterns(cls: type) -> Any:
 
 
 def _apply_naming(naming: str, monkeypatch: pytest.MonkeyPatch) -> None:
-    """Make the root's name patterns unreadable in one of two ways."""
+    """Make the root's name patterns unreadable as the naming requires."""
     if naming == "unreadable_name":
         monkeypatch.setattr(ExplicitContextRoot, "PREFIX_PATTERN", ROOT, raising=False)
         with pytest.raises(ValueError):

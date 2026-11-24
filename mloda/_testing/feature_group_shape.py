@@ -539,7 +539,7 @@ def _check_outputs(
             continue
         if _same(adapter.column_values(result, column), values):
             continue
-        # a column the adapter reads back differently than it was given is unchanged when the result matches that
+        # unchanged if the result matches the adapter's own readback of the input
         if readback is None:
             readback = adapter.from_typed(data)
         if not _same(adapter.column_values(result, column), adapter.column_values(readback, column)):
@@ -708,7 +708,7 @@ def _check_zero_rows(
             return frames
 
         def rerun_frame() -> Any:
-            """The zero-row run fed the with-rows type of each adapter-reframed input; None if none or it raised."""
+            """Zero-row run fed the with-rows types of reframed inputs; None if there are none or it raised."""
             nonlocal rerun
             if rerun is None:
                 extra = _reframed_arrow_types(adapter, data, *framed())

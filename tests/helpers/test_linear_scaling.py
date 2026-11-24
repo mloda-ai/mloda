@@ -76,3 +76,20 @@ def test_one_noisy_run_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
         return text
 
     assert assert_runs_linearly(operation, _build, 4000, "fake op") == _build(4000)
+
+
+def test_long_encoded_head_cuts_linearly(monkeypatch: pytest.MonkeyPatch) -> None:
+    """A long encoded head must be cut in linear time, not quadratic.
+
+    The fake clock makes the timing deterministic so the test is not flaky on
+    shared CI runners: a linear cut advances the clock proportionally to the
+    input length, while a quadratic cut would advance it quadratically.
+    """
+    advance = _fake_clock(monkeypatch)
+
+    def operation(text: str) -> str:
+        advance(len(text) * 1e-5)
+        return text[: len(text) // 2]
+
+    expected = _build(4000)[: 4000 // 2]
+    assert assert_runs_linearly(operation, _build, 4000, "long encoded head cut") == expected

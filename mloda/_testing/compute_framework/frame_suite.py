@@ -3,7 +3,9 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
+from datetime import datetime, timedelta
 from typing import Any, ClassVar
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -298,3 +300,29 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         assert result is not None
         assert self.column_values(adapter, result, "A") == values
         assert self.column_values(adapter, result, "a") == self.column_values(adapter, appendable, "a")
+
+    def test_append_aware_column_keeps_instants_and_zone(
+        self, adapter: FrameworkAdapter, framework_instance: Any
+    ) -> None:
+        """A non-UTC aware column with None keeps instants and zone, or raises naming the column and zone."""
+        appendable = self._appendable(adapter)
+        zone = ZoneInfo("America/New_York")
+        start = datetime(2023, 3, 11, 12, 0, tzinfo=zone)
+        values = [None if i % 2 else start + timedelta(days=i) for i in range(self.row_count(adapter, appendable))]
+
+        try:
+            result = framework_instance._append_columns(appendable, {"zoned": values})
+        except ValueError as error:
+            assert "zoned" in str(error)
+            assert "America/New_York" in str(error)
+            return
+
+        assert result is not None
+        got = self.column_values(adapter, result, "zoned")
+        assert len(got) == len(values)
+        for read, want in zip(got, values):
+            if want is None:
+                assert read is None
+                continue
+            assert read == want
+            assert read.utcoffset() == want.utcoffset()

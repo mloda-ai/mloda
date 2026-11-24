@@ -52,7 +52,7 @@ def arrow_append_columns(data: Any, columns: dict[str, Any]) -> Any | None:
     if any(len(values) != data.num_rows for values in columns.values()):
         return None
     for name, values in columns.items():
-        arrow_values = values if isinstance(values, (pa.Array, pa.ChunkedArray)) else arrow_array(values)
+        arrow_values = values if isinstance(values, (pa.Array, pa.ChunkedArray)) else arrow_array(values, column=name)
         data = data.append_column(name, arrow_values)
     return data
 

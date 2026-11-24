@@ -8,6 +8,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     ensure_distinct_identifiers,
@@ -91,17 +92,15 @@ def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
     return pa.string()
 
 
-def _infer_arrow_type_from_values(values: list[Any]) -> pa.DataType:
+def _infer_arrow_type_from_values(values: list[Any], column: str | None = None) -> pa.DataType:
     non_null_values = [value for value in values if value is not None]
     if not non_null_values:
         return pa.string()
     if all(isinstance(value, bool) for value in non_null_values):
         return pa.bool_()
     if all(isinstance(value, datetime.datetime) for value in non_null_values):
-        first = non_null_values[0]
-        if all(value.tzinfo is not None for value in non_null_values):
-            return pa.timestamp("us", tz=pa.lib.tzinfo_to_string(first.tzinfo))
-        return pa.timestamp("us")
+        zone = aware_zone(non_null_values, column)
+        return pa.timestamp("us") if zone is None else pa.timestamp("us", tz=zone)
     if all(isinstance(value, datetime.date) and not isinstance(value, datetime.datetime) for value in non_null_values):
         return pa.date32()
     if all(isinstance(value, (bytes, bytearray)) for value in non_null_values):
@@ -299,6 +298,7 @@ class SqliteRelation(SqlBaseRelation):
 
     def _types_with_inferred_unknown_hints(self, type_hints: list[pa.DataType | None]) -> list[pa.DataType]:
         unknown_indexes = [idx for idx, arrow_type in enumerate(type_hints) if arrow_type is None]
+        names = self.columns
         values_by_index: dict[int, list[Any]] = {idx: [] for idx in unknown_indexes}
         cursor = self._connection.execute(f"SELECT * FROM {quote_ident(self._table_name)}")  # nosec
         for row in cursor.fetchall():
@@ -309,11 +309,11 @@ class SqliteRelation(SqlBaseRelation):
         resolved_hints = list(type_hints)
         for idx in unknown_indexes:
             if any(value is not None for value in values_by_index[idx]):
-                resolved_hints[idx] = _infer_arrow_type_from_values(values_by_index[idx])
+                resolved_hints[idx] = _infer_arrow_type_from_values(values_by_index[idx], names[idx])
                 continue
             if placeholder_rows is None:
                 placeholder_rows = self._placeholder_rows()
-            resolved_hints[idx] = _infer_arrow_type_from_values([row[idx] for row in placeholder_rows])
+            resolved_hints[idx] = _infer_arrow_type_from_values([row[idx] for row in placeholder_rows], names[idx])
         self._cached_types = resolved_hints
         return [arrow_type for arrow_type in resolved_hints if arrow_type is not None]
 
@@ -727,7 +727,9 @@ class SqliteRelation(SqlBaseRelation):
         type_hints = self._types_for_current_columns()
         arrays = []
         for idx, column in enumerate(cols):
-            arrow_type = type_hints[idx] if type_hints is not None else _infer_arrow_type_from_values(col_data[column])
+            arrow_type = (
+                type_hints[idx] if type_hints is not None else _infer_arrow_type_from_values(col_data[column], column)
+            )
             arrays.append(_build_arrow_column(column, col_data[column], arrow_type))
         return pa.table(dict(zip(cols, arrays, strict=True)))
 
@@ -772,6 +774,7 @@ class SqliteRelation(SqlBaseRelation):
             raise ValueError("Cannot create relation from empty dictionary")
         ensure_distinct_identifiers(cols, "from_dict")
 
+        types = [_infer_arrow_type_from_values(data[column], column) for column in cols]
         sqlite_types = {column: _infer_sqlite_type_from_values(data[column]) for column in cols}
         col_defs = ", ".join(f"{quote_ident(c)} {sqlite_types[c]}" for c in cols)
         connection.execute(f"CREATE TEMP TABLE {quote_ident(table_name)} ({col_defs})")
@@ -788,5 +791,4 @@ class SqliteRelation(SqlBaseRelation):
                 rows.append(row)
             connection.executemany(insert_sql, rows)
 
-        types = [_infer_arrow_type_from_values(data[column]) for column in cols]
         return cls(connection, table_name, _types=types)

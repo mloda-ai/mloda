@@ -32,6 +32,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from tests.helpers.time_zones import unnameable_zone_values
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 
 NY = ZoneInfo("America/New_York")
@@ -119,6 +120,87 @@ class TestArrowBuildUnchanged:
         assert got.to_pylist() == want.to_pylist()
 
 
+_PLUS_0530 = timezone(timedelta(hours=5, minutes=30))
+_NAIVE = datetime(2023, 3, 11, 12, 0)
+_UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
+
+
+@pytest.mark.parametrize(
+    "values, expected",
+    [
+        pytest.param([None, NOON_NY, None], "America/New_York", id="ny"),
+        pytest.param([datetime(2023, 3, 11, tzinfo=_PLUS_0530)], "+05:30", id="fixed_offset"),
+        pytest.param([_UTC_NOON, None], "UTC", id="utc"),
+        pytest.param(
+            [
+                datetime(2023, 1, 1, tzinfo=timezone(timedelta(hours=1), "CET")),
+                datetime(2023, 1, 2, tzinfo=timezone(timedelta(hours=1))),
+            ],
+            "+01:00",
+            id="named_and_unnamed_offset_are_one_zone",
+        ),
+        pytest.param(
+            [
+                datetime(2023, 1, 1, tzinfo=ZoneInfo("Europe/Berlin")),
+                datetime(2023, 7, 1, tzinfo=ZoneInfo("Europe/Berlin")),
+            ],
+            "Europe/Berlin",
+            id="winter_and_summer_one_zone",
+        ),
+        pytest.param([_UTC_NOON, _NAIVE], None, id="mixed_aware_naive"),
+        pytest.param([_NAIVE, _NAIVE], None, id="naive"),
+        pytest.param([None, None], None, id="all_none"),
+        pytest.param([], None, id="empty"),
+        pytest.param([1, 2], None, id="ints"),
+    ],
+)
+def test_aware_zone(values: list[Any], expected: str | None) -> None:
+    assert _builders().aware_zone(values) == expected
+
+
+@pytest.mark.parametrize(
+    "values, zones",
+    [
+        pytest.param(
+            [NOON_NY, datetime(2023, 3, 11, tzinfo=_PLUS_0530)], ["America/New_York", "+05:30"], id="ny_kolkata"
+        ),
+        pytest.param(
+            [
+                datetime(2023, 1, 1, tzinfo=timezone(timedelta(hours=1), "CET")),
+                datetime(2023, 7, 1, tzinfo=timezone(timedelta(hours=2), "CEST")),
+            ],
+            ["+01:00", "+02:00"],
+            id="cet_cest_fixed_offsets",
+        ),
+        pytest.param(
+            [_UTC_NOON, datetime(2023, 3, 11, 12, 0, tzinfo=ZoneInfo("Etc/UTC"))],
+            ["UTC", "Etc/UTC"],
+            id="utc_and_etc_utc",
+        ),
+    ],
+)
+def test_aware_zone_rejects_mixed_zones(values: list[Any], zones: list[str]) -> None:
+    with pytest.raises(ValueError) as named:
+        _builders().aware_zone(values, "zoned_col")
+    for text in ["zoned_col", *zones]:
+        assert text in str(named.value)
+    with pytest.raises(ValueError) as unnamed:
+        _builders().aware_zone(values)
+    assert "zoned_col" not in str(unnamed.value)
+    assert "column" not in str(unnamed.value)
+    for zone in zones:
+        assert zone in str(unnamed.value)
+
+
+@pytest.mark.parametrize("kind", ["keyless", "custom"])
+def test_aware_zone_rejects_unnameable_zone(kind: str) -> None:
+    values, texts = unnameable_zone_values(kind)
+    with pytest.raises(ValueError) as named:
+        _builders().aware_zone(values, "zoned_col")
+    for text in ["zoned_col", *texts]:
+        assert text in str(named.value)
+
+
 def _arrow_of(result: Any) -> pa.Table:
     return result if isinstance(result, pa.Table) else result.to_arrow_table()
 
@@ -190,11 +272,35 @@ class TestEntryPointsKeepNonUtcInstants:
         assert field_type.tz == "America/New_York"
         assert _utc(table.column("t").to_pylist()) == _utc([NOON_NY, LATER_NY])
 
-    def test_value_set_keeps_instants_and_zone(self) -> None:
+    @pytest.mark.parametrize(
+        "values",
+        [[NOON_NY, LATER_NY], [NOON_NY.astimezone(KOLKATA), LATER_NY], [NOON_NY.astimezone(KOLKATA), None, LATER_NY]],
+        ids=["same_zone", "kolkata_and_ny", "kolkata_none_ny"],
+    )
+    def test_value_set_keeps_instants_and_zone(self, values: list[Any]) -> None:
         column = pa.array([NOON_NY.astimezone(UTC)], type=pa.timestamp("us", tz="America/New_York"))
-        result = value_set(column, [NOON_NY, LATER_NY])
+        result = value_set(column, values)
         assert result.type == pa.timestamp("us", tz="America/New_York")
-        assert _utc(result.to_pylist()) == _utc([NOON_NY, LATER_NY])
+        assert _utc(result.to_pylist()) == _utc(values)
+
+    def test_value_set_naive_values_on_aware_column_stay_naive(self) -> None:
+        column = pa.array([NOON_NY.astimezone(UTC)], type=pa.timestamp("us", tz="America/New_York"))
+        assert value_set(column, [_NAIVE]).type == pa.timestamp("us")
+
+
+@ENV_VALUES
+@pytest.mark.usefixtures("ignore_timezone_env")
+class TestEntryPointsRejectUnnameableZones:
+    @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom"])
+    @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_dict_build_raises_naming_column_and_zone(
+        self, build: Callable[[dict[str, list[Any]]], Any], kind: str
+    ) -> None:
+        values, texts = unnameable_zone_values(kind)
+        with pytest.raises(ValueError) as error:
+            build({"zoned": values})
+        for text in ["zoned", *texts]:
+            assert text in str(error.value)
 
 
 _NY_TYPE = pa.timestamp("us", tz="America/New_York")
@@ -224,16 +330,22 @@ def _missing_value_grouped_ffill(tmp_path: Path) -> tuple[pa.Array, list[datetim
     return column, [NOON_NY, NOON_NY, LATER_NY, LATER_NY], "America/New_York"
 
 
-def _sqlite_produce(tmp_path: Path, feature: Feature) -> pa.Array:
+def _sqlite_produce(tmp_path: Path, feature: Feature, zones: tuple[Any, ...] = (NY,)) -> pa.Array:
     values = [NOON_NY, None, LATER_NY]
     path = tmp_path / "zoned.db"
     write_sqlite(path, {"t": {"c": [None if v is None else v.isoformat() for v in values]}})
     feature_set = FeatureSet()
     feature_set.add(feature)
     with contextlib.closing(SqliteFG.connect({"sqlite": str(path)})) as connection:
-        connection.row_factory = lambda _cursor, row: tuple(
-            datetime.fromisoformat(v).astimezone(NY) if isinstance(v, str) else v for v in row
-        )
+        reads = iter(range(len(values)))
+
+        def to_zone(_cursor: Any, row: tuple[Any, ...]) -> tuple[Any, ...]:
+            return tuple(
+                datetime.fromisoformat(v).astimezone(zones[next(reads) % len(zones)]) if isinstance(v, str) else v
+                for v in row
+            )
+
+        connection.row_factory = to_zone
         table = SqliteFG.produce_rows(connection, "t", feature_set)
     return table.column("c")
 
@@ -278,3 +390,10 @@ class TestFeatureGroupBuildsKeepNonUtcInstants:
         assert column.type.tz == expected_zone
         got = column.to_pylist()
         assert got == expected_values if expected_zone is None else _utc(got) == _utc(expected_values)
+
+
+def test_sqlite_produce_rows_rejects_mixed_zones(tmp_path: Path) -> None:
+    with pytest.raises(ValueError) as error:
+        _sqlite_produce(tmp_path, Feature.not_typed("c"), zones=(NY, KOLKATA))
+    for text in ["c", "America/New_York", "+05:30"]:
+        assert text in str(error.value)

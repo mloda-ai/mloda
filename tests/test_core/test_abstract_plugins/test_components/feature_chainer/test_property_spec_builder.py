@@ -961,3 +961,24 @@ class TestPropertySpecGroupOnly:
             pass
 
         assert group_only_keys(_Bare) == {}
+
+    def test_group_scoped_keys_are_the_context_false_specs_of_the_mapping(self) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import group_scoped_keys
+
+        scoped = property_spec("g", context=False, default="a")
+
+        class _Group(FeatureGroup):
+            PROPERTY_MAPPING = {
+                "gsspec_scoped": scoped,
+                "gsspec_context": property_spec("c", context=True, default="x"),
+            }
+
+        assert group_scoped_keys(_Group) == {"gsspec_scoped": scoped}
+
+    def test_group_scoped_keys_of_a_group_without_a_mapping_are_empty(self) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import group_scoped_keys
+
+        class _Bare(FeatureGroup):
+            pass
+
+        assert group_scoped_keys(_Bare) == {}

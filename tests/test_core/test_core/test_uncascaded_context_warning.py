@@ -237,7 +237,18 @@ class UncascadedCtxPartialDelivery(UncascadedCtxConsumer):
         }
 
 
+TWO_ROOTS = "uncascaded_ctx_two_roots"
+
+
+class UncascadedCtxTwoRoots(UncascadedCtxConsumer):
+    INPUTS = {TWO_ROOTS: GROUP_ROOT}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any]:
+        return {Feature(GROUP_ROOT), Feature(UNUSED_ROOT)}
+
+
 GROUPS: set[type[FeatureGroup]] = {
+    UncascadedCtxTwoRoots,
     UncascadedCtxPlainRoot,
     UncascadedCtxGroupRoot,
     UncascadedCtxContextRoot,
@@ -533,6 +544,12 @@ def test_delivery_to_one_branch_does_not_hide_the_other(requested: str, caplog: 
     missing = UNUSED_ROOT if requested == PARTIAL_DELIVERY else DEFAULT_ROOT
     assert _feature(engine, missing).options.get(KEY) == (None if missing == UNUSED_ROOT else DECLARED_DEFAULT)
     _assert_warning(caplog, [requested], [joined_source])
+
+
+def test_two_declaring_input_groups_are_named_in_one_warning(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        _prepare([Feature(TWO_ROOTS, Options(context={KEY: PRIVATE_VALUE}))], UncascadedCtxUnusedRoot)
+    _assert_warning(caplog, [TWO_ROOTS], [UncascadedCtxGroupRoot, UncascadedCtxUnusedRoot])
 
 
 @pytest.mark.parametrize("requested", [DEFAULT_OVERRIDE, INHERITED_OVERRIDE])

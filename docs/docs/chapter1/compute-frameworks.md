@@ -114,7 +114,7 @@ result[0]
 ```
 In this case, the feature group ExampleB will only run on the PyArrowTable framework, while the input feature group uses PandasDataFrame, ensuring that the framework correctly handles the conversion between these technologies.
 
-Build Arrow arrays from Python datetimes with `arrow_array` from `mloda.user.pyarrow` (plain `pa.array` stores an aware datetime's wall time as UTC when `PYARROW_IGNORE_TIMEZONE=1` is set).
+Build Arrow arrays and tables from Python values with `arrow_array` and `arrow_table` from `mloda.user.pyarrow` (plain `pa.array` stores an aware datetime's wall time as UTC when `PYARROW_IGNORE_TIMEZONE=1` is set).
 
 
 #### 5. Available Compute Frameworks

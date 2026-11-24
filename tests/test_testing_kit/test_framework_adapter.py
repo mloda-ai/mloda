@@ -410,6 +410,20 @@ def test_to_arrow_table_keeps_instants_and_zone(
         assert got.utcoffset() == want.utcoffset()
 
 
+@pytest.mark.parametrize("kind", ["mixed", "keyless", "custom"])
+def test_to_arrow_table_rejects_mixed_and_unnameable_zones_naming_column(kind: str) -> None:
+    pytest.importorskip("pyarrow")
+    from mloda._testing.framework_adapter import to_arrow_table
+    from tests.helpers.time_zones import bad_zone_values
+
+    values, texts = bad_zone_values(kind)
+    with pytest.raises(ValueError) as error:
+        to_arrow_table(TypedTestData({"zoned": (DataType.TIMESTAMP_MICROS_TZ, values)}))
+
+    for text in ["zoned", *texts]:
+        assert text in str(error.value)
+
+
 def test_to_arrow_table_zero_row_timezone_is_utc() -> None:
     pa = pytest.importorskip("pyarrow")
     from mloda._testing.framework_adapter import to_arrow_table

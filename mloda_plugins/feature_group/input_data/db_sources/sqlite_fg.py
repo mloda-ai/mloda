@@ -185,7 +185,7 @@ class SqliteFG(ReadDBFG):
                 arrow_type = getattr(pa, arrow_types[name])()
             else:
                 arrow_type = None
-            array = arrow_array(values, type=arrow_type)
+            array = arrow_array(values, type=arrow_type, column=name)
             arrays.append(array)
         return pa.Table.from_arrays(arrays, names=column_names)
 

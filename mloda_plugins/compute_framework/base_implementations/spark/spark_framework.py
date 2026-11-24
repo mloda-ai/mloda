@@ -1,6 +1,6 @@
 import logging
 from datetime import datetime
-from collections.abc import Sequence
+from collections.abc import Callable, Sequence
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.provider import BaseMergeEngine
@@ -12,6 +12,7 @@ from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
@@ -28,6 +29,7 @@ try:
         DoubleType,
         BooleanType,
         TimestampType,
+        TimestampNTZType,
     )
     import pyspark.sql.functions as F
     from pyspark.errors import AnalysisException
@@ -44,6 +46,7 @@ except ImportError:
     DoubleType = None
     BooleanType = None
     TimestampType = None
+    TimestampNTZType = None
     F = None
 
 logger = logging.getLogger(__name__)
@@ -52,16 +55,17 @@ _SPARK_MISSING_COLUMN_CONDITION = "UNRESOLVED_COLUMN"
 _SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
 
 
-def _aware_zone(values: Sequence[Any]) -> str | None:
-    """Return the zone name when every non-None value is a tz-aware datetime, else None."""
-    first = next((v for v in values if v is not None), None)
-    if not (isinstance(first, datetime) and first.tzinfo is not None):
-        return None
-    if not all(isinstance(v, datetime) and v.tzinfo is not None for v in values if v is not None):
-        return None
-    import pyarrow as pa
-
-    return str(pa.lib.tzinfo_to_string(first.tzinfo))
+def _column_field(name: str, values: Sequence[Any], infer: Callable[[Any], Any]) -> tuple[Any, str | None]:
+    """Return the StructField and the zone (if aware) for a column."""
+    zone = aware_zone(values, name)
+    present = [v for v in values if v is not None]
+    if zone is not None:
+        return StructField(name, TimestampType(), True), zone
+    if present and all(isinstance(v, datetime) for v in present):
+        if all(v.tzinfo is None for v in present):
+            return StructField(name, TimestampNTZType(), True), None
+        raise ValueError(f"Column {name!r} mixes naive and aware datetimes; make them all naive or all aware.")
+    return StructField(name, infer(present[0] if present else ""), True), None
 
 
 class SparkFramework(ComputeFramework):
@@ -283,15 +287,10 @@ class SparkFramework(ComputeFramework):
             schema_fields = []
             zones: dict[str, str] = {}
             for col_name, col_values in data.items():
-                zone = _aware_zone(col_values)
+                field, zone = _column_field(col_name, col_values, self._infer_spark_type)
+                schema_fields.append(field)
                 if zone:
                     zones[col_name] = zone
-                    schema_fields.append(StructField(col_name, TimestampType(), True))
-                elif col_values:
-                    spark_type = self._infer_spark_type(col_values[0])
-                    schema_fields.append(StructField(col_name, spark_type, True))
-                else:
-                    schema_fields.append(StructField(col_name, StringType(), True))
 
             schema = StructType(schema_fields)
 
@@ -341,14 +340,10 @@ class SparkFramework(ComputeFramework):
         fields = [StructField(rn, IntegerType(), False)]
         zones: dict[str, str] = {}
         for name, column_values in columns.items():
-            zone = _aware_zone(column_values)
+            field, zone = _column_field(name, column_values, self._infer_spark_type)
+            fields.append(field)
             if zone:
                 zones[name] = zone
-                fields.append(StructField(name, TimestampType(), True))
-            else:
-                fields.append(
-                    StructField(name, self._infer_spark_type(column_values[0] if column_values else ""), True)
-                )
         new_data_df = spark.createDataFrame(
             [(i + 1, *(column[i] for column in values)) for i in range(len(values[0]))], StructType(fields)
         )

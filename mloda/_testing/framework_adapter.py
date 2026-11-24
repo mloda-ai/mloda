@@ -69,12 +69,10 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
                 values = _to_utc(values)
             arrays.append(pa.array(values, type=override))
         elif data_type == DataType.TIMESTAMP_MICROS_TZ:
-            if all(v is None for v in values):
-                arrays.append(pa.array(values, type=pa.timestamp("us", tz="UTC")))
-            else:
-                zone = pa.lib.tzinfo_to_string(next(v for v in values if v is not None).tzinfo)
-                utc_values = _to_utc(values)
-                arrays.append(pa.array(utc_values, type=pa.timestamp("us", tz=zone)))
+            from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
+
+            zone = aware_zone(values, name) or "UTC"
+            arrays.append(pa.array(_to_utc(values), type=pa.timestamp("us", tz=zone)))
         elif data_type == DataType.LIST:
             array = pa.array(values)
             if pa.types.is_null(array.type) or (

@@ -33,6 +33,7 @@ from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import JoinType
 import pytest
+from tests.helpers.time_zones import bad_zone_values
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -198,6 +199,68 @@ class TestSparkFrameworkComputeFramework:
 
         self._assert_column(frame, "base", "Asia/Kolkata", base_values)
         self._assert_column(frame, "t", "America/New_York", values)
+
+    @pytest.mark.parametrize("kind", ["mixed", "custom"])
+    @pytest.mark.parametrize("route", ["dict", "append_columns"])
+    def test_aware_column_with_unnameable_zones_raises_naming_column(
+        self, spark_session: Any, route: str, kind: str
+    ) -> None:
+        import pyarrow as pa
+
+        values, texts = bad_zone_values(kind)
+        with SparkAdapter() as adapter:
+            framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+            framework.set_framework_connection_object(adapter.connection)
+            with pytest.raises(ValueError) as error:
+                if route == "dict":
+                    framework.transform({"id": [1, 2], "zoned": values}, ["id", "zoned"])
+                else:
+                    base = adapter.from_arrow(pa.table({"id": pa.array([1, 2], pa.int64())}))
+                    framework._append_columns(base, {"zoned": values})
+        for text in ["zoned", *texts]:
+            assert text in str(error.value)
+
+    @pytest.mark.parametrize("route", ["dict", "append_columns", "positional"])
+    def test_naive_column_is_timestamp_ntz_and_keeps_wall_times(
+        self, spark_session: Any, spark_non_utc_timezone: Any, route: str
+    ) -> None:
+        import pyarrow as pa
+        from pyspark.sql.types import TimestampNTZType
+
+        values = [None, datetime(2023, 3, 12, 6, 30), datetime(2023, 3, 12, 7, 30)]
+        with SparkAdapter() as adapter:
+            framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+            framework.set_framework_connection_object(adapter.connection)
+            if route == "dict":
+                frame = framework.transform({"id": [1, 2, 3], "t": values}, ["id", "t"])
+            else:
+                base = adapter.from_arrow(pa.table({"id": pa.array([1, 2, 3], pa.int64())}))
+                if route == "append_columns":
+                    frame = framework._append_columns(base, {"t": values})
+                else:
+                    framework.data = framework._pinned_frame = base
+                    frame = framework.transform(values, ["t"])
+
+            assert isinstance(frame.schema["t"].dataType, TimestampNTZType)
+            rows = {row["id"]: row["t"] for row in frame.collect()}
+        assert [rows[i] for i in (1, 2, 3)] == values
+
+    @pytest.mark.parametrize("route", ["dict", "append_columns"])
+    def test_mixed_naive_and_aware_column_raises_naming_column(self, spark_session: Any, route: str) -> None:
+        import pyarrow as pa
+
+        values = [datetime(2023, 3, 12, 6, 30), _NY_START.astimezone(_NY)]
+        with SparkAdapter() as adapter:
+            framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+            framework.set_framework_connection_object(adapter.connection)
+            with pytest.raises(ValueError) as error:
+                if route == "dict":
+                    framework.transform({"id": [1, 2], "t": values}, ["id", "t"])
+                else:
+                    base = adapter.from_arrow(pa.table({"id": pa.array([1, 2], pa.int64())}))
+                    framework._append_columns(base, {"t": values})
+        for text in ["t", "naive", "aware"]:
+            assert text in str(error.value)
 
     @staticmethod
     def _assert_column(frame: Any, name: str, zone: str, expected: list[Any]) -> None:
@@ -728,23 +791,37 @@ def test_exact_column_data_type_jvm_free() -> None:
     assert framework._exact_column_data_type(frame, "nope") is None
 
 
-_NAIVE = datetime(2023, 3, 12, 6, 30)
+@pytest.mark.parametrize(
+    ("values", "type_name", "zone"),
+    [
+        pytest.param([None, 1, 2], "IntegerType", None, id="int_leading_none"),
+        pytest.param([None, datetime(2023, 3, 12, 6, 30)] * 2, "TimestampNTZType", None, id="naive_leading_none"),
+    ],
+)
+def test_column_field_types_jvm_free(values: list[Any], type_name: str, zone: str | None) -> None:
+    types = _spark_types()
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _column_field
+
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    field, got_zone = _column_field("n", values, framework._infer_spark_type)
+    assert isinstance(field.dataType, getattr(types, type_name))
+    assert got_zone == zone
 
 
 @pytest.mark.parametrize(
-    "values, expected",
+    ("values", "words"),
     [
-        pytest.param([None, _NY_START.astimezone(_NY), None], "America/New_York", id="ny"),
-        pytest.param([_NY_START.astimezone(_PLUS_0530)], "+05:30", id="fixed_offset"),
-        pytest.param([_NY_START, None], "UTC", id="utc"),
-        pytest.param([_NY_START, _NAIVE], None, id="mixed_aware_naive"),
-        pytest.param([_NAIVE, _NAIVE], None, id="naive"),
-        pytest.param([None, None], None, id="all_none"),
-        pytest.param([], None, id="empty"),
-        pytest.param([1, 2], None, id="ints"),
+        pytest.param(
+            [datetime(2023, 3, 12, 6, 30), _NY_START.astimezone(_NY)], ["naive", "aware"], id="naive_and_aware"
+        ),
+        pytest.param([_NY_START.astimezone(_NY), _NY_START.astimezone(_PLUS_0530)], [], id="mixed_zones"),
     ],
 )
-def test_aware_zone(values: list[Any], expected: str | None) -> None:
-    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _aware_zone
+def test_column_field_rejects_mixed_columns_naming_column_jvm_free(values: list[Any], words: list[str]) -> None:
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _column_field
 
-    assert _aware_zone(values) == expected
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    with pytest.raises(ValueError) as error:
+        _column_field("n", values, framework._infer_spark_type)
+    for text in ["n", *words]:
+        assert text in str(error.value)

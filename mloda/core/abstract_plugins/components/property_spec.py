@@ -7,6 +7,7 @@ its ``strict=`` keyword maps to the ``strict_validation=`` field.
 
 from __future__ import annotations
 
+import math
 import numbers
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
@@ -33,6 +34,16 @@ def is_positive_int(value: Any) -> bool:
     if isinstance(value, numbers.Integral):
         return int(value) > 0
     return isinstance(value, str) and value.isdecimal() and int(value) > 0
+
+
+def is_non_negative_number(value: Any) -> bool:
+    """Element validator for finite real numbers >= 0 (weights); refuses bool, NaN, infinities and strings.
+
+    Unlike ``is_positive_int`` a string is refused, so a name-bound key needs ``name_converter=float``.
+    """
+    if isinstance(value, bool) or not isinstance(value, numbers.Real):
+        return False
+    return bool(not value < 0 and value < math.inf)
 
 
 class _NoDefault:
@@ -103,6 +114,7 @@ class PropertySpec:
     runtime: bool = False
     # A group option a caller may not move to the context; refused at plan time.
     group_only: bool = False
+    # One value only: a list, tuple, set, frozenset or mapping is refused.
     scalar: bool = False
 
     def __post_init__(self) -> None:
@@ -213,7 +225,7 @@ class PropertySpec:
 
     def _check_declared_default(self, prefix: str) -> None:
         """A declared default must satisfy scalar shape and, when strict, the key's value space."""
-        if self.scalar and isinstance(self.default, (list, tuple, set, frozenset, Mapping)):
+        if scalar_refuses(self, self.default):
             raise ValueError(f"{prefix}: scalar=True requires a scalar default.")
 
         if is_no_default(self.default) or self.default is None or not self.strict_validation:
@@ -241,6 +253,11 @@ class PropertySpec:
             is_member = False
         if not is_member:
             raise ValueError(f"{prefix}: default {self.default!r} is not within the declared allowed_values.")
+
+
+def scalar_refuses(spec: PropertySpec, value: Any) -> bool:
+    """Does a scalar-only spec refuse this container value?"""
+    return spec.scalar and isinstance(value, (list, tuple, set, frozenset, Mapping))
 
 
 def element_admitted(spec: PropertySpec, element: Any, on_raise: Callable[[Exception], None]) -> bool:

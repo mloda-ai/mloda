@@ -20,7 +20,12 @@ from mloda.core.abstract_plugins.components.match_rejection import (
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.feature_chainer.parsed_feature_name import NameResolution, ParsedFeatureName
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import (
+    PropertySpec,
+    element_admitted,
+    is_no_default,
+    scalar_refuses,
+)
 from mloda.core.abstract_plugins.components.declaration_surface import validate_property_spec
 from mloda.core.abstract_plugins.components.utils import (
     contained_raise_log_level,
@@ -307,6 +312,11 @@ class FeatureChainParser:
     def _process_found_property_value(
         cls, found_property_value: Any, property_value: Any, property_name: str, original_property_config: PropertySpec
     ) -> list[Any]:
+        if scalar_refuses(original_property_config, found_property_value):
+            # Contained: a container for a scalar key is this candidate's own verdict, recorded as its reason.
+            raise PropertyValueRejection(
+                f"Option '{property_name}' must be a scalar, got a {type(found_property_value).__name__}"
+            )
         collected_property_value: list[Any] = []
         for found_property_val in cls._unpack_property_value(found_property_value):
             # Use unified validation function

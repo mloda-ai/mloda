@@ -7,11 +7,13 @@ and these tests pin that contract for the predicate itself and for WINDOW_SIZE, 
 and K_VALUE.
 """
 
+from decimal import Decimal
+from fractions import Fraction
 from typing import Any
 
 import pytest
 
-from mloda.provider import is_positive_int
+from mloda.provider import is_non_negative_number, is_positive_int
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda_plugins.feature_group.experimental.dimensionality_reduction.base import (
     DimensionalityReductionFeatureGroup,
@@ -71,6 +73,41 @@ class TestIsPositiveInt:
         """'٣' is a genuine decimal digit that int() parses to 3, so it is accepted."""
         assert int("٣") == 3
         assert is_positive_int("٣") is True
+
+
+NN_ACCEPTED: list[Any] = [0, 0.0, -0.0, 1, 2.5, 10**400, Fraction(1, 3)]
+NN_REJECTED: list[Any] = [
+    True,
+    False,
+    -1,
+    -0.5,
+    float("nan"),
+    float("inf"),
+    float("-inf"),
+    "1",
+    b"1",
+    None,
+    [],
+    Decimal("1"),
+]
+
+
+class TestIsNonNegativeNumber:
+    @pytest.mark.parametrize("value", NN_ACCEPTED)
+    def test_accepts_non_negative_reals(self, value: Any) -> None:
+        assert is_non_negative_number(value) is True
+
+    @pytest.mark.parametrize("value", NN_REJECTED)
+    def test_rejects_everything_else(self, value: Any) -> None:
+        assert is_non_negative_number(value) is False
+
+    @pytest.mark.parametrize("value", [np.int64(3), np.float64(0.5)])
+    def test_accepts_numpy_numbers(self, value: Any) -> None:
+        assert is_non_negative_number(value) is True
+
+    @pytest.mark.parametrize("value", [np.bool_(True), np.float64("nan")])
+    def test_rejects_numpy_bool_and_nan(self, value: Any) -> None:
+        assert is_non_negative_number(value) is False
 
 
 class TestPluginKeysShareThePredicate:

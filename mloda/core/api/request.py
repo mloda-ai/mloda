@@ -70,7 +70,12 @@ from mloda.core.abstract_plugins.components.credential_handle import validate_cr
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
 from mloda.core.abstract_plugins.components.options import Options
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec, element_admitted, runtime_parameter_keys
+from mloda.core.abstract_plugins.components.property_spec import (
+    PropertySpec,
+    element_admitted,
+    runtime_parameter_keys,
+    scalar_refuses,
+)
 from mloda.core.abstract_plugins.components.read_only_dict import _frozen_dict
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -399,9 +404,9 @@ class mlodaAPI:
         return cached
 
     @staticmethod
-    def _refuse_run_value(key: str, value: Any, group: type[FeatureGroup]) -> NoReturn:
+    def _refuse_run_value(key: str, value: Any, group: type[FeatureGroup], reason: str = "") -> NoReturn:
         shown = "***" if _SECRET_KEY.fullmatch(key) else safe_value_text(value)
-        raise ValueError(f"run(parameters=...) value {shown} for '{key}' is rejected by {group.__name__}.")
+        raise ValueError(f"run(parameters=...) value {shown} for '{key}' is rejected by {group.__name__}{reason}.")
 
     def _run_parameters(self, parameters: Mapping[str, Any] | None) -> Mapping[str, Any]:
         """Refuse unknown keys and values a declaring group rejects; return one read-only mapping."""
@@ -421,6 +426,8 @@ class mlodaAPI:
             for group, spec in declared[key]:
                 if value is None and not spec.allow_explicit_none:
                     self._refuse_run_value(key, value, group)
+                if scalar_refuses(spec, value):
+                    self._refuse_run_value(key, value, group, f": must be a scalar, got a {type(value).__name__}")
                 if spec.strict_validation and value is not None:
                     for element in FeatureChainParser._unpack_property_value(value):
                         if not element_admitted(spec, element, _log_run_value_raise(key)):

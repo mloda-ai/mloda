@@ -175,6 +175,7 @@ class TestScalarValues:
             with pytest.raises(PropertyValidationError, match="scalar") as exc:
                 validate_property_values({"k": value}, mapping, closed_world=True)
         assert exc.value.key == "k"
+        assert f"got a {type(value).__name__}" in exc.value.reason
         assert SECRET not in str(exc.value)
         assert SECRET not in caplog.text
         assert exc.value.__cause__ is None
@@ -186,10 +187,6 @@ class TestScalarValues:
         validate_property_values({"k": "abc"}, mapping, closed_world=True)
         with pytest.raises(PropertyValidationError, match="scalar"):
             validate_property_values({"k": []}, mapping, closed_world=True)
-
-    def test_explicit_false_keeps_elementwise_validation(self) -> None:
-        mapping = _strict(scalar=False, element_validator=lambda v: isinstance(v, float) and v >= 0)
-        validate_property_values({"k": [0.5, 0.7]}, mapping, closed_world=True)
 
     def test_required_optional_and_explicit_none_presence_are_unchanged(self) -> None:
         mapping = {

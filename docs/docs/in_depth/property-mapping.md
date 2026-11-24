@@ -45,7 +45,7 @@ PROPERTY_MAPPING = {
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
 | `forward_to_inputs` | `bool` | `True` | `False`: input features do not inherit the key unless an explicit `forward_group` allowlist names it. Context is unaffected. |
 | `group_only` | `bool` | `False` | `True`: the key is a group option and a caller placing it in `Options(context=...)` is refused at plan time. Requires `context=False`. |
-| `scalar` | `bool` | `False` | `validate_property_values` rejects container values for this key, independently of `strict_validation`. Container defaults are refused at construction. |
+| `scalar` | `bool` | `False` | `True`: one value only; a list, tuple, set, frozenset or mapping (empty ones too) is refused at match time, by `run(parameters=...)` and by `validate_property_values`, with or without `strict_validation`. A container default is refused at construction. |
 
 A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `group_only=True` key is refused in the context the same way. A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
 
@@ -150,7 +150,7 @@ and `reason`) on the first failure.
 
 - It checks required presence, `required_when`, scalar shape, and strict values.
 - `required_when` runs only when the key is absent.
-- `scalar=True` rejects lists, tuples, sets, frozensets and any `Mapping`, including empty containers, before element validation even when `strict_validation=False`. Strings and bytes remain scalars. Required presence and `allow_explicit_none` still apply. The default `scalar=False` keeps element-wise validation.
+- `scalar=True` rejects containers (see the field table), even without `strict_validation`.
 - Ignored: `match_guard`, `deferred_binding`, and `context`.
 - `closed_world=True` rejects undeclared keys; `False` ignores them.
 - Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
@@ -186,7 +186,9 @@ WINDOW_SIZE: PropertySpec(
 
 It accepts positive Python ints, numpy integers and decimal strings, and rejects `bool`,
 zero, negatives, and non-integers. Shipped plugins (`window_size`, `horizon`, `k_value`,
-`dimension`) all use it, so the value space stays consistent across feature groups. If a key
+`dimension`) all use it, so the value space stays consistent across feature groups.
+For finite floats such as weights, `is_non_negative_number` accepts real numbers `>= 0` and refuses
+`bool`, NaN, infinities and strings (a name-bound key needs `name_converter=float`). If a key
 allows an extra sentinel, compose rather than fork it, as clustering does for `"auto"`:
 
 ```python
@@ -205,7 +207,7 @@ The two callables differ on both axes, which is what their names say:
   the user instead of failing silently. Declaring `expected` reports the rejection too, even on a
   non-strict spec, with a message naming what the guard accepts instead of the generic strict text.
 
-A key that must reject a collection outright uses a `match_guard` on the raw value (as `HANDLE_SPEC` does).
+A key that must reject a collection outright sets `scalar=True`. A runtime key cannot carry a `match_guard`, and `validate_property_values` ignores guards.
 
 Both run on both match paths, so declaring both on one spec is about **what** is judged, not
 about where: `element_validator` judges each element and produces the message, while
@@ -237,6 +239,7 @@ Options(context={"ops": frozenset({"a", "b"})})
 - An **empty** container is *present* and vacuously valid: it has no elements, so no
   validator runs, and it still satisfies the required-presence check. This is distinct from
   the option being absent.
+- Exception: a `scalar=True` key refuses every container, empty ones included.
 
 `match_guard` is unaffected by any of this: it always receives the raw value with its
 original container type.
@@ -710,6 +713,7 @@ if it really is a whole-value check.
 | A plain group enforces required keys, strict values and `match_guard`, also through an override | `tests/.../feature_chainer/test_name_path_required_presence.py`, `test_strict_validation_returns_false.py`, `test_required_when_enforced_on_override.py` |
 | A plain group's rejection reasons reach the failure report | `tests/test_core/test_prepare/test_first_pass_rejection_recording.py` |
 | Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
+| `scalar=True` refuses containers at match time, in `run(parameters=...)` and in `validate_property_values` | `test_property_mapping_sequence_unpacking.py`, `tests/test_core/test_api/test_prepare_run.py`, `tests/.../test_components/test_validate_property_values.py` |
 | Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
 | Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |
 | A declared option or `in_features` that contradicts an owned name aborts the match, and the env var downgrades it | `tests/test_core/test_abstract_plugins/test_components/test_forwarded_name_mismatch.py` |

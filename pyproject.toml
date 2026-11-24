@@ -80,9 +80,8 @@ nopyarrow_test = [
 ]
 docs = [
     "mkdocs",
-    # Their nbconvert -> beautifulsoup4 -> soupsieve chain has no patched soupsieve below Python 3.11.5.
+    # Its nbconvert -> beautifulsoup4 -> soupsieve chain has no patched soupsieve below Python 3.11.5.
     "mkdocs-jupyter; python_full_version >= '3.11.5'",
-    "notebook; python_full_version >= '3.11.5'",
     "mermaid-py",
     "marimo",
     # Backends the example notebooks execute during the docs build.
@@ -215,7 +214,7 @@ exclude-newer-package = { decorator = "2099-01-01T00:00:00Z" }
 # - fsspec >= 2026.6.0: template injection in ReferenceFileSystem
 # - certifi >= 2026.10.19: bundled emSign root CAs with compromised intermediate CA keys
 # - beautifulsoup4 >= 4.13: makes the lock fail instead of falling back to the 2018 release (which predates
-#   soupsieve) if the docs-extra 3.11.5 markers are lost
+#   soupsieve) if the docs-extra 3.11.5 marker on mkdocs-jupyter is lost
 constraint-dependencies = [
     "urllib3>=2.7.0",
     "idna>=3.15",

@@ -93,7 +93,7 @@ def test_features_differing_only_in_plain_context_share_one_group() -> None:
 
     assert len(groups) == 1, (
         "Plain (non-inherited) context differences must keep features in ONE FeatureSet; "
-        f"only inherited context splits. Got {len(groups)} groups: {groups}"
+        f"only forwarded or declared split keys split. Got {len(groups)} groups: {groups}"
     )
 
 
@@ -183,6 +183,19 @@ def test_plain_value_splits_from_inherited_value_when_key_is_a_split_key() -> No
     assert inherited_acme not in beta_group and plain_acme not in beta_group, (
         "The plain tenant=beta feature must not collapse into the tenant=acme FeatureSet."
     )
+
+
+def test_one_explicit_key_splits_every_feature_in_scope_by_value() -> None:
+    marked = Feature("split_context_feature", Options(context={"top_k": 2}), split_context_keys={"top_k"})
+    same = Feature("same_value", Options(context={"top_k": 2, "metadata": "other"}))
+    different = Feature("different_value", Options(context={"top_k": 3}))
+
+    groups = _group({marked, same, different})
+
+    assert sorted(sorted(str(feature.name) for feature in group) for group in groups.values()) == [
+        ["different_value"],
+        ["same_value", "split_context_feature"],
+    ]
 
 
 def test_none_typed_joins_first_of_two_data_type_only_groups() -> None:

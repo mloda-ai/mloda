@@ -476,9 +476,11 @@ isolated = Feature("knowledge_graph", forward_group=False)
 - Allowlist keys absent from the consumer's group options are skipped silently.
 - `forward_group=False` combined with a non-empty `forward_group_exclude` is
   contradictory and raises a `ValueError`.
-- Merge directives (`forward_group`, `forward_group_exclude`, `inherit_context_keys`)
-  are not part of `Feature` identity, so declare at most one child per upstream feature
-  name in a single `input_features` return; duplicates collapse like link/index.
+- Merge directives (`forward_group`, `forward_group_exclude`, `inherit_context_keys`,
+  `split_context_keys`) are not part of `Feature` identity, so declare at most one child
+  per upstream feature name in a single `input_features` return; duplicates collapse like
+  link/index. Duplicate requests union their `split_context_keys`; within one return, put
+  the marker on the single child you return, as a set drops one of two equal Features.
 
 ### Pulling context with `inherit_context_keys`
 
@@ -501,6 +503,35 @@ whose child value differs raises a `ValueError`; equal values are a no-op. A chi
 that needs its own value for a pushed key opts out of per-level context values with
 `forward_group=False` (only the literal `False` blocks the push; an empty allowlist
 does not).
+
+### Splitting on hand-set context with `split_context_keys`
+
+A consumer can hand a renamed value to its input by setting it in the input's context.
+That forwards nothing, so for a context key the root declares in `PROPERTY_MAPPING` that its
+name does not bind, the engine does not know the key should split. Declare it with
+`split_context_keys`: the keys must already be in the feature's `options.context`
+(otherwise `ValueError`), and the declaration only marks them. Within the feature group's
+scope every feature then splits on the key by value, so a direct request of the same input
+with another value computes separately; equal values still share one call. Duplicate
+requests of a feature union their markers; `Feature` equality is unchanged.
+
+```python
+from mloda.user import Feature, Options
+
+candidates = Feature(
+    "candidates",
+    Options(context={"top_k": 5}),
+    split_context_keys={"top_k"},
+)
+```
+
+The split applies to root inputs and `replaces_rows` groups. A marked input with inputs of
+its own, reached twice with differing values over the same parents, is still rejected;
+use `cascade_context_keys` there. For a `replaces_rows` input, mark every copy: a marker
+on only some copies does not split the others and planning fails. Without the marker, a
+fixed-name root requested directly and also read by a consumer with a different value for a
+declared, name-unbound key shares one call (a group without name patterns treats every
+declared key as name-bound). An undeclared key that differs is already split.
 
 ### Resolution errors from over-forwarding
 

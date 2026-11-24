@@ -777,12 +777,13 @@ class ExecutionPlan:
         return lineage
 
     def _variant_conflict(
-        self, feature_a: Feature, feature_b: Feature
+        self, feature_a: Feature, feature_b: Feature, split_keys: frozenset[Any] | None = None
     ) -> tuple[Feature, Feature, frozenset[Any]] | None:
-        """Two same-name features differing in data type or options, else None."""
+        """Two same-name features differing in data type or scoped option values, else None."""
         if feature_a.name != feature_b.name:
             return None
-        split_keys = feature_a.options.split_context_keys | feature_b.options.split_context_keys
+        if split_keys is None:
+            split_keys = feature_a.options.split_context_keys | feature_b.options.split_context_keys
         option_keys = self._differing_option_keys([feature_a, feature_b], split_keys)
         if feature_a.data_type != feature_b.data_type or option_keys:
             return feature_a, feature_b, option_keys
@@ -822,13 +823,17 @@ class ExecutionPlan:
             memoized = direct_parents_memo.get(feature.uuid)
             if memoized is None:
                 direct = ExecutionPlan.direct_ancestors(feature.uuid, parent_to_children_mapping)
-                # Twin-split root copies upstream also count, so each chain follows its own root copy.
-                twin_roots = {
+                # A root scope's split keys cover plain copies too, regardless of which copy declared them.
+                split_roots = {
                     uuid
                     for uuid in parent_to_children_mapping.get(feature.uuid, ())
                     if nodes[uuid].feature.options.twin_split_keys
+                    or (
+                        not parent_to_children_mapping.get(uuid)
+                        and self._option_split_keys.get(nodes[uuid].feature_group_class)
+                    )
                 }
-                memoized = sorted(uuid for uuid in direct | twin_roots if uuid in producer_index)
+                memoized = sorted(uuid for uuid in direct | split_roots if uuid in producer_index)
                 direct_parents_memo[feature.uuid] = memoized
             return memoized
 
@@ -853,7 +858,8 @@ class ExecutionPlan:
                         or nodes[a].feature_group_class is not nodes[b].feature_group_class
                     ):
                         continue
-                    if self._variant_conflict(nodes[a].feature, nodes[b].feature) is not None:
+                    split_keys = self._option_split_keys.get(nodes[a].feature_group_class)
+                    if self._variant_conflict(nodes[a].feature, nodes[b].feature, split_keys) is not None:
                         read_names.add(str(nodes[a].feature.name))
                         found = True
             return found

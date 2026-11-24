@@ -977,10 +977,11 @@ class Engine:
                         ):
                             continue
                         name_derived = self._name_derived_keys(group_class, name, declared)
+                        explicit = a.options.explicit_split_context_keys | b.options.explicit_split_context_keys
                         keys = sorted(
                             str(k)
                             for k in set(a.options.context) | set(b.options.context)
-                            if str(k) not in name_derived
+                            if (str(k) not in name_derived or k in explicit)
                             and (
                                 (k in a.options.context) != (k in b.options.context)
                                 or not _deep_equal(a.options.context[k], b.options.context[k])
@@ -1273,6 +1274,7 @@ class Engine:
         if declared is not None and existing.uuid in self._declared_options_by_uuid:
             self._warn_on_default_equivalent_merge(host, declared, existing, at_intake=False)
         existing.options.union_own_keys(host.options)
+        existing.options.explicit_split_context_keys |= host.options.explicit_split_context_keys
         existing.absorb_parts(host)
         if not host.link_key_only:
             existing.link_key_only = False
@@ -1421,6 +1423,7 @@ class Engine:
                 merged = set(self.specialized_from.get(existing_feature.uuid, ())) | set(specialized_from)
                 self.specialized_from[existing_feature.uuid] = tuple(sorted(merged, key=_candidate_sort_key))
             existing_feature.options.union_own_keys(feature.options)
+            existing_feature.options.explicit_split_context_keys |= feature.options.explicit_split_context_keys
             existing_feature.absorb_parts(feature)
             if not feature.link_key_only:
                 existing_feature.link_key_only = False

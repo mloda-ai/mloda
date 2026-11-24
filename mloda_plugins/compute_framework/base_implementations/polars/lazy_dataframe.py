@@ -62,10 +62,10 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, pl.LazyFrame):
             return None
-        aware = self._aware_series(columns)
         rows = data.select(pl.len()).collect().item()
         if any(len(values) != rows for values in columns.values()):
             return None
+        aware = self._aware_series(columns)
         appended = data.with_columns(
             [aware[name] if name in aware else pl.Series(name, values) for name, values in columns.items()]
         )

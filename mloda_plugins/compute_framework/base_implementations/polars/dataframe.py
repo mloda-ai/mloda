@@ -21,6 +21,15 @@ try:
 except ImportError:
     pl = None  # type: ignore[assignment]
 
+
+def _polars_zone(zone: str) -> str:
+    """Map a whole-hour "+HH:MM" offset to its Etc/GMT zone (inverted sign); other names pass through."""
+    if zone[:1] in "+-" and zone[3:] == ":00":
+        hours = int(zone[1:3])
+        return "UTC" if hours == 0 else f"Etc/GMT{'-' if zone[0] == '+' else '+'}{hours}"
+    return zone
+
+
 _POLARS_EXACT: dict[Any, DataType] = (
     {
         pl.Int8: DataType.INT8,
@@ -110,7 +119,7 @@ class PolarsDataFrame(ComputeFramework):
                 if zone is not None:
                     reject_sub_hour_zone(name, zone)
                     utc = [None if v is None else v.astimezone(UTC) for v in values]
-                    series[name] = pl.Series(name, utc, dtype=pl.Datetime("us", zone))
+                    series[name] = pl.Series(name, utc, dtype=pl.Datetime("us", _polars_zone(zone)))
         return series
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:

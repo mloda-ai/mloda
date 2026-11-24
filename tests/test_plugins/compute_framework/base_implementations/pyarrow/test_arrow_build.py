@@ -326,13 +326,10 @@ _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
     _duckdb_framework,
     _iceberg_framework,
     _pyarrow_framework,
-    _polars_framework,
-    _polars_lazy_framework,
+    *_POLARS_ENTRY_POINTS,
     _append_columns,
     _sqlite_from_dict,
     _duckdb_append_columns,
-    _polars_append_columns,
-    _polars_lazy_append_columns,
 ]
 
 

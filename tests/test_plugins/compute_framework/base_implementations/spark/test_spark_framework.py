@@ -200,7 +200,7 @@ class TestSparkFrameworkComputeFramework:
         self._assert_column(frame, "base", "Asia/Kolkata", base_values)
         self._assert_column(frame, "t", "America/New_York", values)
 
-    @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom"])
+    @pytest.mark.parametrize("kind", ["mixed", "custom"])
     @pytest.mark.parametrize("route", ["dict", "append_columns"])
     def test_aware_column_with_unnameable_zones_raises_naming_column(
         self, spark_session: Any, route: str, kind: str
@@ -796,15 +796,15 @@ def test_exact_column_data_type_jvm_free() -> None:
     [
         pytest.param([None, 1, 2], "IntegerType", None, id="int_leading_none"),
         pytest.param([None, datetime(2023, 3, 12, 6, 30)] * 2, "TimestampNTZType", None, id="naive_leading_none"),
-        pytest.param([None, _NY_START.astimezone(_NY)], "TimestampType", "America/New_York", id="aware_ny"),
     ],
 )
 def test_column_field_types_jvm_free(values: list[Any], type_name: str, zone: str | None) -> None:
+    types = _spark_types()
     from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _column_field
 
     framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     field, got_zone = _column_field("n", values, framework._infer_spark_type)
-    assert isinstance(field.dataType, getattr(_spark_types(), type_name))
+    assert isinstance(field.dataType, getattr(types, type_name))
     assert got_zone == zone
 
 

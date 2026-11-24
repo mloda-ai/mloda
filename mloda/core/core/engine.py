@@ -124,6 +124,7 @@ class Engine:
         self.framework_positions: Mapping[type[ComputeFramework], int] = framework_preference or {}
         self.filter_ties: list[tuple[UUID, UUID]] = []
         self.variant_blocks: dict[UUID, dict[type[ComputeFramework], tuple[Divergence, ...]]] = {}
+        self._rejected_frameworks: dict[tuple[type[FeatureGroup], str], set[type[ComputeFramework]]] = {}
         self.connection_dropped: dict[UUID, frozenset[type[ComputeFramework]]] = {}
         self.connection_reasons: dict[UUID, dict[type[ComputeFramework], str]] = {}
         # setup variables which track the primary sources and the compute platforms
@@ -413,6 +414,10 @@ class Engine:
         self._set_compute_framework_and_data_type(feature, compute_frameworks, feature_group_class)
         if blocks := result.variant_blocks.get(feature_group_class):
             self.variant_blocks[feature.uuid] = blocks
+        if (candidates := result.candidate_frameworks.get(feature_group_class)) and candidates.rejected:
+            self._rejected_frameworks.setdefault((feature_group_class, str(feature.name)), set()).update(
+                candidates.rejected
+            )
 
         feature.result_index_columns = self._result_index_columns(feature, feature_group, feature_group_class)
 
@@ -1021,7 +1026,7 @@ class Engine:
             ) or (host.data_type is None and not host.initial_requested_data)
             if host.data_type != survivor.data_type and not untyped_free:
                 continue
-            if not self._whole_part_consumers_fit(host, survivor, live):
+            if not self._fold_consumers_fit(group_class, host, survivor, live):
                 continue
             collection = self.feature_group_collection[group_class]
             if survivor.data_type is None and host.data_type is not None:
@@ -1039,8 +1044,22 @@ class Engine:
         ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
-    def _whole_part_consumers_fit(self, host: Feature, survivor: Feature, live: Mapping[UUID, Feature]) -> bool:
-        """Every live consumer must be fixed to the survivor's one framework; a flexible one may convert the frame."""
+    def _fold_consumers_fit(
+        self, group_class: type[FeatureGroup], host: Feature, survivor: Feature, live: Mapping[UUID, Feature]
+    ) -> bool:
+        """Refuse folds forcing a host consumer onto a conversion it avoids; whole/part folds need fixed consumers."""
+        # Judged on live state at fold time; a consumer that also lists the survivor's framework is not guarded.
+        if self._rejected_frameworks.get((group_class, str(host.name))):
+            survivor_cfs = survivor.compute_frameworks or set()
+            host_cfs = host.compute_frameworks or set()
+            for consumer, parents in self.feature_link_parents.items():
+                if host.uuid not in parents:
+                    continue
+                if consumer not in live:
+                    return False
+                consumer_cfs = live[consumer].compute_frameworks or set()
+                if not consumer_cfs & survivor_cfs and consumer_cfs & host_cfs:
+                    return False
         if (host.parts_only and survivor.parts_only) or not (host.requested_parts or survivor.requested_parts):
             return True
         frameworks = survivor.compute_frameworks

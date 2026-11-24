@@ -1267,6 +1267,27 @@ class PythonDictWholeConsumer(PythonDictPartConsumer):
         return {**data, "pmeasure_dict_whole_output": [value * 3 for value in data["pmeasure~v"]]}
 
 
+class PandasWholeConsumer(FeatureGroup):
+    """Pandas-only consumer of the whole pmeasure, which the PyArrow survivor of a fold cannot hold."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure_pandas_whole_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert "pmeasure" in data
+        data["pmeasure_pandas_whole_output"] = data["pmeasure~v"] * 3
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
 class PinnedPyArrowPartConsumer(PyArrowPartConsumer):
     """Converts the numeric part from PythonDict into PyArrow."""
 
@@ -2116,6 +2137,52 @@ class TestPartAwareFrameworkCheck:
         assert frame["pmeasure_flexible_part_output"].to_pylist() == [2, 4, 6]
         assert PartAwareProducer.calls == 2
         assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]
+
+    @pytest.mark.parametrize(
+        ("consumer", "output", "calls", "ran_on"),
+        [
+            (PandasWholeConsumer, "pmeasure_pandas_whole_output", 2, ["PandasDataFrame", "PythonDictFramework"]),
+            (PythonDictWholeConsumer, "pmeasure_dict_whole_output", 1, ["PythonDictFramework"]),
+        ],
+        ids=["consumer_outside_survivor", "consumer_on_survivor"],
+    )
+    @pytest.mark.parametrize("reverse", [False, True], ids=["whole-first", "consumer-first"])
+    def test_restricted_producer_folds_only_when_the_whole_consumer_fits_the_survivor(
+        self, consumer: type[FeatureGroup], output: str, calls: int, ran_on: list[str], reverse: bool
+    ) -> None:
+        requests: list[Feature | str] = [Feature("pmeasure", compute_framework="PythonDictFramework"), output]
+        if reverse:
+            requests.reverse()
+
+        results = _run(
+            requests,
+            WideWholePartAwareProducer,
+            consumer,
+            frameworks=[PythonDictFramework, PandasDataFrame, PyArrowTable],
+        )
+
+        assert column_values([results.frame_for(output)], output) == [3, 6, 9]
+        assert WideWholePartAwareProducer.calls == calls
+        assert sorted(PartAwareProducer.ran_on) == ran_on
+
+    @pytest.mark.parametrize("reverse", [False, True], ids=["pinned-first", "consumer-first"])
+    def test_unrestricted_producer_still_shares_one_read_across_frameworks(self, reverse: bool) -> None:
+        requests: list[Feature | str] = [
+            Feature("measure~value", compute_framework="PyArrowTable"),
+            "measure_consumer_output",
+        ]
+        if reverse:
+            requests.reverse()
+
+        results = _run(
+            requests,
+            WideMeasureProducer,
+            MeasureConsumer,
+            frameworks=[PandasDataFrame, PyArrowTable],
+        )
+
+        assert {"measure~value", "measure_consumer_output"} <= _columns(results)
+        assert WideMeasureProducer.calls == 1
 
     def test_whole_and_part_consumer_unpinned_compute_the_producer_once_per_step(self) -> None:
         _run(

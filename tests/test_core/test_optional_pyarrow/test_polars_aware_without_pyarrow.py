@@ -31,12 +31,48 @@ try:
         (ZoneInfo("America/New_York"), "America/New_York"),
         (timezone.utc, "UTC"),
         (timezone(timedelta(hours=5, minutes=30)), "+05:30"),
+        (timezone(timedelta(hours=-5)), "-05:00"),
     ]
     for tz, want in cases:
         got = aware_zone([at(tz), None], "zoned")
         print("NAME:" + want + ":" + str(got))
 except Exception as e:
     print("NAME_FAILED:" + type(e).__name__ + ":" + str(e))
+
+import io
+from datetime import tzinfo
+from pathlib import Path
+import zoneinfo
+
+class Odd(tzinfo):
+    def utcoffset(self, dt):
+        return timedelta(hours=3)
+    def dst(self, dt):
+        return timedelta(0)
+    def tzname(self, dt):
+        return "ODD"
+
+keyless = None
+for root in zoneinfo.TZPATH:
+    path = Path(root) / "America" / "New_York"
+    if path.is_file():
+        keyless = ZoneInfo.from_file(io.BytesIO(path.read_bytes()))
+        break
+if keyless is None:
+    print("KEYLESS_SKIP")
+
+bad = [("SUBMIN", timezone(timedelta(seconds=30))), ("CUSTOM", Odd())]
+if keyless is not None:
+    bad.append(("KEYLESS", keyless))
+for label, tz in bad:
+    try:
+        aware_zone([at(tz)], "zoned")
+        print(label + "_NO_RAISE")
+    except ValueError as e:
+        ok = "Cannot name" in str(e) and "zoned" in str(e)
+        print(label + "_OK" if ok else label + "_WRONGMSG:" + str(e))
+    except Exception as e:
+        print(label + "_WRONG:" + type(e).__name__ + ":" + str(e))
 
 try:
     aware_zone([at(ZoneInfo("America/New_York")), at(timezone(timedelta(hours=5, minutes=30)))], "zoned")
@@ -90,9 +126,12 @@ def _run(body: str) -> str:
 @pytest.mark.timeout(30)
 def test_aware_zone_names_zones_without_pyarrow() -> None:
     out = _run(_NAMES_BODY)
-    for want in ["America/New_York", "UTC", "+05:30"]:
+    for want in ["America/New_York", "UTC", "+05:30", "-05:00"]:
         assert f"NAME:{want}:{want}" in out, f"stdout: {out!r}"
     assert "MIXED_OK" in out, f"stdout: {out!r}"
+    assert "SUBMIN_OK" in out, f"stdout: {out!r}"
+    assert "CUSTOM_OK" in out, f"stdout: {out!r}"
+    assert "KEYLESS_OK" in out or "KEYLESS_SKIP" in out, f"stdout: {out!r}"
 
 
 @pytest.mark.timeout(30)

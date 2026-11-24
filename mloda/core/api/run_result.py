@@ -1,6 +1,6 @@
 """Run results that carry the resolved plan of the run that produced them."""
 
-from collections.abc import Generator, Mapping
+from collections.abc import Callable, Generator, Mapping
 from dataclasses import dataclass, field
 from itertools import islice
 from types import TracebackType
@@ -179,7 +179,20 @@ class RunResult(_RunOutcomeFields, list[Any]):
         return result_and_plan(tables, plan_table((n, _step_cells(step)) for n, step in enumerate(self._plan, 1)))
 
 
+# Keyed by top-level package and type name so rendering never imports a frame library; each returns n rows as columns.
+_DATAFRAME_HEADS: dict[str, Callable[[Any, int], dict[Any, list[Any]]]] = {
+    "pandas.DataFrame": lambda frame, n: frame.head(n).to_dict("list"),
+    "pyarrow.Table": lambda frame, n: frame.slice(0, n).to_pydict(),
+    "polars.DataFrame": lambda frame, n: frame.head(n).to_dict(as_series=False),
+}
+
+
 def _frame_text(frame: Any, max_rows: int) -> str:
+    head = _DATAFRAME_HEADS.get(f"{type(frame).__module__.partition('.')[0]}.{type(frame).__qualname__}")
+    if head is not None:
+        columns = head(frame, max_rows)
+        shown = list(zip(*columns.values()))
+        return "\n".join(table_lines([str(name) for name in columns], shown, len(frame) - len(shown)))
     if not isinstance(frame, Mapping):
         return str(frame)
     total = len(next(iter(frame.values()), ()))

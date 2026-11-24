@@ -100,6 +100,54 @@ mloda rules
 - Check a name before running it: `resolve_feature("income__sum_aggr")` from `mloda.user`.
 ```
 
+An agent can also skip Python and send its request as JSON, for example as the argument of a tool call. mloda turns it into the same request:
+
+```python
+from mloda.user import PluginLoader, load_features_from_config, mloda
+PluginLoader.all()
+
+# What the agent sends: JSON, no Python
+request = '["customer_id", "income__sum_aggr", {"name": "age__avg_aggr"}]'
+
+result = mloda.run_all(
+    features=load_features_from_config(request, format="json"),
+    compute_frameworks=["PythonDictFramework"],
+    api_data={"SampleData": {
+        "customer_id": ["C001", "C002", "C003", "C004", "C005"],
+        "age": [25, None, 45, 30, 50],
+        "income": [50000, 75000, None, 60000, 85000],
+    }},
+)
+print(result.summary())
+```
+
+```text
+Result
+| customer_id |
+|-------------|
+| C001        |
+| C002        |
+| C003        |
+| C004        |
+| C005        |
+
+| age__avg_aggr | income__sum_aggr |
+|---------------|------------------|
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+| 37.5          | 270000           |
+
+Plan
+| step | plugin                 | features                        | from              |
+|------|------------------------|---------------------------------|-------------------|
+| 1    | ApiDataFG              | age, customer_id, income        | source SampleData |
+| 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |
+```
+
+The agent never sees the aggregation code. It names what it needs, and the plan shows what ran.
+
 Writing a plugin? Point the agent at the [plugin guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) in mloda-registry.
 
 ## Your own FeatureGroup
@@ -158,6 +206,14 @@ Plan
 
 Three methods: the name it answers to, the input it needs, the computation. mloda read `income` from your data and ran your class after it. Any FeatureGroup your code imports is available to `run_all`; the [plugin guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) cover naming patterns, options, joins and the rest.
 
+FeatureGroups are one of three plugin types:
+
+| Plugin type | What it does |
+|---|---|
+| FeatureGroup | Provides features: reads them from a source or computes them from other features |
+| ComputeFramework | The backend a FeatureGroup runs on: plain Python, pandas, Polars, PyArrow, DuckDB, Spark and others |
+| Extender | Hooks into the steps you choose (computing, loading, joining, validating), for logging, validation or lineage |
+
 ## Same request, other backend
 
 The notebook in the story works in pandas, the service in plain Python. The request does not change when the backend does. Install one and name it:
@@ -184,19 +240,21 @@ print(result.summary())
 
 ```text
 Result
-  customer_id   income
-0        C001  50000.0
-1        C002  75000.0
-2        C003      NaN
-3        C004  60000.0
-4        C005  85000.0
+| customer_id | income  |
+|-------------|---------|
+| C001        | 50000.0 |
+| C002        | 75000.0 |
+| C003        | nan     |
+| C004        | 60000.0 |
+| C005        | 85000.0 |
 
-   age__avg_aggr  income__sum_aggr
-0           37.5          270000.0
-1           37.5          270000.0
-2           37.5          270000.0
-3           37.5          270000.0
-4           37.5          270000.0
+| age__avg_aggr | income__sum_aggr |
+|---------------|------------------|
+| 37.5          | 270000.0         |
+| 37.5          | 270000.0         |
+| 37.5          | 270000.0         |
+| 37.5          | 270000.0         |
+| 37.5          | 270000.0         |
 
 Plan
 | step | plugin                 | features                        | from              |
@@ -205,7 +263,7 @@ Plan
 | 2    | AggregatedFeatureGroup | age__avg_aggr, income__sum_aggr | age, income       |
 ```
 
-Same features, same plan, pandas DataFrames in the result. PyArrow (`mloda[pyarrow]`, `PyArrowTable`) works the same way.
+Same features, same plan, same tables. The result holds pandas DataFrames, so the values are pandas' own: `income` becomes a float column and the missing value shows as `nan`. PyArrow (`mloda[pyarrow]`, `PyArrowTable`) works the same way.
 
 ## When mloda fits
 
@@ -216,6 +274,18 @@ Same features, same plan, pandas DataFrames in the result. PyArrow (`mloda[pyarr
 | Reuse work across notebooks, projects and teams | Plugins that run unchanged on any supported backend |
 
 Don't use mloda for a single database with simple queries (use an ORM), for a one-off script, or for sub-millisecond streaming.
+
+## How it relates to other tools
+
+mloda separates what you need from how it is made. Other tools cover neighbouring parts of that problem:
+
+| Category | Examples | Their focus | mloda's focus |
+|---|---|---|---|
+| Feature stores | Feast, Tecton, Featureform | Storing and serving computed features | Resolving and computing features from plugins, on the backend you choose |
+| Semantic layers | dbt Semantic Layer, Cube | Declarative metrics, defined in SQL | Declarative features, defined in Python, across backends |
+| DAG frameworks | Hamilton, Kedro | Dataflows you write as functions or pipelines | Plugins declare their inputs; mloda builds the dataflow per request |
+| Data catalogs | DataHub, Atlan | Metadata and discovery | Execution, with the plan of every run |
+| ORMs | SQLAlchemy, Django ORM | Access to one database | One request across sources and backends |
 
 ## Documentation
 

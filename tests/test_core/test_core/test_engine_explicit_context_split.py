@@ -272,6 +272,7 @@ def test_forwarded_context_key_splits_a_fixed_name_root_without_a_marker(
 MID = "marked_mid"
 BASE = "marked_base"
 TWIN_CONSUMERS = {"marked_twin_one": 1, "marked_twin_two": 2}
+MARKING_TWINS: set[str] = set(TWIN_CONSUMERS)
 
 
 class MarkedBaseRoot(DataCreatorFeatureGroup):
@@ -306,13 +307,22 @@ class MarkedTwinConsumer(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
         level = TWIN_CONSUMERS[str(feature_name)]
-        return {Feature(MID, Options(context={"level": level}), split_context_keys={"level"})}
+        marked: set[str] = {"level"} if str(feature_name) in MARKING_TWINS else set()
+        return {Feature(MID, Options(context={"level": level}), split_context_keys=marked)}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
         return {str(feature.name): [1] for feature in features.features}
 
 
-def test_marked_non_root_input_reached_with_differing_values_is_rejected_at_plan_time() -> None:
+@pytest.mark.parametrize(
+    "marking",
+    [{"marked_twin_one", "marked_twin_two"}, {"marked_twin_one"}, {"marked_twin_two"}],
+    ids=["both", "only_first", "only_second"],
+)
+def test_marked_non_root_input_reached_with_differing_values_is_rejected_at_plan_time(
+    marking: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(f"{__name__}.MARKING_TWINS", marking)
     with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
         _run(list(TWIN_CONSUMERS), {MarkedBaseRoot, MarkedMid, MarkedTwinConsumer}, [PythonDictFramework])

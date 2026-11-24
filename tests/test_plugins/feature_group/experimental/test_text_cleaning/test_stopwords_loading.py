@@ -1,5 +1,7 @@
-"""Stopword loading preserves offline text cleaning in both backends."""
+"""Stopword loading keeps offline text cleaning in both backends and stays off plugin import."""
 
+import subprocess  # nosec B404
+import sys
 from collections.abc import Callable
 from unittest.mock import Mock, call
 
@@ -56,3 +58,42 @@ def test_remove_stopwords_downloads_only_after_missing_corpus(
         call.download("stopwords", quiet=True),
         call.words("english"),
     ]
+
+
+_IMPORT_SCRIPT = """
+import sys
+
+import mloda_plugins.feature_group.experimental.text_cleaning.python_dict
+import mloda_plugins.feature_group.experimental.text_cleaning.pandas
+
+leaked = sorted(name for name in sys.modules if name == "nltk" or name.startswith("nltk."))
+assert not leaked, "importing the text cleaning backends pulled nltk into sys.modules: " + repr(leaked)
+
+print("ok")
+"""
+
+
+@pytest.mark.timeout(30)
+def test_importing_the_backends_does_not_import_nltk() -> None:
+    # Fixed argv, no shell, no user input.
+    result = subprocess.run(  # nosec B603
+        [sys.executable, "-c", _IMPORT_SCRIPT],
+        capture_output=True,
+        text=True,
+        timeout=25,
+    )
+
+    assert result.returncode == 0, f"nltk must be imported lazily by the backends.\nstderr:\n{result.stderr}"
+    assert result.stdout.strip() == "ok"
+
+
+def test_remove_stopwords_without_nltk_returns_text_unchanged(
+    remove_stopwords: Callable[[list[str]], list[str]], nltk_io: Mock, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setitem(sys.modules, "nltk", None)
+    text = ["The River is wide", "and the", ""]
+
+    result = remove_stopwords(text)
+
+    assert result == text
+    nltk_io.words.assert_not_called()

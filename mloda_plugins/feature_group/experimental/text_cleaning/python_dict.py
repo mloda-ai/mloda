@@ -13,15 +13,6 @@ from mloda.provider import ComputeFramework, FeatureSet, Implementation
 from mloda.user.python_dict import PythonDictFramework, row_count
 from mloda_plugins.feature_group.experimental.text_cleaning.base import TextCleaningFeatureGroup
 
-# Optional NLTK support - gracefully handle if not available
-try:
-    import nltk
-
-    nltk_available = True
-except ImportError:
-    nltk = None
-    nltk_available = False
-
 
 class PythonDictTextCleaning(Implementation[TextCleaningFeatureGroup]):
     """PythonDict text cleaning."""
@@ -153,11 +144,9 @@ class PythonDictTextCleaning(Implementation[TextCleaningFeatureGroup]):
         Returns:
             The text with stopwords removed
         """
-        if not nltk_available:
-            # If NLTK is not available, return the original text
-            return text
-
         try:
+            import nltk  # imported here: nltk pulls in scipy, which plugin import should not pay
+
             stop_words = TextCleaningFeatureGroup._load_english_stopwords(nltk)
 
             result = []

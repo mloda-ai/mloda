@@ -147,14 +147,26 @@ def test_renamed_input_context_shares_equal_values_and_splits_different_values(
 
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
-def test_direct_unmarked_requests_differing_in_a_declared_key_are_rejected(
-    framework: type[ComputeFramework],
+@pytest.mark.parametrize("marked", [False, True])
+def test_direct_requests_differing_in_a_declared_key_are_rejected_unless_marked(
+    framework: type[ComputeFramework], marked: bool
 ) -> None:
-    root, _, _ = _groups([], [])
-    requests: list[Feature | str] = [Feature(ROOT, Options(context={"top_k": k})) for k in (2, 3)]
+    calls: list[tuple[int, ...]] = []
+    root, _, _ = _groups(calls, [])
+    keys = {"top_k"} if marked else set()
+    requests: list[Feature | str] = [
+        Feature(ROOT, Options(context={"top_k": k}), split_context_keys=keys) for k in (2, 3)
+    ]
 
-    with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
-        _run(requests, {root}, [framework])
+    if not marked:
+        with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
+            _run(requests, {root}, [framework])
+        return
+
+    results = _run(requests, {root}, [framework])
+
+    assert sorted(calls) == [(2,), (3,)]
+    assert sorted(v for column in _columns(results)[ROOT] for v in column) == [20, 30]
 
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)

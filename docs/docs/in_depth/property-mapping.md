@@ -829,7 +829,8 @@ but read the same inputs on one framework are rejected; use the same values,
 requested directly more than once and declared option keys that the feature name does not
 bind. Such a key (every declared key of a group without name patterns) splits by value
 without a marker when a consumer reads one of the copies; `split_context_keys` is what
-splits copies that are all direct requests.
+splits copies that are all direct requests. A source group's declared keys are exempt:
+they route the read, and copies reading different data are already kept apart.
 
 ### Previewing the forwarded options
 

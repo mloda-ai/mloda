@@ -9,8 +9,7 @@ import pyarrow.compute as pc
 
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
-from mloda.user.pyarrow import PyArrowTable
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_array
+from mloda.user.pyarrow import PyArrowTable, arrow_array
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 

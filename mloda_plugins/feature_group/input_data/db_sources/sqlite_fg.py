@@ -12,10 +12,8 @@ from mloda.core.filter.single_filter import SingleFilter
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, DBTable, FeatureSet, Implementation, ReadDBFG, SourceMatch
 from mloda.user import DataType
-from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
-    PythonDictFramework,
-)
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_array
+from mloda.user.pyarrow import arrow_array
+from mloda.user.python_dict import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 

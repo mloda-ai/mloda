@@ -74,6 +74,16 @@ BACKEND_EXPORT_MATRIX: list[tuple[str, str, str]] = [
         "mloda_plugins.compute_framework.base_implementations.pyarrow.table",
     ),
     (
+        "mloda.user.pyarrow",
+        "arrow_array",
+        "mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build",
+    ),
+    (
+        "mloda.user.pyarrow",
+        "arrow_table",
+        "mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build",
+    ),
+    (
         "mloda.user.duckdb",
         "DuckDBFramework",
         "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework",

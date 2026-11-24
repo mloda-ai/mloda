@@ -9,7 +9,7 @@ from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.pyarrow.pyarrow_file_source_transformer import (
     pyarrow_file_loader,
 )
-from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.input_data.file_suffixes import PARQUET_SUFFIXES
 
 

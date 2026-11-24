@@ -388,6 +388,35 @@ class TestBindNameCaptures:
 
         assert bindings == {ALGORITHM_KEY: "pca"}
 
+    @pytest.mark.parametrize("wrap", [lambda p: p[0], list, tuple], ids=["str", "list", "tuple"])
+    @pytest.mark.parametrize(
+        ("pattern", "name", "expected"),
+        [
+            (r".*__(pca|tsne)_listform_pnb770$", "f0__pca_listform_pnb770", {ALGORITHM_KEY: "pca"}),
+            (
+                rf".*__(?P<{ALGORITHM_KEY}>pca|tsne)_namedform_pnb770$",
+                "f0__tsne_namedform_pnb770",
+                {ALGORITHM_KEY: "tsne"},
+            ),
+        ],
+        ids=["positional", "named"],
+    )
+    def test_pattern_attribute_form_binds_like_the_str_form(
+        self, wrap: Callable[[list[str]], Any], pattern: str, name: str, expected: dict[str, Any]
+    ) -> None:
+        attribute = wrap([pattern])
+        group: Any = type(
+            "PatternFormPnb770Group",
+            (FeatureGroup,),
+            {
+                "__module__": __name__,
+                "PREFIX_PATTERN": attribute,
+                "PROPERTY_MAPPING": {ALGORITHM_KEY: _algorithm_spec()},
+            },
+        )
+
+        assert group.name_bindings(name) == expected
+
     def test_legacy_fallback_binds_nothing_when_no_value_space_contains_the_value(self) -> None:
         """The fallback only ever binds a value that is already a member of an allowed_values."""
         parsed = FeatureChainParser.parse_name("f0__bogus_strict_pnb770", [r".*__(\w+)_strict_pnb770$"])

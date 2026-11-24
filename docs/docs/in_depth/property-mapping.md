@@ -373,7 +373,7 @@ Both sites run *after* resolution, so materialization never changes **resolution
 matching runs after intake and does observe materialized values, see below). It does change
 how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
 so a feature that passes a declared default explicitly and one that omits it become equal and merge
-into a single feature (with a warning naming the duplicated request; twins differing only in a name-bound value merge the same way) instead of computing twice. Twins on nested compute framework sets merge after resolution, with the same warning.
+into a single feature (with a warning naming the duplicated request; twins differing only in a name-bound value merge the same way) instead of computing twice. Twins on nested compute framework sets, or narrowed onto a pinned filter, merge after resolution and warn too; the merged feature then keeps the inputs of both requests.
 
 One consequence for authors: `input_features` is called with the DECLARED, pre-default options (the
 engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a

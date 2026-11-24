@@ -12,6 +12,7 @@ from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda_plugins.compute_framework.base_implementations.pyarrow import pyarrow_type_semantics
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_array
 from mloda.user.pyarrow import PyArrowTable
 from mloda_plugins.feature_group.experimental.time_window.base import (
     TimeWindowFeatureGroup,
@@ -193,7 +194,7 @@ class PyArrowTimeWindow(Implementation[TimeWindowFeatureGroup]):
             return pa.array(reordered_results, type=cls._window_scalar(source, window_function).type)
 
         # Convert the results to a PyArrow array
-        return pa.array(reordered_results)
+        return arrow_array(reordered_results)
 
     @classmethod
     def _window_scalar(cls, window_values: pa.ChunkedArray, window_function: str) -> pa.Scalar:

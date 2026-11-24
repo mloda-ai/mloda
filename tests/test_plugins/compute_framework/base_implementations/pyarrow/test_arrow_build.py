@@ -4,9 +4,11 @@ PYARROW_IGNORE_TIMEZONE=1 makes plain pyarrow read an aware datetime's wall time
 builder must give the same instants and zone with the variable unset or set.
 """
 
+import contextlib
 import sqlite3
 from collections.abc import Callable
 from datetime import UTC, datetime, timedelta, timezone
+from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
@@ -14,6 +16,8 @@ import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.provider import FeatureSet
+from mloda.user import DataType, Feature
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework import DuckDBFramework
 from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework import IcebergFramework
@@ -23,6 +27,12 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictPyArrowTransformer,
 )
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import SqliteRelation
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.pyarrow import PyArrowAggregation
+from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow import PyArrowMissingValueImputation
+from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
+from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
+from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
+from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 
 NY = ZoneInfo("America/New_York")
 NOON_NY = datetime(2023, 3, 11, 12, 0, tzinfo=NY)
@@ -185,3 +195,86 @@ class TestEntryPointsKeepNonUtcInstants:
         result = value_set(column, [NOON_NY, LATER_NY])
         assert result.type == pa.timestamp("us", tz="America/New_York")
         assert _utc(result.to_pylist()) == _utc([NOON_NY, LATER_NY])
+
+
+_NY_TYPE = pa.timestamp("us", tz="America/New_York")
+
+
+def _ny_column(values: list[datetime | None]) -> pa.Array:
+    return pa.array([None if v is None else v.astimezone(UTC) for v in values], type=_NY_TYPE)
+
+
+def _time_window_max(tmp_path: Path) -> tuple[pa.Array, list[datetime | None], str]:
+    values = [NOON_NY, None, LATER_NY]
+    table = pa.table({"ref": _ny_column([NOON_NY, NOON_NY + timedelta(hours=1), LATER_NY]), "v": _ny_column(values)})
+    span = TimeWindowFeatureGroup._window_span(1, "second")
+    column = PyArrowTimeWindow._perform_window_operation(table, "max", span, ["v"], "ref")
+    return column, values, "America/New_York"
+
+
+def _missing_value_ffill(tmp_path: Path) -> tuple[pa.Array, list[datetime | None], str]:
+    table = pa.table({"v": _ny_column([None, NOON_NY, None, LATER_NY])})
+    column = PyArrowMissingValueImputation._perform_imputation(table, "ffill", ["v"])
+    return column, [None, NOON_NY, NOON_NY, LATER_NY], "America/New_York"
+
+
+def _missing_value_grouped_ffill(tmp_path: Path) -> tuple[pa.Array, list[datetime | None], str]:
+    table = pa.table({"v": _ny_column([NOON_NY, None, LATER_NY, None]), "g": ["a", "a", "b", "b"]})
+    column = PyArrowMissingValueImputation._perform_grouped_imputation(table, "ffill", "v", None, ["g"])
+    return column, [NOON_NY, NOON_NY, LATER_NY, LATER_NY], "America/New_York"
+
+
+def _sqlite_produce(tmp_path: Path, feature: Feature) -> pa.Array:
+    values = [NOON_NY, None, LATER_NY]
+    path = tmp_path / "zoned.db"
+    write_sqlite(path, {"t": {"c": [None if v is None else v.isoformat() for v in values]}})
+    feature_set = FeatureSet()
+    feature_set.add(feature)
+    with contextlib.closing(SqliteFG.connect({"sqlite": str(path)})) as connection:
+        connection.row_factory = lambda _cursor, row: tuple(
+            datetime.fromisoformat(v).astimezone(NY) if isinstance(v, str) else v for v in row
+        )
+        table = SqliteFG.produce_rows(connection, "t", feature_set)
+    return table.column("c")
+
+
+def _sqlite_inferred(tmp_path: Path) -> tuple[pa.Array, list[datetime | None], str | None]:
+    return _sqlite_produce(tmp_path, Feature.not_typed("c")), [NOON_NY, None, LATER_NY], "America/New_York"
+
+
+def _sqlite_declared_naive(tmp_path: Path) -> tuple[pa.Array, list[datetime | None], str | None]:
+    column = _sqlite_produce(tmp_path, Feature("c", data_type=DataType.TIMESTAMP_MICROS))
+    return (
+        column,
+        [None if v is None else v.astimezone(UTC).replace(tzinfo=None) for v in (NOON_NY, None, LATER_NY)],
+        None,
+    )
+
+
+def _aggregation_python_value(tmp_path: Path) -> tuple[pa.Array, list[datetime | None], str]:
+    table = PyArrowAggregation._add_result_to_data(pa.table({"n": [1, 2]}), "out", NOON_NY)
+    return table.column("out"), [NOON_NY, NOON_NY], "America/New_York"
+
+
+_FEATURE_GROUP_BUILDS: list[Callable[[Path], tuple[pa.Array, list[datetime | None], str | None]]] = [
+    _time_window_max,
+    _missing_value_ffill,
+    _missing_value_grouped_ffill,
+    _sqlite_inferred,
+    _sqlite_declared_naive,
+    _aggregation_python_value,
+]
+
+
+@ENV_VALUES
+@pytest.mark.usefixtures("ignore_timezone_env")
+class TestFeatureGroupBuildsKeepNonUtcInstants:
+    @pytest.mark.parametrize("build", _FEATURE_GROUP_BUILDS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_build_keeps_instants_and_zone(
+        self, build: Callable[[Path], tuple[pa.Array, list[datetime | None], str | None]], tmp_path: Path
+    ) -> None:
+        column, expected_values, expected_zone = build(tmp_path)
+        assert pa.types.is_timestamp(column.type)
+        assert column.type.tz == expected_zone
+        got = column.to_pylist()
+        assert got == expected_values if expected_zone is None else _utc(got) == _utc(expected_values)

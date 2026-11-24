@@ -15,6 +15,7 @@ from mloda.user import DataType
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_array
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity import sqlite_affinity_class
 
@@ -176,18 +177,19 @@ class SqliteFG(ReadDBFG):
         pa = require("pyarrow", "reading SQLite into a pyarrow table")
         column_names, rows, arrow_types = cls._fetch(connection, table, features)
         data_types = {feature.name: feature.data_type for feature in features.features}
-        fields = []
+        arrays = []
         for index, name in enumerate(column_names):
+            values = [row[index] for row in rows]
             data_type = data_types.get(name)
             if data_type:
                 arrow_type = DataType.to_arrow_type(data_type)
             elif name in arrow_types:
                 arrow_type = getattr(pa, arrow_types[name])()
             else:
-                arrow_type = pa.array([row[index] for row in rows]).type if rows else pa.null()
-            fields.append((name, arrow_type))
-        data = [dict(zip(column_names, row)) for row in rows]
-        return pa.Table.from_pylist(data, schema=pa.schema(fields))
+                arrow_type = None
+            array = arrow_array(values, type=arrow_type)
+            arrays.append(array)
+        return pa.Table.from_arrays(arrays, names=column_names)
 
     @classmethod
     def describe_columns(cls, match: SourceMatch) -> dict[str, DataType | None]:

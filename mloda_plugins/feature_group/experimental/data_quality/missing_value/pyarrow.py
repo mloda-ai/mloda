@@ -10,6 +10,7 @@ import pyarrow.compute as pc
 from mloda.provider import ComputeFramework, FeatureSet, Implementation
 
 from mloda.user.pyarrow import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import arrow_array
 from mloda_plugins.feature_group.experimental.data_quality.missing_value.base import MissingValueFeatureGroup
 
 
@@ -272,7 +273,7 @@ class PyArrowMissingValueImputation(Implementation[MissingValueFeatureGroup]):
                 results.append(group_value)
 
         # Convert the results to a PyArrow array
-        return pa.array(results)
+        return arrow_array(results)
 
     @classmethod
     def _perform_fill_direction(cls, column: pa.Array, direction: str) -> pa.Array:
@@ -307,4 +308,4 @@ class PyArrowMissingValueImputation(Implementation[MissingValueFeatureGroup]):
                     values[i] = last_valid
 
         # Convert back to PyArrow array
-        return pa.array(values)
+        return arrow_array(values)

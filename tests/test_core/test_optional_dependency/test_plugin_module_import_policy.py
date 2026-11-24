@@ -125,8 +125,11 @@ MODULE_EXTRA: dict[str, str] = {
 # Extras a module reaches only lazily, guarded or through an import edge, on top of its home extra.
 ALSO_NEEDS: dict[str, tuple[str, ...]] = {
     f"{_BACKENDS}.pandas.pandas_pyarrow_transformer": ("pyarrow",),
+    f"{_BACKENDS}.polars.dataframe": ("pyarrow",),
+    f"{_BACKENDS}.polars.lazy_dataframe": ("pyarrow",),
     f"{_BACKENDS}.polars.polars_lazy_pyarrow_transformer": ("pyarrow",),
     f"{_BACKENDS}.polars.polars_pyarrow_transformer": ("pyarrow",),
+    f"{_EXPERIMENTAL}.aggregated_feature_group.polars_lazy": ("pyarrow",),
     f"{_EXPERIMENTAL}.aggregated_feature_group.pyarrow": ("pandas",),
     f"{_EXPERIMENTAL}.clustering.pandas": ("sklearn",),
     f"{_EXPERIMENTAL}.data_quality.missing_value.pyarrow": ("pandas",),

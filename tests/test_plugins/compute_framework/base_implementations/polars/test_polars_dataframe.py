@@ -1,5 +1,7 @@
 import os
+from datetime import datetime, timedelta
 from typing import Any
+from zoneinfo import ZoneInfo
 import pytest
 from mloda._testing.compute_framework.dtype_suite import DataTypeValidatorSuite, DtypeExtractionSuite
 from mloda._testing.compute_framework.frame_suite import AppendColumnsSuite, EmptyResultSuite
@@ -7,6 +9,8 @@ from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, PolarsAdapter
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda.user import FeatureName
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+from tests.helpers.time_zones import bad_zone_values
 from mloda.user import ParallelizationMode
 from tests.helpers.availability_test_helper import (
     assert_unavailable_when_import_blocked,
@@ -244,3 +248,28 @@ def test_exact_column_data_type(name: str, expected: str | None) -> None:
 
     framework = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
     assert framework._exact_column_data_type(polars_frame(name), "c") == (DataType[expected] if expected else None)
+
+
+@pytest.mark.skipif(pl is None, reason="Polars is not installed. Skipping this test.")
+@pytest.mark.parametrize("framework_class", [PolarsDataFrame, PolarsLazyDataFrame])
+@pytest.mark.parametrize("kind", ["mixed", "custom", "single_zone"])
+def test_dict_build_aware_column_zones(framework_class: Any, kind: str) -> None:
+    """A dict build rejects a mixed or unnameable zone naming the column, and keeps a single named zone."""
+    framework = framework_class(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    if kind != "single_zone":
+        values, texts = bad_zone_values(kind)
+        with pytest.raises(ValueError) as error:
+            framework.transform({"id": [1, 2], "zoned": values}, ["id", "zoned"])
+        for text in ["zoned", *texts]:
+            assert text in str(error.value)
+        return
+
+    zone = ZoneInfo("America/New_York")
+    start = datetime(2023, 3, 11, 12, 0, tzinfo=zone)
+    values = [start, None, start + timedelta(days=1)]
+    result = framework.transform({"zoned": values}, ["zoned"])
+    frame = result.collect() if framework_class is PolarsLazyDataFrame else result
+    assert frame.schema["zoned"].time_zone == "America/New_York"
+    got = frame["zoned"].to_list()
+    assert got[1] is None
+    assert [g.astimezone(zone) for g in (got[0], got[2])] == [values[0], values[2]]

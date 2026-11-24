@@ -6,8 +6,9 @@ With PYARROW_IGNORE_TIMEZONE=1 plain pyarrow reads the wall time of an aware dat
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import UTC, datetime, tzinfo
+from datetime import UTC, datetime, timezone, tzinfo
 from typing import Any
+from zoneinfo import ZoneInfo
 
 try:
     import pyarrow as pa
@@ -16,6 +17,8 @@ except ImportError:
 
 
 def _zone_name(tz: tzinfo, values: list[datetime], where: str) -> str:
+    if pa is None:
+        return _zone_name_without_pyarrow(tz, where)
     name = None
     resolved = None
     # pyarrow has no validating API, so its errors are translated into the rule's ValueError.
@@ -27,6 +30,20 @@ def _zone_name(tz: tzinfo, values: list[datetime], where: str) -> str:
     if any(v.astimezone(resolved).utcoffset() != v.utcoffset() for v in values if v.tzinfo == tz):
         raise ValueError(_unnameable(tz, name, where))
     return str(name)
+
+
+def _zone_name_without_pyarrow(tz: tzinfo, where: str) -> str:
+    if isinstance(tz, ZoneInfo) and tz.key is not None:
+        return tz.key
+    if isinstance(tz, timezone):
+        offset = tz.utcoffset(None)
+        minutes, seconds = divmod(int(offset.total_seconds()), 60)
+        if seconds == 0 and not offset.microseconds:
+            if minutes == 0:
+                return "UTC"
+            hours, mins = divmod(abs(minutes), 60)
+            return f"{'-' if minutes < 0 else '+'}{hours:02d}:{mins:02d}"
+    raise ValueError(_unnameable(tz, None, where))
 
 
 def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:

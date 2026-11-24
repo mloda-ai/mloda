@@ -301,19 +301,31 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         assert self.column_values(adapter, result, "A") == values
         assert self.column_values(adapter, result, "a") == self.column_values(adapter, appendable, "a")
 
+    @pytest.mark.parametrize("kind", ["single_zone", "mixed_zones"])
     def test_append_aware_column_keeps_instants_and_zone(
-        self, adapter: FrameworkAdapter, framework_instance: Any
+        self, adapter: FrameworkAdapter, framework_instance: Any, kind: str
     ) -> None:
         appendable = self._appendable(adapter)
+        rows = self.row_count(adapter, appendable)
         zone = ZoneInfo("America/New_York")
         start = datetime(2023, 3, 11, 12, 0, tzinfo=zone)
-        values = [None if i % 2 else start + timedelta(days=i) for i in range(self.row_count(adapter, appendable))]
+        if kind == "single_zone":
+            values = [None if i % 2 else start + timedelta(days=i) for i in range(rows)]
+            zones = ["America/New_York"]
+        else:
+            kolkata = ZoneInfo("Asia/Kolkata")
+            values = [
+                None if i % 2 else (start + timedelta(days=i)).replace(tzinfo=zone if i % 4 == 0 else kolkata)
+                for i in range(rows)
+            ]
+            zones = ["America/New_York", "Asia/Kolkata"]
 
         try:
             result = framework_instance._append_columns(appendable, {"zoned": values})
         except ValueError as error:
             assert "zoned" in str(error)
-            assert "America/New_York" in str(error)
+            for name in zones:
+                assert name in str(error)
             return
 
         assert result is not None

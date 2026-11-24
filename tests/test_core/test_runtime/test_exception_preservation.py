@@ -1866,21 +1866,23 @@ class ChsRcCalcAndSaverFG(ChsTwoHandleFG):
         return pd.DataFrame({name: [1] for name in features.get_all_names()})
 
 
-class ChsRcClearingContextFG(ChsRcCalcAndSaverFG):
-    """Calculate drops the FeatureSet's stashed calculate context before the saver runs."""
+class ChsRcOverwriteContextFG(ChsSource):
+    """Calculate tries to overwrite the compute framework's calculate context and records the refusal."""
+
+    refused: list[bool] = []
 
     @classmethod
     def feature_names_supported(cls) -> set[str]:
-        return {"chs_rc_clearing_a"}
+        return {"chs_rc_overwrite_a"}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        setattr(features, "_calculate_context", None)
         cfw = ComputeFramework.current()
         assert cfw is not None
         with pytest.raises(AttributeError):
             cfw._calculate_context = None
-        return super().calculate_feature(data, features)
+        cls.refused.append(True)
+        return pd.DataFrame({name: [1] for name in features.get_all_names()})
 
 
 @pytest.mark.timeout(15)
@@ -1895,13 +1897,6 @@ class ChsRcClearingContextFG(ChsRcCalcAndSaverFG):
             {"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B},
             (_VAULT_A, _VAULT_B),
             id="calculate_and_saver",
-        ),
-        pytest.param(
-            ChsRcClearingContextFG,
-            "chs_rc_clearing_a",
-            {"chs_two_a_handle": _VAULT_A, "chs_two_z_handle": _VAULT_B},
-            (_VAULT_A, _VAULT_B),
-            id="calculate_clears_context",
         ),
     ],
 )
@@ -1929,6 +1924,24 @@ def test_a_saver_read_shows_on_the_calculate_context_after_the_run(
     assert [context.credentials_read for context in probe.kept] == [expected]
     # MULTIPROCESSING is not parametrized: the probe instance is pickled into the worker.
     assert probe.at_return == [(expected, "success")]
+
+
+def test_a_feature_group_cannot_overwrite_the_calculate_context(flight_server: Any) -> None:
+    from mloda.user import mloda as mloda_api
+    from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+
+    ChsRcOverwriteContextFG.refused.clear()
+    probe = _ReadProbeExtender({ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE})
+    api = mloda_api(
+        [Feature("chs_rc_overwrite_a")],
+        [PandasDataFrame],
+        data_access_collection=_vault_dac({**_TWO_VAULTS, _E2E_HANDLE: _vault_values()}),
+        plugin_collector=PluginCollector.enabled_feature_groups({ChsRcOverwriteContextFG}),
+        function_extender={probe},
+    )
+    api.run(parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server)
+
+    assert ChsRcOverwriteContextFG.refused == [True]
 
 
 class ChsRcRaisingArtifact(BaseArtifact):

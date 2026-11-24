@@ -65,10 +65,7 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
 
 
 def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
-    """The non-None values when there is at least one and all are aware datetimes, else None.
-
-    Raises when the values are all datetimes mixing naive and aware ones.
-    """
+    """The non-None values if all are aware datetimes, None if not datetimes; raises on a naive/aware mix."""
     present = []
     for v in values:
         if v is None:

@@ -377,7 +377,7 @@ A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these framew
 
 ## SQL Relation Helpers (DuckDB / SQLite)
 
-The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `SqliteRelation`) inside `calculate_feature`. Both share the same helper surface so a feature group can be written once against either.
+The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `SqliteRelation`) inside `calculate_feature`. Both share the same helper surface so a feature group can be written once against either. Import them from `mloda.user.duckdb` and `mloda.user.sqlite`.
 
 ### Result type
 

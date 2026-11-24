@@ -27,6 +27,11 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
+from mloda.provider import Cause
+from mloda.provider import Divergence
+from mloda.provider import DivergenceKind
+from mloda.provider import Implementation
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import FeatureResolutionError
@@ -46,6 +51,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import column_values
 
 
 class SubColumnTestDataCreator(DataCreatorFeatureGroup):
@@ -1111,7 +1117,7 @@ class MeasureConsumer(FeatureGroup):
 class PartAwareProducer(DataCreatorFeatureGroup):
     """Declares part v; its whole value holds Python objects, so only PythonDict may compute the whole."""
 
-    OUTPUT_PARTS = ("v",)
+    OUTPUT_PARTS: ClassVar[tuple[str, ...]] = ("v",)
     calls = 0
     ran_on: list[str] = []
 
@@ -1150,6 +1156,63 @@ class PartAwareProducer(DataCreatorFeatureGroup):
         return rows
 
 
+class WideWholePartAwareProducer(PartAwareProducer):
+    """Also holds the whole Python objects in a Pandas frame."""
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
+    ) -> bool:
+        return part is not None or compute_framework in {PythonDictFramework, PandasDataFrame}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework, PandasDataFrame, PyArrowTable}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        result = super().calculate_feature(data, features)
+        if next(iter(features.features)).chosen_compute_framework is PandasDataFrame:
+            return pd.DataFrame(result)
+        return result
+
+
+class ChainPartAwareProducer(WideWholePartAwareProducer):
+    """Part v has three frameworks, part w has two, and the direct whole request pins one."""
+
+    OUTPUT_PARTS = ("v", "w")
+
+    @classmethod
+    def supports_compute_framework(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        compute_framework: type[ComputeFramework],
+        *,
+        part: str | None = None,
+    ) -> bool:
+        if part == "w":
+            return compute_framework in {PandasDataFrame, PyArrowTable}
+        return super().supports_compute_framework(feature_name, options, compute_framework, part=part)
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        result = super().calculate_feature(data, features)
+        if isinstance(result, pa.Table):
+            return result.append_column("pmeasure~w", pc.add(result["pmeasure~v"], 10))
+        if isinstance(result, pd.DataFrame):
+            result["pmeasure~w"] = result["pmeasure~v"] + 10
+        else:
+            for row in result:
+                row["pmeasure~w"] = row["pmeasure~v"] + 10
+        return result
+
+
 class PyArrowPartConsumer(FeatureGroup):
     """PyArrow-only consumer of Feature("pmeasure~v")."""
 
@@ -1169,6 +1232,113 @@ class PyArrowPartConsumer(FeatureGroup):
         return {PyArrowTable}
 
 
+class PythonDictPartConsumer(FeatureGroup):
+    """Reads the declared part on the framework that can also hold the whole value."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure_dict_part_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure~v")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {**data, "pmeasure_dict_part_output": [value * 2 for value in data["pmeasure~v"]]}
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PythonDictFramework}
+
+
+class PythonDictWholeConsumer(PythonDictPartConsumer):
+    """Makes whole and part dependencies carry equal consumer options."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure_dict_whole_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        assert "pmeasure" in data
+        return {**data, "pmeasure_dict_whole_output": [value * 3 for value in data["pmeasure~v"]]}
+
+
+class PinnedPyArrowPartConsumer(PyArrowPartConsumer):
+    """Converts the numeric part from PythonDict into PyArrow."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure~v", compute_framework="PythonDictFramework")}
+
+
+class PinnedPythonDictPartConsumer(PythonDictPartConsumer):
+    """Pins its part input to the narrower PythonDict framework."""
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure~v", compute_framework="PythonDictFramework")}
+
+
+class PandasChainPartConsumer(FeatureGroup):
+    """Reads the middle twin's part on the framework that can also hold the whole."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure_pandas_part_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return {Feature("pmeasure~w")}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        data["pmeasure_pandas_part_output"] = data["pmeasure~w"] * 2
+        return data
+
+    @classmethod
+    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
+        return {PandasDataFrame}
+
+
+class FlexiblePartConsumer(OperationFeatureGroup):
+    """Its Arrow implementation preserves values, so framework choice can prefer a conversion."""
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {"pmeasure_flexible_part_output"}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        return {Feature("pmeasure~v")}
+
+
+class DivergentPythonDictPart(Implementation[FlexiblePartConsumer]):
+    feature_group = FlexiblePartConsumer
+    compute_framework = PythonDictFramework
+    divergences = (
+        Divergence(
+            kind=DivergenceKind.VALUE, cause=Cause.BACKEND, reason="Truncates fractional inputs before scaling."
+        ),
+    )
+
+    @classmethod
+    def calculate(
+        cls, group: type[FlexiblePartConsumer], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return {"pmeasure_flexible_part_output": [int(value) * 2 for value in data["pmeasure~v"]]}
+
+
+class NativePyArrowPart(Implementation[FlexiblePartConsumer]):
+    feature_group = FlexiblePartConsumer
+    compute_framework = PyArrowTable
+
+    @classmethod
+    def calculate(
+        cls, group: type[FlexiblePartConsumer], data: Any, features: FeatureSet, framework: ComputeFramework | None
+    ) -> Any:
+        return data.append_column("pmeasure_flexible_part_output", pc.multiply(data["pmeasure~v"], 2))
+
+
 def _has_input_data_rejection() -> bool:
     reasons = MATCH_REJECTION_REASONS.get()
     return reasons is not None and any(r.stage == INPUT_DATA_STAGE for r in reasons.values())
@@ -1182,6 +1352,8 @@ def _reset_measure_state() -> None:
     WideMeasureProducer.calls = 0
     PartAwareProducer.calls = 0
     PartAwareProducer.ran_on = []
+    WideWholePartAwareProducer.calls = 0
+    ChainPartAwareProducer.calls = 0
 
 
 def _collector(*groups: type[FeatureGroup]) -> PluginCollector:
@@ -1850,6 +2022,100 @@ class TestPartAwareFrameworkCheck:
         assert PartAwareProducer.calls == 2
         assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]
         assert sorted(sorted(_columns([f])) for f in results) == [["pmeasure", "pmeasure~v"], ["pmeasure~v"]]
+
+    @pytest.mark.parametrize("narrower", ["whole", "part"])
+    @pytest.mark.parametrize("tier", ["exact", "child-options"])
+    @pytest.mark.parametrize("consumers", ["dict", "arrow", "both"])
+    @pytest.mark.parametrize("reverse", [False, True], ids=["whole-first", "part-first"])
+    def test_nested_whole_and_part_twins_preserve_every_consumer(
+        self, narrower: str, tier: str, consumers: str, reverse: bool
+    ) -> None:
+        producer = PartAwareProducer if narrower == "whole" else WideWholePartAwareProducer
+        groups: list[type[FeatureGroup]] = [producer]
+        features: list[Feature | str] = []
+        expected: dict[str, list[int]] = {}
+        if tier == "exact":
+            groups.append(PythonDictWholeConsumer)
+            features.append("pmeasure_dict_whole_output")
+            expected["pmeasure_dict_whole_output"] = [3, 6, 9]
+        else:
+            pin = "PythonDictFramework" if narrower == "whole" else None
+            features.append(Feature("pmeasure", compute_framework=pin))
+            expected["pmeasure~v"] = [1, 2, 3]
+        if consumers in {"dict", "both"}:
+            groups.append(PythonDictPartConsumer if narrower == "whole" else PinnedPythonDictPartConsumer)
+            features.append("pmeasure_dict_part_output")
+            expected["pmeasure_dict_part_output"] = [2, 4, 6]
+        if consumers in {"arrow", "both"}:
+            groups.append(PyArrowPartConsumer if narrower == "whole" else PinnedPyArrowPartConsumer)
+            features.append("pmeasure_consumer_output")
+            expected["pmeasure_consumer_output"] = [2, 4, 6]
+        if reverse:
+            features.reverse()
+
+        frameworks: list[type[ComputeFramework]] = [PythonDictFramework, PyArrowTable]
+        if narrower == "part":
+            frameworks.append(PandasDataFrame)
+        results = _run(features, *groups, frameworks=frameworks)
+
+        assert _columns(results) == set(expected) | ({"pmeasure"} if tier == "child-options" else set())
+        for name, values in expected.items():
+            frame = next(frame for frame in results if name in _frame_column_names(frame))
+            assert column_values([frame], name) == values
+        assert producer.calls == (1 if consumers == "dict" else 2)
+        assert "PythonDictFramework" in producer.ran_on
+
+    @pytest.mark.parametrize("order", [(0, 1, 2), (0, 2, 1), (1, 0, 2), (1, 2, 0), (2, 0, 1), (2, 1, 0)])
+    def test_fold_chain_checks_consumers_against_the_final_survivor(self, order: tuple[int, int, int]) -> None:
+        requests: list[Feature | str] = [
+            "pmeasure_consumer_output",
+            "pmeasure_pandas_part_output",
+            Feature("pmeasure", compute_framework="PandasDataFrame"),
+        ]
+
+        results = _run(
+            [requests[index] for index in order],
+            ChainPartAwareProducer,
+            PyArrowPartConsumer,
+            PandasChainPartConsumer,
+            frameworks=[PandasDataFrame, PyArrowTable, PythonDictFramework],
+        )
+
+        assert _columns(results) == {
+            "pmeasure",
+            "pmeasure~v",
+            "pmeasure~w",
+            "pmeasure_consumer_output",
+            "pmeasure_pandas_part_output",
+        }
+        assert results.frame_for("pmeasure_consumer_output")["pmeasure_consumer_output"].to_pylist() == [2, 4, 6]
+        assert results.frame_for("pmeasure_pandas_part_output")["pmeasure_pandas_part_output"].tolist() == [22, 24, 26]
+        assert results.frame_for("pmeasure")["pmeasure~v"].tolist() == [1, 2, 3]
+        assert results.frame_for("pmeasure")["pmeasure~w"].tolist() == [11, 12, 13]
+        assert ChainPartAwareProducer.calls == 2
+        assert "PandasDataFrame" in ChainPartAwareProducer.ran_on
+
+    @pytest.mark.parametrize("reverse", [False, True], ids=["whole-first", "consumer-first"])
+    def test_flexible_part_consumer_may_choose_a_framework_outside_the_whole_survivor(self, reverse: bool) -> None:
+        requests: list[Feature | str] = [
+            Feature("pmeasure", compute_framework="PythonDictFramework"),
+            "pmeasure_flexible_part_output",
+        ]
+        if reverse:
+            requests.reverse()
+
+        results = _run(
+            requests,
+            PartAwareProducer,
+            FlexiblePartConsumer,
+            frameworks=[PythonDictFramework, PyArrowTable],
+        )
+
+        frame = results.frame_for("pmeasure_flexible_part_output")
+        assert isinstance(frame, pa.Table)
+        assert frame["pmeasure_flexible_part_output"].to_pylist() == [2, 4, 6]
+        assert PartAwareProducer.calls == 2
+        assert sorted(PartAwareProducer.ran_on) == ["PyArrowTable", "PythonDictFramework"]
 
     def test_whole_and_part_consumer_unpinned_compute_the_producer_once_per_step(self) -> None:
         _run(

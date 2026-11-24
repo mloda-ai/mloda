@@ -825,10 +825,6 @@ class Engine:
             host.framework_pinned = True
             collection.add(host)
             return host
-        declared = self._declared_options_by_uuid.get(host.uuid)
-        # An injected twin records no declaration; comparing a lone request with its options would warn falsely.
-        if declared is not None and existing.uuid in self._declared_options_by_uuid:
-            self._warn_on_default_equivalent_merge(host, declared, existing)
         self._merge_host_into(existing, host)
         existing.framework_pinned = True
         return existing
@@ -1025,6 +1021,8 @@ class Engine:
             ) or (host.data_type is None and not host.initial_requested_data)
             if host.data_type != survivor.data_type and not untyped_free:
                 continue
+            if not self._whole_part_consumers_fit(host, survivor, live):
+                continue
             collection = self.feature_group_collection[group_class]
             if survivor.data_type is None and host.data_type is not None:
                 promoted = copy(survivor)
@@ -1041,13 +1039,27 @@ class Engine:
         ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
+    def _whole_part_consumers_fit(self, host: Feature, survivor: Feature, live: Mapping[UUID, Feature]) -> bool:
+        """Every live consumer must be fixed to the survivor's one framework; a flexible one may convert the frame."""
+        if (host.parts_only and survivor.parts_only) or not (host.requested_parts or survivor.requested_parts):
+            return True
+        frameworks = survivor.compute_frameworks
+        if not frameworks:
+            return False
+        folded = {host.uuid, survivor.uuid}
+        return all(
+            len(frameworks) == 1 and consumer in live and live[consumer].compute_frameworks == frameworks
+            for consumer, parents in self.feature_link_parents.items()
+            if parents & folded
+        )
+
     def _same_merge_scope(self, a: Feature, b: Feature, *, parts: bool = True) -> bool:
-        """True when cascade keys and parts_only match, and requested parts too unless parts=False."""
+        """True when cascade keys match, and whole/part requests too unless parts=False."""
         return (
             self._cascade_keys_at_resolution.get(a.uuid, a.options.cascade_context_keys)
             == self._cascade_keys_at_resolution.get(b.uuid, b.options.cascade_context_keys)
             and (not parts or a.requested_parts == b.requested_parts)
-            and a.parts_only == b.parts_only
+            and (not parts or a.parts_only == b.parts_only)
         )
 
     def _same_matched_filters(self, host: Feature, target: Feature, group_class: type[FeatureGroup]) -> bool:
@@ -1155,6 +1167,10 @@ class Engine:
 
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
+        declared = self._declared_options_by_uuid.get(host.uuid)
+        # An injected twin records no declaration; comparing a lone request with its options would warn falsely.
+        if declared is not None and existing.uuid in self._declared_options_by_uuid:
+            self._warn_on_default_equivalent_merge(host, declared, existing, at_intake=False)
         existing.options.union_own_keys(host.options)
         existing.absorb_parts(host)
         if not host.link_key_only:
@@ -1360,7 +1376,7 @@ class Engine:
         return compatible
 
     def _warn_on_default_equivalent_merge(
-        self, feature: Feature, declared_options: Options, existing_feature: Feature
+        self, feature: Feature, declared_options: Options, existing_feature: Feature, *, at_intake: bool = True
     ) -> None:
         """Warn when a merge holds only post-materialization: the declared (pre-default) options differ."""
         survivor_declared = self._declared_options_by_uuid.get(existing_feature.uuid, existing_feature.options)
@@ -1369,10 +1385,16 @@ class Engine:
             declared_options.context, survivor_declared.context
         ):
             return
+        when = "at intake" if at_intake else "after resolution"
+        advice = (
+            "Deduplicate the request; dependency declaration follows the first-listed request."
+            if at_intake
+            else "Deduplicate the request."
+        )
         logger.warning(
             f"Feature '{feature.name}' was requested twice with default-equivalent options: the requests "
-            f"differ only in explicitly-set declared defaults or name-bound values and merged into one feature at intake. "
-            f"Deduplicate the request; dependency declaration follows the first-listed request."
+            f"differ only in explicitly-set declared defaults or name-bound values and merged into one feature {when}. "
+            f"{advice}"
         )
 
     def _update_feature_link_parents(self, child_uuid: UUID, original_uuid: UUID, wanted_uuid: UUID) -> None:

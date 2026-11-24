@@ -929,7 +929,7 @@ class IdentifyFeatureGroupClass:
         """The near-miss reason for a config-path group the request selects but leaves a required key absent."""
         if not self._selects_by_required_own_key(feature_group, options):
             return None
-        if issubclass(feature_group, FeatureChainParserMixin) and safe_field(
+        if is_nominal_subclass(feature_group, FeatureChainParserMixin) and safe_field(
             lambda: feature_group.resolve_feature_name(feature.name).owned, True, catching=(ValueError, re.error)
         ):
             return None

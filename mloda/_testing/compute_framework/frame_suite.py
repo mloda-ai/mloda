@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from collections.abc import Iterator
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Any, ClassVar
 from zoneinfo import ZoneInfo
 
@@ -301,7 +301,7 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         assert self.column_values(adapter, result, "A") == values
         assert self.column_values(adapter, result, "a") == self.column_values(adapter, appendable, "a")
 
-    @pytest.mark.parametrize("kind", ["single_zone", "mixed_zones"])
+    @pytest.mark.parametrize("kind", ["single_zone", "mixed_zones", "sub_hour_offset", "naive_and_aware"])
     def test_append_aware_column_keeps_instants_and_zone(
         self, adapter: FrameworkAdapter, framework_instance: Any, kind: str
     ) -> None:
@@ -312,6 +312,16 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
         if kind == "single_zone":
             values = [None if i % 2 else start + timedelta(days=i) for i in range(rows)]
             zones = ["America/New_York"]
+        elif kind == "sub_hour_offset":
+            offset = timezone(timedelta(hours=5, minutes=30))
+            values = [None if i % 2 else (start + timedelta(days=i)).replace(tzinfo=offset) for i in range(rows)]
+            zones = ["+05:30"]
+        elif kind == "naive_and_aware":
+            values = [
+                None if i % 2 else (start + timedelta(days=i)).replace(tzinfo=zone if i % 4 == 0 else None)
+                for i in range(rows)
+            ]
+            zones = ["naive", "aware"]
         else:
             kolkata = ZoneInfo("Asia/Kolkata")
             values = [
@@ -337,3 +347,4 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
                 continue
             assert read == want
             assert read.utcoffset() == want.utcoffset()
+            assert (read.tzinfo is None) == (want.tzinfo is None)

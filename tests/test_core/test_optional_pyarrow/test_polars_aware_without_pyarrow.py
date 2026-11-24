@@ -134,6 +134,34 @@ expect_mixed("LAZY_APPEND", lambda: lazy_framework._append_columns(pl.LazyFrame(
 expect_mixed("LAZY_BUILD", lambda: lazy_framework.transform(mixed, ["zoned"]))
 
 try:
+    plus5 = timezone(timedelta(hours=5))
+    values = [ny.astimezone(plus5), None]
+    frame = framework.transform({"zoned": values}, ["zoned"])
+    got = frame["zoned"].to_list()
+    same = got[0] == values[0] and got[0].utcoffset() == values[0].utcoffset() and got[1] is None
+    print("WHOLE_HOUR_OK" if frame.schema["zoned"].time_zone == "Etc/GMT-5" and same else "WHOLE_HOUR_WRONG:" + str(got))
+except Exception as e:
+    print("WHOLE_HOUR_FAILED:" + type(e).__name__ + ":" + str(e))
+
+try:
+    framework.transform({"zoned": [kolkata]}, ["zoned"])
+    print("SUB_HOUR_NO_RAISE")
+except ValueError as e:
+    print("SUB_HOUR_OK" if "zoned" in str(e) and "+05:30" in str(e) else "SUB_HOUR_WRONGMSG:" + str(e))
+except Exception as e:
+    print("SUB_HOUR_WRONG:" + type(e).__name__ + ":" + str(e))
+
+for order, naive_mix in [("AWARE_NAIVE", [ny, ny.replace(tzinfo=None)]), ("NAIVE_AWARE", [ny.replace(tzinfo=None), ny])]:
+    try:
+        framework.transform({"zoned": naive_mix}, ["zoned"])
+        print(order + "_NO_RAISE")
+    except ValueError as e:
+        ok = "zoned" in str(e) and "naive" in str(e) and "aware" in str(e)
+        print(order + "_OK" if ok else order + "_WRONGMSG:" + str(e))
+    except Exception as e:
+        print(order + "_WRONG:" + type(e).__name__ + ":" + str(e))
+
+try:
     frame = framework.transform({"zoned": [ny, None]}, ["zoned"])
     print("SINGLE_OK" if frame.schema["zoned"].time_zone == "America/New_York" else "SINGLE_WRONGZONE")
 except Exception as e:
@@ -170,3 +198,5 @@ def test_polars_dict_build_aware_zones_without_pyarrow() -> None:
     for label in ["APPEND", "LAZY_APPEND", "LAZY_BUILD"]:
         assert f"{label}_OK" in out, f"stdout: {out!r}"
     assert "SINGLE_OK" in out, f"stdout: {out!r}"
+    for label in ["WHOLE_HOUR", "SUB_HOUR", "AWARE_NAIVE", "NAIVE_AWARE"]:
+        assert f"{label}_OK" in out, f"stdout: {out!r}"

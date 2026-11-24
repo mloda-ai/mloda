@@ -1,6 +1,7 @@
 """Unit tests for value_set, the shared helper that builds typed pyarrow value sets for is_in."""
 
 from collections.abc import Iterator
+from datetime import UTC, datetime
 from typing import Any
 
 import pyarrow as pa
@@ -29,6 +30,11 @@ class TestPyArrowValueSet:
         column = pa.array(["a", "b", "a"]).dictionary_encode()
         result = value_set(column, [])
         assert result.type == pa.string()
+
+    def test_naive_and_aware_values_raise(self) -> None:
+        values = [datetime(2023, 3, 11, 12, 0), datetime(2023, 3, 11, 12, 0, tzinfo=UTC)]
+        with pytest.raises(ValueError, match="naive and aware"):
+            value_set(pa.array([1], type=pa.timestamp("us", tz="UTC")), values)
 
     @pytest.mark.parametrize("values", [["a", "b"], [None, None]], ids=["values", "all_none"])
     def test_single_pass_iterable_is_consumed_once(self, values: list[Any]) -> None:

@@ -140,11 +140,15 @@ Implementations compute on the session zone; a zone-carrying column against a `T
 without a recorded zone is reported as aware against naive.
 
 mloda's Arrow-based builders, Polars and Spark raise a `ValueError` naming the column and zones when a column
-mixes zones or has a zone with no readable name.
+mixes zones or has a zone with no readable name. They also raise, naming the column, when a column mixes
+naive and aware datetimes.
+
+Polars keeps a whole-hour fixed offset as an `Etc/GMT-N` zone (`+05:00` becomes `Etc/GMT-5`) and raises for
+a sub-hour one such as `+05:30`, naming the column and the zone.
 
 `DataTypeValidatorSuite` checks this with a DST zone and a sub-hour offset. `AppendColumnsSuite` checks an
-appended DST-zone column (keeps instants and zone, or raises) and a mixed-zone column (keeps each value's
-zone, or raises naming the column and both zones).
+appended DST-zone column (keeps instants and zone, or raises), a mixed-zone column (keeps each value's
+zone, or raises naming the column and both zones), a sub-hour offset and a naive/aware mix.
 
 ## Core feature groups
 

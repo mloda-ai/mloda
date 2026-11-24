@@ -33,6 +33,16 @@ def _sub_hour_zone(arrow_type: Any) -> str | None:
     return None
 
 
+def reject_sub_hour_zone(column: str, zone: str | None) -> None:
+    """Raise ValueError when zone is a fixed offset with non-zero minutes, which Polars cannot hold."""
+    match = _FIXED_OFFSET.fullmatch(zone) if zone else None
+    if match and match.group(1) != "00":
+        raise ValueError(
+            f"Column '{column}' has time zone '{zone}', but Polars has no sub-hour fixed offset. "
+            "Convert it to UTC or a named zone first."
+        )
+
+
 class PolarsPyArrowTransformer(BaseTransformer):
     """
     Transformer for converting between Polars DataFrame and PyArrow Table.
@@ -87,9 +97,4 @@ class PolarsPyArrowTransformer(BaseTransformer):
     def _reject_sub_hour_offsets(cls, data: Any) -> None:
         """Raise ValueError for timestamp columns with fixed offsets that have non-zero minutes."""
         for field in data.schema:
-            tz = _sub_hour_zone(field.type)
-            if tz:
-                raise ValueError(
-                    f"Column '{field.name}' has time zone '{tz}', but Polars has no sub-hour fixed offset. "
-                    "Convert it to UTC first."
-                )
+            reject_sub_hour_zone(field.name, _sub_hour_zone(field.type))

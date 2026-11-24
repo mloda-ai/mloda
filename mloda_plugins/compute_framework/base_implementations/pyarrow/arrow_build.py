@@ -64,21 +64,30 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
     return f"Cannot name the time zone {detail}{where}; use a zone with a readable name."
 
 
-def _aware_values(values: Any) -> list[datetime] | None:
-    """The non-None values when there is at least one and all are aware datetimes, else None."""
+def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
+    """The non-None values when there is at least one and all are aware datetimes, else None.
+
+    Raises when the values are all datetimes mixing naive and aware ones.
+    """
     present = []
     for v in values:
         if v is None:
             continue
-        if not (isinstance(v, datetime) and v.tzinfo is not None):
+        if not isinstance(v, datetime):
             return None
         present.append(v)
-    return present or None
+    aware = [v for v in present if v.tzinfo is not None]
+    if not aware:
+        return None
+    if len(aware) != len(present):
+        subject = "Values mix" if column is None else f"Column {column!r} mixes"
+        raise ValueError(f"{subject} naive and aware datetimes; make them all naive or all aware.")
+    return present
 
 
 def aware_zone(values: Any, column: str | None = None) -> str | None:
     """Return the single zone name of aware datetimes, else None; raise on mixed or unnameable zones."""
-    present = _aware_values(values)
+    present = _aware_values(values, column)
     if present is None:
         return None
     where = "" if column is None else f" in column {column!r}"
@@ -101,7 +110,7 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
             if aware:
                 type = pa.timestamp("us", tz=zone)
         else:
-            aware = _aware_values(values) is not None
+            aware = _aware_values(values, column) is not None
         if aware:
             utc_values = [None if v is None else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)

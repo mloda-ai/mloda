@@ -62,9 +62,7 @@ def _column_field(name: str, values: Sequence[Any], infer: Callable[[Any], Any])
     if zone is not None:
         return StructField(name, TimestampType(), True), zone
     if present and all(isinstance(v, datetime) for v in present):
-        if all(v.tzinfo is None for v in present):
-            return StructField(name, TimestampNTZType(), True), None
-        raise ValueError(f"Column {name!r} mixes naive and aware datetimes; make them all naive or all aware.")
+        return StructField(name, TimestampNTZType(), True), None
     return StructField(name, infer(present[0] if present else ""), True), None
 
 

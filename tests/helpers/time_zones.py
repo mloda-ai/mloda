@@ -36,7 +36,11 @@ def keyless_ny() -> ZoneInfo:
 
 
 def bad_zone_values(kind: str) -> tuple[list[Any], list[str]]:
-    """Two aware values for kind mixed, keyless or custom, and the strings the error must contain."""
+    """Two values for kind mixed, keyless, custom, aware_naive or naive_aware, and the strings the error must contain."""
+    if kind == "aware_naive":
+        return [datetime(2023, 3, 11, 12, 0, tzinfo=_NY), datetime(2023, 3, 11, 12, 0)], ["naive", "aware"]
+    if kind == "naive_aware":
+        return [datetime(2023, 3, 11, 12, 0), datetime(2023, 3, 11, 12, 0, tzinfo=_NY)], ["naive", "aware"]
     if kind == "mixed":
         return [
             datetime(2023, 3, 11, 12, 0, tzinfo=_NY),

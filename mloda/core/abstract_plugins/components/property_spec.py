@@ -37,10 +37,7 @@ def is_positive_int(value: Any) -> bool:
 
 
 def is_non_negative_number(value: Any) -> bool:
-    """Element validator for finite real numbers >= 0 (weights); refuses bool, NaN, infinities and strings.
-
-    Unlike ``is_positive_int`` a string is refused, so a name-bound key needs ``name_converter=float``.
-    """
+    """Element validator for finite real numbers >= 0; refuses bool, NaN, infinities and strings."""
     if isinstance(value, bool) or not isinstance(value, numbers.Real):
         return False
     return bool(not value < 0 and value < math.inf)
@@ -114,7 +111,7 @@ class PropertySpec:
     runtime: bool = False
     # A group option a caller may not move to the context; refused at plan time.
     group_only: bool = False
-    # One value only: a list, tuple, set, frozenset or mapping is refused.
+    # One value only; containers are refused.
     scalar: bool = False
 
     def __post_init__(self) -> None:

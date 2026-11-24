@@ -304,7 +304,6 @@ class AppendColumnsSuite(ComputeFrameworkSuite, suite_base=True):
     def test_append_aware_column_keeps_instants_and_zone(
         self, adapter: FrameworkAdapter, framework_instance: Any
     ) -> None:
-        """A non-UTC aware column with None keeps instants and zone, or raises naming the column and zone."""
         appendable = self._appendable(adapter)
         zone = ZoneInfo("America/New_York")
         start = datetime(2023, 3, 11, 12, 0, tzinfo=zone)

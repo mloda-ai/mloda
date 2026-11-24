@@ -32,7 +32,7 @@ def _all_aware(values: Any) -> bool:
 
 
 def aware_zone(values: Any, column: str | None = None) -> str | None:
-    """Return the one zone name of a list of aware datetimes (None kept), else None; reject mixed or unnameable zones."""
+    """Return the single zone name of aware datetimes, else None; raise on mixed or unnameable zones."""
     if not _all_aware(values):
         return None
     present = [v for v in values if v is not None]

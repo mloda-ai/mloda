@@ -56,7 +56,7 @@ _SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
 
 
 def _column_field(name: str, values: Sequence[Any], infer: Callable[[Any], Any]) -> tuple[Any, str | None]:
-    """Return the StructField and the zone of an aware column; a naive datetime column is TimestampNTZType."""
+    """Return the StructField and the zone (if aware) for a column."""
     zone = aware_zone(values, name)
     present = [v for v in values if v is not None]
     if zone is not None:

@@ -701,6 +701,7 @@ if it really is a whole-value check.
 | `consumer_local_keys` and the explicit-allowlist override in `Options.inherit_from` | `tests/test_core/test_abstract_plugins/test_components/test_options_inherit_from.py` |
 | Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
 | Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
+| A context key that does not reach an input group declaring it as a group option logs one plan warning | `tests/test_core/test_core/test_uncascaded_context_warning.py` |
 | Filter criteria matching observes effective options | `tests/test_core/test_filter/test_filter_criteria_effective_options.py` |
 | The shared declaration mechanics: the per-key validator | `tests/.../test_components/test_declaration_surface.py` |
 | A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../feature_chainer/test_required_when_enforced_on_override.py`, `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
@@ -784,6 +785,12 @@ Options(
 - The value sits in the options of every input down the chain, so every feature group
   there sees it, and it is pickled to MULTIPROCESSING workers.
 - The pull `inherit_context_keys` stays one hop.
+
+Planning logs a warning when a context key set on a requested feature does not reach an input
+feature group that declares it as a group option. Pass the key in `Options(group=...)` or list it
+in `cascade_context_keys`; a `group_only` or credential handle key is refused in the context, so
+only the group option works. No warning is logged when the requested feature's own group declares
+the key, or when the input already holds an equal value or one a consumer set for it.
 
 Group options remain the choice when the value should be part of feature identity and
 resolution at every level, and a feature group author can pull a key level by level

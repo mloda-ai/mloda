@@ -1595,6 +1595,7 @@ def test_narrower_fold_keeps_every_parent_alive_and_types_consistent(shape: str)
     engine.resolved_input_feature_names = {}
     engine.input_feature_columns = {}
     engine._declared_options_by_uuid = {}
+    engine._configured_option_keys_by_uuid = defaultdict(set)
     engine._cascade_keys_at_resolution = {}
 
     engine._fold_into_narrower_twins()

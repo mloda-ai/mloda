@@ -76,6 +76,7 @@ from mloda.core.abstract_plugins.components.handle_option_names import CONNECTIO
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import (
     group_only_keys,
+    group_scoped_keys,
     runtime_parameter_keys,
     unforwarded_keys,
 )
@@ -170,6 +171,8 @@ class Engine:
         self._intake_options_memo: dict[tuple[type[FeatureGroup], int, Any], tuple[Options, Options]] = {}
         # Declared (pre-default) options per uuid for the default-equivalent merge warning; injected twins record none.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
+        # Pre-default key presence across merged declarations, for context delivery diagnostics only.
+        self._configured_option_keys_by_uuid: dict[UUID, set[str]] = defaultdict(set)
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
         # Per feature uuid, the sorted columns its declared inputs bind to in the incoming data.
@@ -312,6 +315,7 @@ class Engine:
         with reader_probe_scope(probe_scope):
             self._load_result_index_columns()
 
+        self._warn_on_uncascaded_context()
         if self.global_filter:
             self.global_filter.warn_on_unmatched_filters()
 
@@ -503,6 +507,78 @@ class Engine:
                 f"forward_group_exclude={{...}}, an allowlist, or forward_group=False on the child in "
                 f"input_features."
             )
+
+    def _warn_on_uncascaded_context(self) -> None:
+        """Warn when a requested local context misses a resolved group-scoped consumer."""
+        candidates = [
+            (group, feature, keys)
+            for group, features in self.feature_group_collection.items()
+            for feature in features
+            if feature.initial_requested_data
+            and (
+                keys := feature.options.own_context_keys
+                - feature.options.cascade_context_keys
+                - self._property_mapping_keys(group)
+            )
+        ]
+        if not candidates:
+            return
+        resolved = {
+            feature.uuid: (group, feature)
+            for group, features in self.feature_group_collection.items()
+            for feature in features
+        }
+        missing: set[str] = set()
+        requested_names: set[str] = set()
+        input_groups: set[str] = set()
+        refused: set[str] = set()
+        for group, feature, keys in candidates:
+            pending = list(self.feature_link_parents.get(feature.uuid, ()))
+            seen = {feature.uuid}
+            while pending:
+                uuid = pending.pop()
+                if uuid in seen:
+                    continue
+                seen.add(uuid)
+                input_group, input_feature = resolved[uuid]
+                candidate_keys = keys & group_scoped_keys(input_group).keys()
+                if candidate_keys:
+                    configured = self._configured_option_keys_by_uuid.get(uuid, ())
+                    restricted = group_only_keys(input_group).keys() | credential_handle_keys(input_group)
+                for key in candidate_keys:
+                    # Keys set through any consumer are unioned per merged feature, so one consumer's setting
+                    # silences every path to that input.
+                    if key in configured:
+                        continue
+                    if key in input_feature.options and _deep_equal(
+                        input_feature.options.get(key), feature.options.context[key]
+                    ):
+                        continue
+                    missing.add(key)
+                    requested_names.add(str(feature.name))
+                    input_groups.add(input_group.get_class_name())
+                    if key in restricted:
+                        refused.add(key)
+                pending.extend(self.feature_link_parents.get(uuid, ()))
+        if not missing:
+            return
+        remedies = []
+        plain = sorted(missing - refused)
+        if plain:
+            remedies.append(f"Pass {plain} in Options(group=...) or list them in cascade_context_keys.")
+        if refused:
+            remedies.append(
+                f"Pass {sorted(refused)} in Options(group=...); a group-only or credential handle key is "
+                "refused in the context."
+            )
+        logger.warning(
+            "Context option(s) %s of requested feature(s) %s do not reach "
+            "input feature group(s) %s, which declare them as group options. %s",
+            sorted(missing),
+            sorted(requested_names),
+            sorted(input_groups),
+            " ".join(remedies),
+        )
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature, depth: int = 0
@@ -1192,6 +1268,9 @@ class Engine:
         declared = self._declared_options_by_uuid.pop(host.uuid, None)
         if declared is not None:
             self._declared_options_by_uuid.setdefault(existing.uuid, declared)
+        self._configured_option_keys_by_uuid[existing.uuid].update(
+            self._configured_option_keys_by_uuid.pop(host.uuid, ())
+        )
         host_parents = self.feature_link_parents.pop(host.uuid, set())
         self.feature_link_parents[existing.uuid] |= host_parents - {existing.uuid}
         for parents in self.feature_link_parents.values():
@@ -1287,6 +1366,8 @@ class Engine:
             feature_collection.add(feature)
             if not (if_index_feature or engine_injected):
                 self._declared_options_by_uuid[feature.uuid] = declared_options
+                if child_uuid is not None:
+                    self._configured_option_keys_by_uuid[feature.uuid].update(declared_options)
             if specialized_from:
                 self.specialized_from[feature.uuid] = specialized_from
             return True
@@ -1324,6 +1405,8 @@ class Engine:
             if not (if_index_feature or engine_injected):
                 # The first request to reach an engine-injected index or filter twin becomes its declaration.
                 self._declared_options_by_uuid.setdefault(existing_feature.uuid, declared_options)
+                if child_uuid is not None:
+                    self._configured_option_keys_by_uuid[existing_feature.uuid].update(declared_options)
                 self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:

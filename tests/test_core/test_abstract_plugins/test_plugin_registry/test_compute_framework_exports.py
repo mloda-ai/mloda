@@ -37,6 +37,22 @@ _PYTHON_DICT_PACKAGE = "mloda_plugins.compute_framework.base_implementations.pyt
 _PYTHON_DICT_FRAMEWORK_MODULE = f"{_PYTHON_DICT_PACKAGE}.python_dict_framework"
 _PYTHON_DICT_UTILS_MODULE = f"{_PYTHON_DICT_PACKAGE}.python_dict_utils"
 _PANDAS_DATAFRAME_MODULE = "mloda_plugins.compute_framework.base_implementations.pandas.dataframe"
+_SQL_PACKAGE = "mloda_plugins.compute_framework.base_implementations.sql"
+_SQL_WINDOW_MODULE = f"{_SQL_PACKAGE}.sql_window"
+_SQL_UTILS_MODULE = f"{_SQL_PACKAGE}.sql_utils"
+
+# SQL relation helpers published from both SQL backend modules: (symbol, source module)
+_SQL_HELPERS: list[tuple[str, str]] = [
+    ("OrderBy", _SQL_WINDOW_MODULE),
+    ("WindowFrame", _SQL_WINDOW_MODULE),
+    ("FrameBound", _SQL_WINDOW_MODULE),
+    ("CurrentRow", _SQL_WINDOW_MODULE),
+    ("Unbounded", _SQL_WINDOW_MODULE),
+    ("Preceding", _SQL_WINDOW_MODULE),
+    ("Following", _SQL_WINDOW_MODULE),
+    ("quote_ident", _SQL_UTILS_MODULE),
+    ("pick_helper_column_name", _SQL_UTILS_MODULE),
+]
 
 _FACADES: list[str] = ["mloda.provider", "mloda.steward", "mloda.user"]
 
@@ -113,12 +129,16 @@ BACKEND_EXPORT_MATRIX: list[tuple[str, str, str]] = [
         "IcebergFramework",
         "mloda_plugins.compute_framework.base_implementations.iceberg.iceberg_framework",
     ),
+    *[
+        (backend, symbol, source)
+        for backend in ("mloda.user.duckdb", "mloda.user.sqlite")
+        for symbol, source in _SQL_HELPERS
+    ],
 ]
 
 _BACKEND_MATRIX_IDS = [f"{backend}:{symbol}" for backend, symbol, _source in BACKEND_EXPORT_MATRIX]
 
-# Every symbol that used to live on the facades themselves (#649 lazy user exports, #707/#716
-# eager provider exports). None of them may be a facade attribute any more.
+# Every symbol a backend module publishes. None of them may be a facade attribute.
 _FORMER_FACADE_SYMBOLS: list[str] = sorted({symbol for _backend, symbol, _source in BACKEND_EXPORT_MATRIX})
 
 
@@ -221,7 +241,7 @@ class TestFrameworkSymbolsAreNotOnTheFacades:
     @pytest.mark.parametrize("facade", _FACADES)
     @pytest.mark.parametrize("symbol", _FORMER_FACADE_SYMBOLS)
     def test_symbol_is_not_a_facade_attribute(self, facade: str, symbol: str) -> None:
-        """The framework classes and python_dict helpers moved to the per-backend modules."""
+        """Every symbol a backend module publishes stays off the facades."""
         module = importlib.import_module(facade)
         assert not hasattr(module, symbol), (
             f"{facade} must NOT expose '{symbol}' any more: it is published from its mloda.user backend module "

@@ -377,7 +377,7 @@ A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these framew
 
 ## SQL Relation Helpers (DuckDB / SQLite)
 
-The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `SqliteRelation`) inside `calculate_feature`. Both share the same helper surface so a feature group can be written once against either. Import them from `mloda.user.duckdb` and `mloda.user.sqlite` respectively.
+The DuckDB and SQLite frameworks expose a relation object (`DuckdbRelation`, `SqliteRelation`) inside `calculate_feature`. Both share the same helper surface so a feature group can be written once against either. Import them from `mloda.user.duckdb` and `mloda.user.sqlite` respectively. Both modules also export the window primitives (`OrderBy`, `WindowFrame`, `FrameBound`, `CurrentRow`, `Unbounded`, `Preceding`, `Following`), `quote_ident` and `pick_helper_column_name`.
 
 ### Result type
 
@@ -411,7 +411,7 @@ A column Arrow cannot build (for example bytes that are not UTF-8 in a text colu
 `with_row_number` appends a `ROW_NUMBER()` column; `window` appends an arbitrary window expression. Rows keep their input order. Both quote every identifier and raise `ValueError` if the new `alias` collides with an existing column (the comparison ignores ASCII case) or if a `partition_by` / `order_by` column is not an exact column name.
 
 ```py
-from mloda_plugins.compute_framework.base_implementations.sql.sql_window import (
+from mloda.user.duckdb import (
     OrderBy,
     WindowFrame,
     Preceding,

@@ -111,8 +111,8 @@ def _pattern_named_and_total_groups(pattern: Any) -> tuple[frozenset[str], int]:
 def _flatten_patterns(patterns: list[Any]) -> list[Any]:
     """Flatten one level so a list/tuple pattern attribute contributes its elements as concrete patterns.
 
-    Mirrors how a ``SUFFIX_PATTERN = [regex]`` fixture passes the list straight to ``parse_name`` at
-    runtime. A compiled ``re.Pattern`` and a ``str`` stay as-is.
+    Flattens what a ``_get_prefix_patterns`` override returns, as ``prefix_patterns_of`` flattens the
+    attributes. A compiled ``re.Pattern`` and a ``str`` stay as-is.
     """
     flattened: list[Any] = []
     for pattern in patterns:

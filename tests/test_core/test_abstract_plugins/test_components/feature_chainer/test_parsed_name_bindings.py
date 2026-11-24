@@ -388,6 +388,8 @@ class TestBindNameCaptures:
 
         assert bindings == {ALGORITHM_KEY: "pca"}
 
+    @pytest.mark.parametrize("base", [FeatureGroup, FeatureChainParserMixin], ids=["plain", "mixin"])
+    @pytest.mark.parametrize("attr_name", ["PREFIX_PATTERN", "SUFFIX_PATTERN"])
     @pytest.mark.parametrize("wrap", [lambda p: p[0], list, tuple], ids=["str", "list", "tuple"])
     @pytest.mark.parametrize(
         ("pattern", "name", "expected"),
@@ -402,20 +404,28 @@ class TestBindNameCaptures:
         ids=["positional", "named"],
     )
     def test_pattern_attribute_form_binds_like_the_str_form(
-        self, wrap: Callable[[list[str]], Any], pattern: str, name: str, expected: dict[str, Any]
+        self,
+        base: type,
+        attr_name: str,
+        wrap: Callable[[list[str]], Any],
+        pattern: str,
+        name: str,
+        expected: dict[str, Any],
     ) -> None:
         attribute = wrap([pattern])
         group: Any = type(
-            "PatternFormPnb770Group",
-            (FeatureGroup,),
+            f"PatternForm{base.__name__}{attr_name}{type(attribute).__name__}{len(expected)}{name[-12:]}Pnb770Group",
+            ((base,) if base is FeatureGroup else (base, FeatureGroup)),
             {
                 "__module__": __name__,
-                "PREFIX_PATTERN": attribute,
+                attr_name: attribute,
                 "PROPERTY_MAPPING": {ALGORITHM_KEY: _algorithm_spec()},
             },
         )
 
         assert group.name_bindings(name) == expected
+        if base is FeatureChainParserMixin:
+            assert group.match_feature_group_criteria(name, Options())
 
     def test_legacy_fallback_binds_nothing_when_no_value_space_contains_the_value(self) -> None:
         """The fallback only ever binds a value that is already a member of an allowed_values."""

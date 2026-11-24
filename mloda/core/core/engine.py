@@ -1007,6 +1007,7 @@ class Engine:
         """Keys the feature name binds; an unreadable name binds nothing, a source group binds every declared key."""
         if is_nominal_subclass(group_class, SourceFeatureGroup):
             return {str(k) for k in declared}  # declared keys route the read for a source group
+        # An unreadable name proves no key came from it: copies split or are rejected, never silently share a value.
         return set(group_class.name_bindings(name)) | {DefaultOptionKeys.in_features.value}
 
     def _fold_into_narrower_twins(self) -> None:

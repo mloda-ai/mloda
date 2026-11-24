@@ -901,10 +901,11 @@ class Engine:
                         ):
                             continue
                         name_derived = self._name_derived_keys(group_class, name, declared)
+                        explicit = a.options.explicit_split_context_keys | b.options.explicit_split_context_keys
                         keys = sorted(
                             str(k)
                             for k in set(a.options.context) | set(b.options.context)
-                            if str(k) not in name_derived
+                            if (str(k) not in name_derived or k in explicit)
                             and (
                                 (k in a.options.context) != (k in b.options.context)
                                 or not _deep_equal(a.options.context[k], b.options.context[k])

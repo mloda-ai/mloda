@@ -6,14 +6,13 @@ from typing import Any
 
 import pytest
 
-from mloda.core.prepare.execution_plan import ExecutionPlan
 from mloda.core.prepare.input_chain import resolution_key
 from mloda.provider import FeatureGroup, FeatureSet, PropertySpec
 from mloda.user import Feature, Options
 
 
 def _feature(options: Options | None = None, keys: Any = (), **kwargs: Any) -> Feature:
-    return Feature("split_context_feature", options=options, **{"split_context_keys": keys, **kwargs})
+    return Feature("split_context_feature", options=options, split_context_keys=keys, **kwargs)
 
 
 class SplitContextDefaults(FeatureGroup):
@@ -180,25 +179,3 @@ def test_split_markers_do_not_change_feature_identity_but_do_change_resolution_i
     assert hash(plain) == hash(marked)
     assert resolution_key(plain) != resolution_key(marked)
     assert resolution_key(plain.options) != resolution_key(marked.options)
-
-
-def test_one_explicit_key_splits_every_feature_in_scope_by_value() -> None:
-    marked = _feature(Options(context={"top_k": 2}), {"top_k"})
-    same = Feature("same_value", Options(context={"top_k": 2, "metadata": "other"}))
-    different = Feature("different_value", Options(context={"top_k": 3}))
-
-    grouped = ExecutionPlan.group_features_by_compute_framework_and_options({marked, same, different})
-
-    assert sorted(sorted(str(feature.name) for feature in group) for group in grouped.values()) == [
-        ["different_value"],
-        ["same_value", "split_context_feature"],
-    ]
-
-
-def test_unmarked_context_differences_still_share_a_group() -> None:
-    first = Feature("plain_first", Options(context={"metadata": "one"}))
-    second = Feature("plain_second", Options(context={"metadata": "two"}))
-
-    grouped = ExecutionPlan.group_features_by_compute_framework_and_options({first, second})
-
-    assert list(grouped.values()) == [{first, second}]

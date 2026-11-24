@@ -59,8 +59,7 @@ class RenamingContextConsumer(FeatureGroup):
 
     def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
         source_options = Options(context={"top_k": options.get("candidates_top_k")})
-        arguments: dict[str, Any] = {"split_context_keys": {"top_k"}}
-        return {Feature(ROOT, source_options, **arguments)}
+        return {Feature(ROOT, source_options, split_context_keys={"top_k"})}
 
     @classmethod
     def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
@@ -207,10 +206,8 @@ def test_one_marker_in_the_root_scope_keeps_both_plain_downstream_paths_separate
 ) -> None:
     def input_features(self: RenamingContextConsumer, options: Options, feature_name: FeatureName) -> set[Feature]:
         value = options.get("candidates_top_k")
-        arguments: dict[str, Any] = {}
-        if marker_location == "chain-root" and value == 1:
-            arguments["split_context_keys"] = {"top_k"}
-        return {Feature(ROOT, Options(context={"top_k": value}), **arguments)}
+        keys = {"top_k"} if marker_location == "chain-root" and value == 1 else frozenset[str]()
+        return {Feature(ROOT, Options(context={"top_k": value}), split_context_keys=keys)}
 
     monkeypatch.setattr(RenamingContextConsumer, "input_features", input_features)
     calls: list[tuple[int, ...]] = []
@@ -221,8 +218,7 @@ def test_one_marker_in_the_root_scope_keeps_both_plain_downstream_paths_separate
     expected_calls = [(1,), (2,)]
     marked_value = 1
     if marker_location == "third-direct-root":
-        arguments: dict[str, Any] = {"split_context_keys": {"top_k"}}
-        requests.insert(0, Feature(ROOT, Options(context={"top_k": 3}), **arguments))
+        requests.insert(0, Feature(ROOT, Options(context={"top_k": 3}), split_context_keys={"top_k"}))
         expected[ROOT] = [[30]]
         expected_calls.append((3,))
         marked_value = 3
@@ -234,3 +230,89 @@ def test_one_marker_in_the_root_scope_keeps_both_plain_downstream_paths_separate
     assert _columns(results) == expected
     assert sorted(calls) == expected_calls
     _assert_explicit_source_marker(observed, marked_value)
+
+
+FORWARDED = ("forwarded_small", "forwarded_large")
+
+
+class ForwardingConsumer(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(FORWARDED)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        return {Feature(ROOT)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(feature.name): [value + 1 for value in _values(data, ROOT)] for feature in features.features}
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+@pytest.mark.parametrize("reverse", [False, True])
+def test_forwarded_context_key_splits_a_fixed_name_root_without_a_marker(
+    framework: type[ComputeFramework], reverse: bool
+) -> None:
+    calls: list[tuple[int, ...]] = []
+    observed: list[Options] = []
+    root, _, _ = _groups(calls, observed)
+    requests: list[Feature | str] = [
+        Feature(name, Options(context={"top_k": top_k}, propagate_context_keys=frozenset({"top_k"})))
+        for name, top_k in zip(FORWARDED, (1, 2))
+    ]
+    if reverse:
+        requests.reverse()
+
+    results = _run(requests, {root, ForwardingConsumer}, [framework])
+
+    assert _columns(results) == {"forwarded_small": [[11]], "forwarded_large": [[21]]}
+    assert sorted(calls) == [(1,), (2,)]
+
+
+MID = "marked_mid"
+BASE = "marked_base"
+TWIN_CONSUMERS = {"marked_twin_one": 1, "marked_twin_two": 2}
+
+
+class MarkedBaseRoot(DataCreatorFeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {BASE}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {BASE: [1]}
+
+
+class MarkedMid(FeatureGroup):
+    PROPERTY_MAPPING = {"level": PropertySpec("The marked value.", context=True)}
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {MID}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        return {Feature(BASE)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {MID: [1]}
+
+
+class MarkedTwinConsumer(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(TWIN_CONSUMERS)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        level = TWIN_CONSUMERS[str(feature_name)]
+        return {Feature(MID, Options(context={"level": level}), split_context_keys={"level"})}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(feature.name): [1] for feature in features.features}
+
+
+def test_marked_non_root_input_reached_with_differing_values_is_rejected_at_plan_time() -> None:
+    with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
+        _run(list(TWIN_CONSUMERS), {MarkedBaseRoot, MarkedMid, MarkedTwinConsumer}, [PythonDictFramework])

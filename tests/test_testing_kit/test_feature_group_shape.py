@@ -4,7 +4,9 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable, Iterator, Mapping
+from datetime import date, datetime
 from typing import Any, Literal, cast
+from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -139,6 +141,9 @@ def _write_parts(kind: str, data: dict[str, list[Any]], counter: list[int]) -> d
     return data
 
 
+_DAYS = [date(2024, 1, 1), date(2024, 2, 2), date(2024, 3, 3)]
+
+
 def make_run_group(
     kind: str = "ok",
     rule: set[type[ComputeFramework]] | None = None,
@@ -165,8 +170,10 @@ def make_run_group(
 
         @classmethod
         def return_data_type_rule(cls, feature: Feature) -> DataType | None:
-            if kind == "undeclared_out":
+            if kind in ("undeclared_out", "int32_on_zero_rows"):
                 return None
+            if kind == "double_out":
+                return DataType.DOUBLE
             if kind == "object_date":
                 return DataType.DATE
             if kind == "tz_out":
@@ -260,6 +267,16 @@ def make_run_group(
             if kind == "overwrites_input":
                 data = _double_into(data, "rg_out", "rg_src")
                 data["rg_src"] = [0 for _ in data["rg_src"]]
+                return data
+            if kind in ("nulls_date", "restores_date"):
+                data = _double_into(data, "rg_out", "rg_src")
+                rows = len(data["rg_src"])
+                data["rg_day"] = [None] * rows if kind == "nulls_date" else _DAYS[:rows]
+                return data
+            if kind == "int32_on_zero_rows":
+                data = _double_into(data, "rg_out", "rg_src")
+                if len(data) == 0:
+                    data["rg_out"] = data["rg_out"].astype("int32")
                 return data
             if kind == "wrong_type":
                 if _is_columnar_dict(data):
@@ -993,24 +1010,63 @@ def test_pandas_na_output_passes_determinism() -> None:
     assert result.failures == (), result.failures
 
 
+class _ProductionPandasAdapter(PandasAdapter):
+    """Frames like production: no nullable dtypes, so a null-bearing int is float64 and int64 on zero rows."""
+
+    def from_arrow(self, table: Any) -> Any:
+        from mloda_plugins.compute_framework.base_implementations.pandas.pandas_pyarrow_transformer import (
+            PandasPyArrowTransformer,
+        )
+
+        return PandasPyArrowTransformer.transform_other_fw_to_fw(table)
+
+
+def _null_int_data(with_tz: bool = False) -> TypedTestData:
+    columns: dict[str, Any] = {"rg_src": (DataType.INT64, [1, None, 3]), "rg_label": _RUN_LABELS}
+    if with_tz:
+        stamp = datetime(2024, 1, 1, 9, tzinfo=ZoneInfo("America/New_York"))
+        columns["rg_ts"] = (DataType.TIMESTAMP_MICROS_TZ, [stamp] * 3)
+    return TypedTestData(columns)
+
+
 @pytest.mark.parametrize(
-    ("kind", "fails"),
-    [("input_widened_with_rows", False), ("input_retyped_on_zero_rows", True), ("input_narrowed_with_rows", True)],
+    ("kind", "fails", "adapter_cls", "with_tz"),
+    [
+        ("input_widened_with_rows", False, PandasAdapter, False),
+        ("input_retyped_on_zero_rows", True, PandasAdapter, False),
+        ("input_narrowed_with_rows", True, PandasAdapter, False),
+        ("undeclared_out", False, _ProductionPandasAdapter, False),
+        ("int32_on_zero_rows", True, _ProductionPandasAdapter, False),
+        ("undeclared_out", False, _ProductionPandasAdapter, True),
+    ],
+    ids=["widened", "retyped", "narrowed", "follows_reframed_int", "group_retype_still_fails", "with_non_utc_ts"],
 )
-def test_pandas_null_input_zero_rows_excuses_only_the_adapter_retype(kind: str, fails: bool) -> None:
+def test_pandas_null_input_zero_rows_excuses_only_the_adapter_retype(
+    kind: str, fails: bool, adapter_cls: type[Any], with_tz: bool
+) -> None:
     """Only the adapter's own zero-row reframing of an input is excused, not a group retype."""
     pytest.importorskip("pandas")
     pytest.importorskip("pyarrow")
-    result = check_feature_group_shape(
-        make_run_group(kind),
-        input_data=TypedTestData({"rg_src": (DataType.INT64, [1, None, 3]), "rg_label": _RUN_LABELS}),
-        adapter=PandasAdapter(),
-    )
+    result = check_feature_group_shape(make_run_group(kind), input_data=_null_int_data(with_tz), adapter=adapter_cls())
     if fails:
         assert result.failures
         assert all(f.startswith("zero_rows:") for f in result.failures), result.failures
     else:
         assert result.failures == (), result.failures
+
+
+@pytest.mark.parametrize("record", [False, True], ids=["no_record", "type_record"])
+def test_typed_output_following_a_reframed_int_needs_no_record(record: bool) -> None:
+    pytest.importorskip("pandas")
+    pytest.importorskip("pyarrow")
+    group = make_run_group("double_out")
+    if record:
+        setattr(group, "DIVERGENCES", (_record(DivergenceKind.TYPE),))
+    result = check_feature_group_shape(group, input_data=_null_int_data(), adapter=_ProductionPandasAdapter())
+    assert result.failures == (), result.failures
+    assert not any("stale" in n for n in result.notes), result.notes
+    noted = any(n.startswith("type:") and "'rg_out' changes type on zero rows" in n for n in result.notes)
+    assert noted is record, result.notes
 
 
 @pytest.mark.parametrize(
@@ -1200,6 +1256,36 @@ def test_undeclared_row_count_change_is_named_once(kind: str) -> None:
     assert len(outputs) == 1, result.failures
     assert "replaces_rows()" in outputs[0]
     assert not any("was changed" in f for f in result.failures), result.failures
+
+
+class _IsoTextAdapter(PythonDictAdapter):
+    """Frames DATE values as ISO text, like an adapter whose computed columns hold text."""
+
+    def from_typed(self, data: TypedTestData, arrow_types: Mapping[str, Any] | None = None) -> Any:
+        columns = data.to_python_dict()
+        dates = {n for n, t in data.types.items() if t == DataType.DATE}
+        return {n: [v.isoformat() if n in dates and v is not None else v for v in vs] for n, vs in columns.items()}
+
+
+@pytest.mark.parametrize(
+    ("kind", "changed"),
+    [("ok", None), ("restores_date", None), ("overwrites_input", "rg_src"), ("nulls_date", "rg_day")],
+)
+def test_pass_through_column_the_adapter_reads_back_differently_is_not_changed(kind: str, changed: str | None) -> None:
+    columns: dict[str, Any] = {
+        "rg_src": (DataType.INT64, [1, 2, 3]),
+        "rg_label": _RUN_LABELS,
+        "rg_day": (DataType.DATE, _DAYS),
+    }
+    data = TypedTestData(columns)
+    result = check_feature_group_shape(make_run_group(kind), input_data=data, adapter=_IsoTextAdapter())
+    if changed is None:
+        assert result.failures == (), result.failures
+        return
+    assert all(f.startswith("outputs:") for f in result.failures), result.failures
+    assert any(f"input column '{changed}' was changed" in f for f in result.failures), result.failures
+    others = {"rg_src", "rg_day"} - {changed}
+    assert not any(f"'{c}' was changed" in f for f in result.failures for c in others), result.failures
 
 
 def test_list_directory_runs_on_pandas(tmp_path: Any, monkeypatch: pytest.MonkeyPatch) -> None:

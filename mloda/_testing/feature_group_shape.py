@@ -533,10 +533,16 @@ def _check_outputs(
             "declare replaces_rows() when the group changes the row count"
         )
         return failures
+    readback: Any = None
     for column, values in data.to_python_dict().items():
         if column in names or column not in present:
             continue
-        if not _same(adapter.column_values(result, column), values):
+        if _same(adapter.column_values(result, column), values):
+            continue
+        # a column the adapter reads back differently than it was given is unchanged when the result matches that
+        if readback is None:
+            readback = adapter.from_typed(data)
+        if not _same(adapter.column_values(result, column), adapter.column_values(readback, column)):
             failures.append(f"outputs: input column '{column}' was changed")
     return failures
 
@@ -639,6 +645,18 @@ def _retyped(adapter: FrameworkAdapter, a: Any, b: Any, column: str) -> bool:
     return twin is None or twin != adapter.exact_type(b, column)
 
 
+def _reframed_arrow_types(adapter: FrameworkAdapter, data: TypedTestData, full: Any, zero: Any) -> dict[str, Any]:
+    """Arrow types for the inputs the adapter frames differently by row count, as it frames them with rows."""
+    found: dict[str, Any] = {}
+    for column in data.types:
+        if not _retyped(adapter, full, zero, column):
+            continue
+        exact = adapter.exact_type(full, column)
+        if exact is not None and exact not in (DataType.LIST, DataType.TIMESTAMP_MICROS_TZ):
+            found[column] = DataType.to_arrow_type(exact)
+    return found
+
+
 def _check_zero_rows(
     cls: type[FeatureGroup],
     adapter: FrameworkAdapter,
@@ -681,23 +699,42 @@ def _check_zero_rows(
     elif adapter.capabilities.typed_columns:
         frames: tuple[Any, Any] | None = None
         production: Any = None
+        rerun: tuple[Any] | None = None
+
+        def framed() -> tuple[Any, Any]:
+            nonlocal frames
+            if frames is None:
+                frames = (adapter.from_typed(data), adapter.from_typed(empty, arrow_types))
+            return frames
+
+        def rerun_frame() -> Any:
+            """The zero-row run fed the with-rows type of each adapter-reframed input; None if none or it raised."""
+            nonlocal rerun
+            if rerun is None:
+                extra = _reframed_arrow_types(adapter, data, *framed())
+                rerun = (
+                    _run(cls, adapter, empty, names, base, {**(arrow_types or {}), **extra})[0] if extra else None,
+                )
+            return rerun[0]
+
         for column in (c for c in columns if c in out_columns):
             mapped = _compared([column], names)
             data_type = expected.get(mapped[0][1]) if mapped else None
             exact = None if data_type is None else adapter.has_type(result, column, data_type)
             if exact is False:
                 continue
-            if exact is True and data_type is not None:
-                if data_type in (DataType.LIST, DataType.TIMESTAMP_MICROS_TZ):
-                    changed = adapter.column_type(out, column) != adapter.column_type(result, column)
-                else:
-                    changed = adapter.has_type(out, column, data_type) is not True
-            else:
-                changed = _retyped(adapter, result, out, column)
+
+            def differs(frame: Any) -> bool:
+                if exact is True and data_type is not None:
+                    if data_type in (DataType.LIST, DataType.TIMESTAMP_MICROS_TZ):
+                        return bool(adapter.column_type(frame, column) != adapter.column_type(result, column))
+                    return adapter.has_type(frame, column, data_type) is not True
+                return _retyped(adapter, result, frame, column)
+
+            changed = differs(out)
+            if not (exact is True and data_type is not None):
                 if changed and column in data.types:
-                    if frames is None:
-                        frames = (adapter.from_typed(data), adapter.from_typed(empty, arrow_types))
-                    full, zero = frames
+                    full, zero = framed()
                     # excused only when the adapter frames it differently by row count, the result is the
                     # framework's own framing and the group kept the zero-row type
                     if adapter.column_type(full, column) != adapter.column_type(zero, column):
@@ -711,6 +748,8 @@ def _check_zero_rows(
             note = _excused(text, covering.get(column, []), used, DivergenceKind.TYPE) if changed else None
             if note is not None:
                 notes.append(note)
+            elif changed and column not in data.types and (frame := rerun_frame()) is not None and not differs(frame):
+                continue
             elif changed:
                 failures.append(f"zero_rows: {text}")
             elif exact is True and data_type is not None:

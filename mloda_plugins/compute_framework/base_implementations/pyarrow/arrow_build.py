@@ -64,12 +64,18 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
     return f"Cannot name the time zone {detail}{where}; use a zone with a readable name."
 
 
+def is_gap(v: Any) -> bool:
+    """True for None and pd.NaT."""
+    # NaT is the only datetime unequal to itself (no pandas import).
+    return v is None or (isinstance(v, datetime) and v != v)  # noqa: PLR0124
+
+
 def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
-    """The non-None values if all are aware datetimes, None if not datetimes; raises on a naive/aware mix."""
+    """The non-gap values if all are aware datetimes, None if not datetimes; raises on a naive/aware mix."""
     present = []
     has_naive = has_aware = False
     for v in values:
-        if v is None:
+        if is_gap(v):
             continue
         if not isinstance(v, datetime):
             return None
@@ -113,7 +119,7 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         else:
             aware = _aware_values(values, column) is not None
         if aware:
-            utc_values = [None if v is None else v.astimezone(UTC) for v in values]
+            utc_values = [None if is_gap(v) else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
     return pa.array(values, type=type)
 

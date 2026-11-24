@@ -387,7 +387,7 @@ Framework authors: `select_native_data_by_column_names` returns the selection in
 
 ### NaN as null
 
-A framework that holds NaN as null overrides the classmethod `nan_is_null()` to return `True` (default `False`; Pandas and SQLite do). The plan then marks `potential_nan_null_loss` on steps that move data onto it ([Frameworks that hold NaN as null](divergence-records.md#frameworks-that-hold-nan-as-null)).
+A framework that holds NaN as null overrides the classmethod `nan_is_null()` to return `True` (default `False`). The plan then marks steps that move data onto it ([details](divergence-records.md#frameworks-that-hold-nan-as-null)).
 
 ### Reading column types
 

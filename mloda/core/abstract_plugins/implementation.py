@@ -344,7 +344,7 @@ _ACCESSIBLE: ContextVar[frozenset[type[Implementation[Any]]] | None] = ContextVa
 
 def accessible_implementations(
     implementations: Iterable[type[Implementation[Any]]],
-) -> VarScope[frozenset[type[Implementation[Any]]] | None]:
+) -> VarScope[frozenset[type[Implementation[Any]]]]:
     """Make the run's accessible implementations current for capability checks inside the block."""
     return VarScope(_ACCESSIBLE, frozenset(implementations))
 

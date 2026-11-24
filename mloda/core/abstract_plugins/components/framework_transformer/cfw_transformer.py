@@ -261,15 +261,15 @@ class ComputeFrameworkTransformer:
         chain: list[type[BaseTransformer]],
         data: Any,
         connection: Any,
-        inspect: Callable[[Any, Any], None] | None = None,
+        on_hop: Callable[[Any, Any], None] | None = None,
     ) -> Any:
         """Walk a transformation chain, resolving each intermediate hop's target framework
         from the transformer map, and apply each transformer in sequence.
-        ``inspect(current_fw, data)`` runs before each hop."""
+        ``on_hop(current_fw, data)`` runs before each hop."""
         current_fw = from_framework
         for i, transformer_cls in enumerate(chain):
-            if inspect is not None:
-                inspect(current_fw, data)
+            if on_hop is not None:
+                on_hop(current_fw, data)
             if i == len(chain) - 1:
                 target_fw: type[Any] = to_framework
             else:

@@ -131,14 +131,14 @@ class DataLifecycleManager:
             return
 
         inspector = None
-        if report is not None and self.output_framework is not None:
+        if (report is not None or refuse) and self.output_framework is not None:
             inspector = NanNullLossInspector.for_pair(
                 step_uuid,
                 type(cfw),
                 self.output_framework,
                 f"{description or f'step {step_uuid}'} to output_framework",
                 refuse,
-                report,
+                report if report is not None else (lambda _losses: None),
             )
         result = self.get_result_data(
             cfw,
@@ -239,7 +239,7 @@ class DataLifecycleManager:
         if chain is None:
             raise ValueError(f"No transformation from {source} to {target} for the output framework.")
         converted = self.transformer.apply_chain(
-            source, target, chain, data, self.output_connection, inspect=loss_inspector
+            source, target, chain, data, self.output_connection, on_hop=loss_inspector
         )
         if loss_inspector is not None:
             loss_inspector.finish()

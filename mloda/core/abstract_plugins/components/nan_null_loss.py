@@ -88,9 +88,11 @@ class NanNullLossInspector:
         self.checked = True
         columns = nan_and_null_columns(data)
         if columns and self.refuse:
+            names = ", ".join(f"'{c}'" for c in columns)
             raise NanNullLossError(
-                f"{self.description} ({self.source_name} to {self.target_name}): column '{columns[0]}' holds both "
-                f"NaN and null, which {self.target_name} cannot tell apart (refuse_nan_null_loss=True)."
+                f"{self.description} (step {self.step_uuid}, {self.source_name} to {self.target_name}): "
+                f"column(s) {names} hold both NaN and null, which {self.target_name} cannot tell apart "
+                "(refuse_nan_null_loss=True)."
             )
         if columns:
             self.report([NanNullLoss(self.step_uuid, c, self.source_name, self.target_name) for c in columns])

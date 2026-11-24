@@ -197,7 +197,7 @@ class TransformFrameworkStep(Step):
                 cfw_register.add_nan_null_losses,
             )
         converted = transformer.apply_chain(
-            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object, inspect=inspector
+            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object, on_hop=inspector
         )
         if inspector is not None:
             inspector.finish()

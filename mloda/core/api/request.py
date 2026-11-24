@@ -674,6 +674,10 @@ class mlodaAPI:
         ``run_all``, it yields in completion order, which can differ from ``run_all``'s plan order under
         THREADING/MULTIPROCESSING.
 
+        Args:
+            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
+                conversion would merge a float column's NaN and null, or cannot be checked.
+
         Returns:
             ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each
             result with the ``PlanStep`` that produced it. ``stream.run_id``/``stream.plan_id`` are the run's
@@ -1100,6 +1104,8 @@ class mlodaAPI:
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
             credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
             parameters: ``{key: value}`` replacing declared runtime parameters for this run only.
+            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
+                conversion would merge a float column's NaN and null, or cannot be checked.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():
@@ -1153,6 +1159,10 @@ class mlodaAPI:
         past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and
         ``parameters`` are as in ``run()``; credentials and parameters are refused, and MULTIPROCESSING preflights
         raise, at the call.
+
+        Args:
+            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
+                conversion would merge a float column's NaN and null, or cannot be checked.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():

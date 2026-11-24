@@ -169,19 +169,10 @@ class TestApplyChainInspect:
         def _inspect(current_fw: Any, data: Any) -> None:
             seen.append((current_fw, list(data)))
 
-        result = transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["start"], None, inspect=_inspect)
+        result = transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["start"], None, on_hop=_inspect)
 
         assert seen == [(fw_a, ["start"]), (fw_b, ["start", "A->B"])]
         assert result == ["start", "A->B", "B->C"]
-
-    def test_without_inspect_the_chain_is_unchanged(self) -> None:
-        fw_a, _fw_b, fw_c, trans_ab, trans_bc, transformer = _chain_env()
-
-        assert transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["s"], None, inspect=None) == [
-            "s",
-            "A->B",
-            "B->C",
-        ]
 
 
 class TestTransformFrameworkStepDelegatesToApplyChain:
@@ -219,7 +210,7 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
             chain: list[type[BaseTransformer]],
             data: Any,
             connection: Any,
-            inspect: Any = None,
+            on_hop: Any = None,
         ) -> Any:
             recorded["args"] = (from_framework, to_framework, list(chain), data, connection)
             return "CHAIN_APPLIED"

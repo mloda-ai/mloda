@@ -545,11 +545,9 @@ class Engine:
                 configured = self._configured_option_keys_by_uuid.get(uuid, ())
                 restricted = group_only_keys(input_group).keys() | credential_handle_keys(input_group)
                 for key in keys & group_keys:
-                    # Keys are unioned per merged feature: an explicit default-valued setting on one consumer's
-                    # path also silences another path that lost the key.
+                    # Keys are unioned per merged feature, so one explicit setting silences every path.
                     if key in configured:
                         continue
-                    # An equal effective default already supplies the requested setting.
                     if key in input_feature.options and _deep_equal(
                         input_feature.options.get(key), feature.options.context[key]
                     ):

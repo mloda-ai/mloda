@@ -749,11 +749,6 @@ Options(
 )
 ```
 
-Planning logs a warning when a context key set on a requested feature is not declared by that
-feature's group and does not reach an input feature group that declares it with `context=False`.
-Pass the key in `Options(group=...)` or list it in `cascade_context_keys`. A `group_only` or
-credential handle key is refused in the context, so for it only the group option works.
-
 Only listed keys propagate; the rest stay local. The push is one hop: listed keys land
 in the context of the feature's direct input features, and an input feature does not
 push them on to its own inputs. For a name-chained feature such as `a__b__c`, a key
@@ -790,6 +785,11 @@ Options(
 - The value sits in the options of every input down the chain, so every feature group
   there sees it, and it is pickled to MULTIPROCESSING workers.
 - The pull `inherit_context_keys` stays one hop.
+
+Planning logs a warning when a context key set on a requested feature does not reach an input
+feature group that declares it as a group option. Pass the key in `Options(group=...)` or list it
+in `cascade_context_keys`; a `group_only` or credential handle key is refused in the context, so
+only the group option works.
 
 Group options remain the choice when the value should be part of feature identity and
 resolution at every level, and a feature group author can pull a key level by level

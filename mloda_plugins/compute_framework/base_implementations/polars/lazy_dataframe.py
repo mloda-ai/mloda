@@ -62,6 +62,7 @@ class PolarsLazyDataFrame(PolarsDataFrame):
     def _append_columns(self, data: Any, columns: dict[str, Any]) -> Any | None:
         if not isinstance(data, pl.LazyFrame):
             return None
+        self._check_aware_zones(columns)
         rows = data.select(pl.len()).collect().item()
         if any(len(values) != rows for values in columns.values()):
             return None
@@ -132,6 +133,7 @@ class PolarsLazyDataFrame(PolarsDataFrame):
 
         if isinstance(data, dict):
             """Initial data: Transform dict to lazy frame"""
+            self._check_aware_zones(data)
             return self.pl_lazy_frame()(data)
 
         if isinstance(data, self.pl_series()):

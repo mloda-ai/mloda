@@ -1,4 +1,4 @@
-from collections.abc import Sequence
+from collections.abc import Mapping, Sequence
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.hook_context import OutputSchema
@@ -10,6 +10,7 @@ from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import PolarsMaskEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
 
 try:
     import polars as pl
@@ -90,7 +91,15 @@ class PolarsDataFrame(ComputeFramework):
             return None
         if any(len(values) != data.height for values in columns.values()):
             return None
+        self._check_aware_zones(columns)
         return data.with_columns([pl.Series(name, values) for name, values in columns.items()])
+
+    @staticmethod
+    def _check_aware_zones(columns: Mapping[str, Any]) -> None:
+        """Raise for a list column that mixes time zones or has an unnameable zone."""
+        for name, values in columns.items():
+            if isinstance(values, (list, tuple)):
+                aware_zone(values, name)
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:
         if column_name in data.columns:
@@ -170,6 +179,7 @@ class PolarsDataFrame(ComputeFramework):
 
         if isinstance(data, dict):
             """Initial data: Transform dict to table"""
+            self._check_aware_zones(data)
             return self.pl_dataframe()(data)
 
         if isinstance(data, self.pl_series()):

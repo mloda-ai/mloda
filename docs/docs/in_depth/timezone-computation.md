@@ -139,11 +139,12 @@ computes, or a key it coalesces in an outer join, loses the recorded zone and re
 Implementations compute on the session zone; a zone-carrying column against a `TimestampType` column
 without a recorded zone is reported as aware against naive.
 
-mloda's Arrow-based builders and Spark raise a `ValueError` naming the column and zones when a column mixes
-zones or has a zone with no readable name.
+mloda's Arrow-based builders, Polars and Spark raise a `ValueError` naming the column and zones when a column
+mixes zones or has a zone with no readable name.
 
 `DataTypeValidatorSuite` checks this with a DST zone and a sub-hour offset. `AppendColumnsSuite` checks an
-appended DST-zone column (keeps instants and zone, or raises).
+appended DST-zone column (keeps instants and zone, or raises) and a mixed-zone column (keeps each value's
+zone, or raises naming the column and both zones).
 
 ## Core feature groups
 

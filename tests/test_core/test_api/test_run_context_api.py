@@ -174,47 +174,6 @@ class TestBuildRunContextGracefulShutdownTimeout:
         assert recorded == [9.5]
 
 
-class TestRefuseNanNullLossPlumbing:
-    def test_build_run_context_defaults_to_false_and_carries_the_keyword(self) -> None:
-        session = _prepare_session()
-
-        assert session._build_run_context(None, None).refuse_nan_null_loss is False
-        assert session._build_run_context(None, None, refuse_nan_null_loss=True).refuse_nan_null_loss is True
-
-    @pytest.mark.parametrize("flag", [True, False])
-    def test_session_run_forwards_the_keyword(self, flag: bool, monkeypatch: pytest.MonkeyPatch) -> None:
-        runners = record_runners(monkeypatch)
-        session = _prepare_session()
-
-        session.run(parallelization_modes={ParallelizationMode.SYNC}, refuse_nan_null_loss=flag)
-
-        assert runners[0].cfw_register.get_run_context().refuse_nan_null_loss is flag
-
-    def test_session_stream_run_forwards_the_keyword(self, monkeypatch: pytest.MonkeyPatch) -> None:
-        runners = record_runners(monkeypatch)
-        session = _prepare_session()
-
-        list(session.stream_run(parallelization_modes={ParallelizationMode.SYNC}, refuse_nan_null_loss=True))
-
-        assert runners[0].cfw_register.get_run_context().refuse_nan_null_loss is True
-
-    @pytest.mark.parametrize("call_site", ["run_all", "stream_all"])
-    def test_entry_points_forward_the_keyword(self, call_site: str, monkeypatch: pytest.MonkeyPatch) -> None:
-        runners = record_runners(monkeypatch)
-
-        result = getattr(mloda, call_site)(
-            ["run_context_api_col"],
-            compute_frameworks=["PythonDictFramework"],
-            plugin_collector=_ENABLED,
-            parallelization_modes={ParallelizationMode.SYNC},
-            refuse_nan_null_loss=True,
-        )
-        if call_site == "stream_all":
-            list(result)
-
-        assert runners[0].cfw_register.get_run_context().refuse_nan_null_loss is True
-
-
 class TestBatchRunWithoutRunContextMintsAFreshRunId:
     def test_batch_run_without_run_context_mints_a_fresh_run_id_per_call(self, monkeypatch: pytest.MonkeyPatch) -> None:
         runners = record_runners(monkeypatch)

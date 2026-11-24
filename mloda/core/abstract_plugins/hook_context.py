@@ -27,6 +27,7 @@ from mloda.core.abstract_plugins.function_extender import ExtenderHook
 if TYPE_CHECKING:
     from mloda.core.abstract_plugins.components.input_data.claim_route import DataAccessReader
     from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
+    from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 
 _current_hook_context: ContextVar["HookContext | None"] = ContextVar("_current_hook_context", default=None)
 
@@ -117,6 +118,8 @@ class HookContext:
     asof_config: "AsOfJoinConfig | None" = None
     join_left_feature_group: str | None = None
     join_right_feature_group: str | None = None
+    source_compute_framework: "type[ComputeFramework] | None" = None
+    target_compute_framework: "type[ComputeFramework] | None" = None
     plan_feature_count: int | None = None
     plan_node_count: int | None = None
     plan_depth: int | None = None

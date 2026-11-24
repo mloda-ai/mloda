@@ -2,9 +2,10 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
-from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossInspector
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
+from mloda.core.abstract_plugins.components.framework_transformer.transform_hook import transform_hook_invoker
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
+from mloda.core.abstract_plugins.function_extender import ExtenderHook
 from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.abstract_step import Step
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -122,7 +123,7 @@ class TransformFrameworkStep(Step):
 
         data = self.get_data(from_cfw, location)
         source = data
-        data = self.transform(cfw, source, cfw_register)
+        data = self.transform(cfw, source)
 
         if data is source and not (isinstance(from_cfw, ComputeFramework) and source is from_cfw._pinned_frame):
             cfw.set_data(data)
@@ -156,7 +157,7 @@ class TransformFrameworkStep(Step):
     def set_data(self, cfw: ComputeFramework, data: Any) -> None:
         cfw.set_data(data)
 
-    def transform(self, cfw: ComputeFramework, data: Any, cfw_register: CfwManager | None = None) -> Any:
+    def transform(self, cfw: ComputeFramework, data: Any) -> Any:
         _from_fw = self.from_framework.expected_data_framework()
         _to_fw = self.to_framework.expected_data_framework()
 
@@ -183,22 +184,14 @@ class TransformFrameworkStep(Step):
                 f"Available transformers: {list(transformer.transformer_map.keys())}"
             )
 
-        inspector = None
-        if cfw_register is not None:
-            description = (
-                f"transfer from {self.from_feature_group.get_class_name()} to {self.to_feature_group.get_class_name()}"
-            )
-            inspector = NanNullLossInspector.for_pair(
-                self.uuid,
-                self.from_framework,
-                self.to_framework,
-                description,
-                cfw.run_context.refuse_nan_null_loss,
-                cfw_register.add_nan_null_losses,
-            )
-        converted = transformer.apply_chain(
-            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object, on_hop=inspector
+        invoke = transform_hook_invoker(
+            cfw.get_function_extender(ExtenderHook.FRAMEWORK_TRANSFORM),
+            cfw.run_context,
+            self.uuid,
+            self.from_framework,
+            self.to_framework,
+            cfw.worker_index,
         )
-        if inspector is not None:
-            inspector.finish()
-        return converted
+        return transformer.apply_chain(
+            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object, invoke
+        )

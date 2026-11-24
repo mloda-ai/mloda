@@ -44,6 +44,7 @@ class ExtenderHook(Enum):
     INPUT_DATA_LOAD = "input_data_load"
     JOIN = "join"
     INPUT_DATA_MATCH = "input_data_match"
+    FRAMEWORK_TRANSFORM = "framework_transform"
 
 
 class GateBypassError(RuntimeError):

@@ -11,7 +11,6 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
-from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
@@ -112,7 +111,6 @@ class CfwManager:
 
         self.failed_rows: list[FailedRows] = []
         self.step_durations: list[StepDuration] = []
-        self.nan_null_losses: list[NanNullLoss] = []
 
         self.artifact_bindings: dict[UUID, ArtifactBinding] = {}
         self.run_parameters: Mapping[str, Any] = {}
@@ -452,18 +450,9 @@ class CfwManager:
         """Appends one completed step's calculate_feature duration."""
         self.step_durations.append(entry)
 
-    def add_nan_null_losses(self, entries: list[NanNullLoss]) -> None:
-        """Appends the NaN/null loss records one conversion reported."""
-        self.nan_null_losses.extend(entries)
-
     def get_run_outcome(self) -> RunOutcome:
-        """Retrieves the artifacts, failed rows, step durations and NaN/null losses of the run."""
-        return RunOutcome(
-            self.artifact_to_save,
-            tuple(self.failed_rows),
-            tuple(self.step_durations),
-            tuple(self.nan_null_losses),
-        )
+        """Retrieves the artifacts, failed rows and step durations of the run."""
+        return RunOutcome(self.artifact_to_save, tuple(self.failed_rows), tuple(self.step_durations))
 
     def set_artifact_bindings(self, bindings: dict[UUID, ArtifactBinding]) -> None:
         """Sets the per-step artifact bindings resolved from run(artifacts=...)."""

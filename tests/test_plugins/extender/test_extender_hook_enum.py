@@ -17,3 +17,6 @@ class TestExtenderHookNewMembers:
 
     def test_join_member_exists_with_value(self) -> None:
         assert ExtenderHook.JOIN.value == "join"
+
+    def test_framework_transform_member_exists_with_value(self) -> None:
+        assert ExtenderHook.FRAMEWORK_TRANSFORM.value == "framework_transform"

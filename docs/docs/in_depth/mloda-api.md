@@ -193,8 +193,6 @@ for entry in results.step_durations:
     assert entry.duration_seconds < budget_seconds, f"{entry.feature_group} took {entry.duration_seconds:.3f}s"
 ```
 
-`nan_null_losses` on `RunResult` and `ResultStream` holds one `NanNullLoss` per float column that held both NaN and null in a marked conversion, in the order the conversions completed (on `ResultStream`, complete once the stream is exhausted); `refuse_nan_null_loss=True` raises `NanNullLossError` instead ([Frameworks that hold NaN as null](divergence-records.md#frameworks-that-hold-nan-as-null)).
-
 To pin a resolved plan, see [Plan Lock](plan-lock.md).
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.

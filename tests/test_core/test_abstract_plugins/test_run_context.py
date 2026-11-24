@@ -363,15 +363,6 @@ class TestRunContextGracefulShutdownTimeout:
         assert ctx.graceful_shutdown_timeout == 7.5
 
 
-class TestRunContextRefuseNanNullLoss:
-    def test_defaults_to_false_and_sits_right_before_run_inputs(self) -> None:
-        names = [f.name for f in dataclasses.fields(RunContext)]
-
-        assert RunContext().refuse_nan_null_loss is False
-        assert RunContext(refuse_nan_null_loss=True).refuse_nan_null_loss is True
-        assert names[names.index("run_inputs") - 1] == "refuse_nan_null_loss"
-
-
 class TestRunContextIsInternal:
     def test_docstring_names_the_steward_export(self) -> None:
         assert RunContext.__doc__ is not None

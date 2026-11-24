@@ -19,7 +19,6 @@ import pytest
 import mloda.core.core.cfw_manager as cfw_manager_module
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.feature_set import ArtifactBinding
-from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
@@ -54,14 +53,6 @@ class TestCfwManagerRunOutcome:
         d2 = StepDuration(feature_group="H", step_uuid=uuid4(), duration_seconds=0.2)
         cfw_register.add_step_duration(d1)
         cfw_register.add_step_duration(d2)
-        l1 = NanNullLoss(
-            step_uuid=uuid4(), column="a", source_framework="PyArrowTable", target_framework="PandasDataFrame"
-        )
-        l2 = NanNullLoss(
-            step_uuid=uuid4(), column="b", source_framework="PyArrowTable", target_framework="PandasDataFrame"
-        )
-        cfw_register.add_nan_null_losses([l1])
-        cfw_register.add_nan_null_losses([l2])
 
         outcome = cfw_register.get_run_outcome()
 
@@ -69,7 +60,6 @@ class TestCfwManagerRunOutcome:
         assert outcome.artifacts is cfw_register.artifact_to_save
         assert outcome.failed_rows == (first, second)
         assert outcome.step_durations == (d1, d2)
-        assert outcome.nan_null_losses == (l1, l2)
         with pytest.raises(dataclasses.FrozenInstanceError):
             outcome.artifacts = {}  # type: ignore[misc]
 

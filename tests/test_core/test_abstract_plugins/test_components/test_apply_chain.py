@@ -20,7 +20,6 @@ framework enumeration of other tests. No FileSource / file IO involved.
 from __future__ import annotations
 
 from typing import Any
-from unittest.mock import MagicMock
 
 import pytest
 
@@ -31,8 +30,6 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
-from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError
-from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.user import ParallelizationMode
 
 _ChainEnv = tuple[
@@ -161,17 +158,21 @@ class TestApplyChain:
         assert "_FwA" in message, message
 
 
-class TestApplyChainInspect:
-    def test_inspect_sees_each_hops_current_framework_and_data_in_order(self) -> None:
+class TestApplyChainInvoke:
+    def test_invoke_runs_every_hop_in_order_with_resolved_targets_and_returns_the_last_result(self) -> None:
         fw_a, fw_b, fw_c, trans_ab, trans_bc, transformer = _chain_env()
-        seen: list[tuple[Any, Any]] = []
+        seen: list[tuple[Any, ...]] = []
 
-        def _inspect(current_fw: Any, data: Any) -> None:
-            seen.append((current_fw, list(data)))
+        def _invoke(func: Any, *args: Any) -> Any:
+            seen.append((func, *args[:2], list(args[2]), args[3]))
+            return func(*args)
 
-        result = transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["start"], None, on_hop=_inspect)
+        result = transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["start"], "conn", invoke=_invoke)
 
-        assert seen == [(fw_a, ["start"]), (fw_b, ["start", "A->B"])]
+        assert seen == [
+            (trans_ab.transform, fw_a, fw_b, ["start"], "conn"),
+            (trans_bc.transform, fw_b, fw_c, ["start", "A->B"], "conn"),
+        ]
         assert result == ["start", "A->B", "B->C"]
 
 
@@ -210,7 +211,7 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
             chain: list[type[BaseTransformer]],
             data: Any,
             connection: Any,
-            on_hop: Any = None,
+            invoke: Any = None,
         ) -> Any:
             recorded["args"] = (from_framework, to_framework, list(chain), data, connection)
             return "CHAIN_APPLIED"
@@ -225,48 +226,3 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
 
         assert result == "CHAIN_APPLIED"
         assert recorded["args"] == (fw_a, fw_b, [trans_ab], ["payload"], cfw.framework_connection_object)
-
-
-class TestTransformStepUncheckableConversion:
-    @pytest.mark.parametrize("refuse", [True, False])
-    def test_a_chain_without_an_arrow_hop_is_refused_or_converted_unreported(self, refuse: bool) -> None:
-        fw_a, fw_b, _fw_c, trans_ab, _trans_bc, _transformer = _chain_env()
-
-        class _CfwFrom(ComputeFramework):
-            @classmethod
-            def expected_data_framework(cls) -> Any:
-                return fw_a
-
-            @classmethod
-            def nan_is_null(cls) -> bool:
-                return False
-
-        class _CfwTo(ComputeFramework):
-            @classmethod
-            def expected_data_framework(cls) -> Any:
-                return fw_b
-
-            @classmethod
-            def nan_is_null(cls) -> bool:
-                return True
-
-        step = TransformFrameworkStep(
-            from_framework=_CfwFrom,
-            to_framework=_CfwTo,
-            required_uuids=set(),
-            from_feature_group=FeatureGroup,
-            to_feature_group=FeatureGroup,
-        )
-        cfw = _CfwTo(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-        registry = ComputeFrameworkTransformer()
-        registry.transformer_map = {(fw_a, fw_b): trans_ab, (fw_b, fw_a): trans_ab}
-        cfw.transformer = registry
-        cfw.run_context = RunContext(refuse_nan_null_loss=refuse)
-        cfw_register = MagicMock()
-
-        if refuse:
-            with pytest.raises(NanNullLossError, match="could not be checked"):
-                step.transform(cfw, ["start"], cfw_register)
-        else:
-            assert step.transform(cfw, ["start"], cfw_register) == ["start", "A->B"]
-        cfw_register.add_nan_null_losses.assert_not_called()

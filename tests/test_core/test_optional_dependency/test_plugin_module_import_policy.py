@@ -57,6 +57,7 @@ MODULE_EXTRA: dict[str, str] = {
     f"{_BACKENDS}.polars.polars_merge_engine": "polars",
     f"{_BACKENDS}.polars.polars_pyarrow_transformer": "polars",
     f"{_BACKENDS}.polars.polars_type_semantics": "polars",
+    "mloda_plugins.function_extender.base_implementations.nan_null_loss.nan_null_loss_extender": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_file_source_transformer": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_filter_engine": "pyarrow",
     f"{_BACKENDS}.pyarrow.pyarrow_mask_engine": "pyarrow",

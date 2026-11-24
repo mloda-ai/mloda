@@ -215,6 +215,8 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             ("failed_rows", ("forged",)),
             ("credentials_read", ("forged",)),
             ("step_uuid", uuid4()),
+            ("source_compute_framework", dict),
+            ("target_compute_framework", dict),
         ],
     )
     def test_assigning_a_frozen_field_raises(self, field: str, value: Any) -> None:
@@ -251,6 +253,8 @@ class TestHookContextIsFrozenExceptOutcomeFields:
             "failed_rows",
             "credentials_read",
             "step_uuid",
+            "source_compute_framework",
+            "target_compute_framework",
         ],
     )
     def test_deleting_a_frozen_field_raises_and_keeps_the_value(self, field: str) -> None:

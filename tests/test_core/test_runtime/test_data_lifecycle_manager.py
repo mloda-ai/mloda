@@ -265,7 +265,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
             manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid)
 
             mock_get_result.assert_called_once_with(
-                mock_cfw, {feature_name}, None, result_index_columns={}, loss_inspector=None
+                mock_cfw, {feature_name}, None, result_index_columns={}, step_uuid=step_uuid
             )
 
     def test_add_to_result_data_collection_passes_location(self) -> None:
@@ -284,7 +284,7 @@ class TestDataLifecycleManagerAddToResultDataCollection:
             manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid, location=location)
 
             mock_get_result.assert_called_once_with(
-                mock_cfw, {feature_name}, location, result_index_columns={}, loss_inspector=None
+                mock_cfw, {feature_name}, location, result_index_columns={}, step_uuid=step_uuid
             )
 
     def test_add_to_result_data_collection_handles_none_result(self) -> None:
@@ -559,90 +559,61 @@ class TestDataLifecycleManagerOutputFramework:
         assert isinstance(result, pa.Table)
         assert result.column_names == ["feature1"]
 
-    @staticmethod
-    def _collect(
-        output: Any, table: pa.Table, refuse: bool, transformer: Any = None
-    ) -> tuple[DataLifecycleManager, UUID, list[Any]]:
-        manager = DataLifecycleManager(output_framework=output, output_connection=None, transformer=transformer)
+    def test_the_transform_hook_gets_the_step_and_the_framework_pair_and_its_invoker_runs_the_hop(self) -> None:
+        step_uuid = uuid4()
+        asked: list[tuple[Any, ...]] = []
+        hops: list[tuple[Any, ...]] = []
+
+        def _invoke(func: Any, *args: Any) -> Any:
+            hops.append(args)
+            return func(*args)
+
+        def _hook(uuid: Any, source: Any, target: Any) -> Any:
+            asked.append((uuid, source, target))
+            return _invoke
+
+        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+        manager.transform_hook = _hook
+        table = pa.table({"feature1": [1, 2]})
+
+        result = manager.get_result_data(self._arrow_cfw(table), [FeatureName("feature1")], step_uuid=step_uuid)
+
+        assert isinstance(result, pd.DataFrame)
+        assert asked == [(step_uuid, PyArrowTable, PandasDataFrame)]
+        assert len(hops) == 1
+        assert hops[0][:2] == (pa.Table, pd.DataFrame)
+        assert hops[0][3] is None
+
+    def test_a_hook_without_an_invoker_still_converts(self) -> None:
+        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+        manager.transform_hook = lambda uuid, source, target: None
+
+        result = manager.get_result_data(self._arrow_cfw(pa.table({"feature1": [1]})), [FeatureName("feature1")])
+
+        assert isinstance(result, pd.DataFrame)
+
+    def test_the_transform_hook_is_not_asked_when_the_result_is_already_the_output_type(self) -> None:
+        asked: list[Any] = []
+        manager = DataLifecycleManager(output_framework=PyArrowTable, output_connection=None)
+        manager.transform_hook = lambda uuid, source, target: asked.append(uuid)
+
+        manager.get_result_data(self._arrow_cfw(pa.table({"feature1": [1]})), [FeatureName("feature1")])
+
+        assert asked == []
+
+    def test_add_to_result_data_collection_hands_its_step_uuid_to_the_transform_hook(self) -> None:
+        step_uuid = uuid4()
+        asked: list[Any] = []
+        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
+        manager.transform_hook = lambda uuid, source, target: asked.append(uuid)
         features = Mock(spec=FeatureSet)
         features.get_result_index_columns.return_value = {}
-        features.get_initial_requested_features.return_value = (FeatureName("nl_col"),)
-        step_uuid = uuid4()
-        reported: list[Any] = []
+        features.get_initial_requested_features.return_value = (FeatureName("feature1"),)
 
-        manager.add_to_result_data_collection(
-            TestDataLifecycleManagerOutputFramework._arrow_cfw(table),
-            features,
-            step_uuid,
-            report=reported.extend,
-            refuse=refuse,
-        )
-        return manager, step_uuid, reported
+        manager.add_to_result_data_collection(self._arrow_cfw(pa.table({"feature1": [1]})), features, step_uuid)
 
-    _BOTH = pa.table({"nl_col": pa.array([1.0, float("nan"), None]), "other": [1, 2, 3]})
-
-    def test_a_lossy_output_conversion_reports_one_record_per_offending_column(self) -> None:
-        _, step_uuid, reported = self._collect(PandasDataFrame, self._BOTH, refuse=False)
-
-        assert [(r.step_uuid, r.column, r.source_framework, r.target_framework) for r in reported] == [
-            (step_uuid, "nl_col", "PyArrowTable", "PandasDataFrame")
-        ]
-
-    def test_refuse_raises_naming_the_step_frameworks_and_column(self) -> None:
-        from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError
-
-        with pytest.raises(NanNullLossError) as excinfo:
-            self._collect(PandasDataFrame, self._BOTH, refuse=True)
-
-        message = str(excinfo.value)
-        assert "PyArrowTable" in message
-        assert "PandasDataFrame" in message
-        assert "nl_col" in message
-
-    @pytest.mark.parametrize(
-        "table",
-        [
-            pa.table({"nl_col": pa.array([1.0, float("nan"), 2.0])}),
-            pa.table({"nl_col": pa.array([1.0, None, 2.0])}),
-        ],
-        ids=["only_nan", "only_null"],
-    )
-    def test_clean_data_under_refuse_neither_raises_nor_reports(self, table: pa.Table) -> None:
-        manager, step_uuid, reported = self._collect(PandasDataFrame, table, refuse=True)
-
-        assert reported == []
+        assert asked == [step_uuid]
         assert isinstance(manager.result_data_collection[step_uuid], pd.DataFrame)
-
-    @pytest.mark.parametrize("output", [None, "python_dict", "arrow"])
-    def test_an_unmarked_conversion_never_reports_or_refuses(self, output: str | None) -> None:
-        from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
-            PythonDictFramework,
-        )
-
-        target = {None: None, "python_dict": PythonDictFramework, "arrow": PyArrowTable}[output]
-
-        _, _, reported = self._collect(target, self._BOTH, refuse=True)
-
-        assert reported == []
-
-    def test_refuse_without_an_arrow_hop_is_refused_as_uncheckable(self) -> None:
-        from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError
-
-        transformer = Mock(spec=ComputeFrameworkTransformer)
-        transformer.get_transformation_chain.return_value = [Mock()]
-        transformer.apply_chain.return_value = pd.DataFrame({"nl_col": [1.0]})
-
-        with pytest.raises(NanNullLossError, match="could not be checked"):
-            self._collect(PandasDataFrame, self._BOTH, refuse=True, transformer=transformer)
-
-    def test_without_refuse_an_unchecked_conversion_records_nothing(self) -> None:
-        transformer = Mock(spec=ComputeFrameworkTransformer)
-        transformer.get_transformation_chain.return_value = [Mock()]
-        transformer.apply_chain.return_value = pd.DataFrame({"nl_col": [1.0]})
-
-        _, _, reported = self._collect(PandasDataFrame, self._BOTH, refuse=False, transformer=transformer)
-
-        assert reported == []
 
 
 class TestDataLifecycleManagerKeepIndex:

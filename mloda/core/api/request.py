@@ -567,7 +567,6 @@ class mlodaAPI:
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
         output_framework: str | type[ComputeFramework] | None = None,
-        refuse_nan_null_loss: bool = False,
     ) -> RunResult:
         """
         Run feature computation in one step.
@@ -598,8 +597,6 @@ class mlodaAPI:
             graceful_shutdown_timeout: Seconds a MULTIPROCESSING worker gets to run its
                 extenders' close() before being terminated, shared across every extender in
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
-            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
-                conversion would merge a float column's NaN and null, or cannot be checked.
 
         Returns:
             ``RunResult``, a list of computed results, one per feature group, in ``result.plan``
@@ -640,7 +637,6 @@ class mlodaAPI:
             carrier=carrier,
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
-            refuse_nan_null_loss=refuse_nan_null_loss,
         )
 
     @classmethod
@@ -663,7 +659,6 @@ class mlodaAPI:
         child_bootstrap: Callable[[], None] | None = None,
         graceful_shutdown_timeout: float = 2.0,
         output_framework: str | type[ComputeFramework] | None = None,
-        refuse_nan_null_loss: bool = False,
     ) -> ResultStream:
         """Stream results at feature-group granularity.
 
@@ -673,10 +668,6 @@ class mlodaAPI:
         ``carrier``/``child_bootstrap``/``graceful_shutdown_timeout`` behave as in ``run_all``. Unlike
         ``run_all``, it yields in completion order, which can differ from ``run_all``'s plan order under
         THREADING/MULTIPROCESSING.
-
-        Args:
-            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
-                conversion would merge a float column's NaN and null, or cannot be checked.
 
         Returns:
             ``ResultStream`` yielding one complete result per feature group; ``stream.frames()`` pairs each
@@ -706,7 +697,6 @@ class mlodaAPI:
             carrier=carrier,
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
-            refuse_nan_null_loss=refuse_nan_null_loss,
         )
 
     @classmethod
@@ -1041,7 +1031,6 @@ class mlodaAPI:
         child_bootstrap: Callable[[], None] | None,
         graceful_shutdown_timeout: float = 2.0,
         run_inputs: RunInputs | None = None,
-        refuse_nan_null_loss: bool = False,
     ) -> RunContext:
         """Derive this run's context from the engine's plan-time base."""
         if self.engine is None:
@@ -1054,7 +1043,6 @@ class mlodaAPI:
             carrier=carrier,
             child_bootstrap=child_bootstrap,
             graceful_shutdown_timeout=graceful_shutdown_timeout,
-            refuse_nan_null_loss=refuse_nan_null_loss,
             tenant_id=identity.tenant_id,
             project_id=identity.project_id,
             principal=identity.principal,
@@ -1080,7 +1068,6 @@ class mlodaAPI:
         graceful_shutdown_timeout: float = 2.0,
         credentials: Mapping[str, Any] | None = None,
         parameters: Mapping[str, Any] | None = None,
-        refuse_nan_null_loss: bool = False,
     ) -> RunResult:
         """Execute the prepared session and return a ``RunResult`` (plan order, with ``run_id``/``plan_id``).
 
@@ -1104,8 +1091,6 @@ class mlodaAPI:
                 that worker. Also the longest a cancelled THREADING run waits for step threads.
             credentials: ``{handle: Credential | dict}`` replacing declared handles' values for this run only.
             parameters: ``{key: value}`` replacing declared runtime parameters for this run only.
-            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
-                conversion would merge a float column's NaN and null, or cannot be checked.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():
@@ -1114,9 +1099,7 @@ class mlodaAPI:
             with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
                 run_parameters = self._run_parameters(parameters)
                 run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
-                run_context = self._build_run_context(
-                    carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs, refuse_nan_null_loss
-                )
+                run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
                 plan = list(self._plan_snapshot())
                 runner = self._batch_run(
                     modes,
@@ -1149,7 +1132,6 @@ class mlodaAPI:
         graceful_shutdown_timeout: float = 2.0,
         credentials: Mapping[str, Any] | None = None,
         parameters: Mapping[str, Any] | None = None,
-        refuse_nan_null_loss: bool = False,
     ) -> ResultStream:
         """Execute the prepared session and stream each feature group's result as it completes.
 
@@ -1159,10 +1141,6 @@ class mlodaAPI:
         past the caller's intended scope. ``parallelization_modes``, ``flight_server``, ``credentials`` and
         ``parameters`` are as in ``run()``; credentials and parameters are refused, and MULTIPROCESSING preflights
         raise, at the call.
-
-        Args:
-            refuse_nan_null_loss: If True, raise ``NanNullLossError`` when a marked transfer or output
-                conversion would merge a float column's NaN and null, or cannot be checked.
         """
         modes = self._run_modes(parallelization_modes)
         with run_boundary():
@@ -1171,9 +1149,7 @@ class mlodaAPI:
             with self._credential_redaction(self._secret_literals(run_dac), self._identity_literals(run_dac)):
                 run_parameters = self._run_parameters(parameters)
                 run_inputs = self._run_inputs(api_data, artifacts, run_parameters, names)
-                run_context = self._build_run_context(
-                    carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs, refuse_nan_null_loss
-                )
+                run_context = self._build_run_context(carrier, child_bootstrap, graceful_shutdown_timeout, run_inputs)
                 plan = list(self._plan_snapshot())
             stream_outcome = _StreamOutcome()
             stream = self._start_stream(

@@ -29,7 +29,6 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
     implementation_path,
 )
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
-from mloda.core.abstract_plugins.components.nan_null_loss import nan_null_loss_pair
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -44,6 +43,11 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
     from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
+
+
+def _nan_null_loss(source: "type[ComputeFramework] | None", target: "type[ComputeFramework] | None") -> bool:
+    """True when the target folds NaN into null and the source does not."""
+    return source is not None and target is not None and not bool(source.nan_is_null()) and bool(target.nan_is_null())
 
 
 @dataclass(frozen=True)
@@ -89,8 +93,9 @@ class PlanStep:
     credential-shaped keys masked),
     and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the
     key ``RunResult.frames()`` pairs frames by; ``feature_set_options`` is None for join/transform steps, ``step_uuid`` is
-    None for join steps (a transform step carries its ``TransformFrameworkStep.uuid``), and both, like ``join_token``,
-    are excluded from equality.
+    None for join steps (a transform step carries its ``TransformFrameworkStep.uuid``, equal to ``HookContext.step_uuid``
+    on the step's hooks, its ``FRAMEWORK_TRANSFORM`` hook included), and both, like ``join_token``, are excluded from
+    equality.
     ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
     it participates in equality but is excluded from hashing.
 
@@ -215,9 +220,9 @@ class PlanStep:
     @property
     def potential_nan_null_loss(self) -> bool:
         if self.step_kind == "transform":
-            return nan_null_loss_pair(self.source_compute_framework, self.compute_framework)
+            return _nan_null_loss(self.source_compute_framework, self.compute_framework)
         if self.step_kind == "compute":
-            return nan_null_loss_pair(self.compute_framework, self.result_framework)
+            return _nan_null_loss(self.compute_framework, self.result_framework)
         return False
 
     @property

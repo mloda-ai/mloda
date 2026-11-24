@@ -42,6 +42,7 @@ class Features:
         self.input_copies: dict[int, tuple[Feature, Feature]] = {} if input_copies is None else input_copies
 
         self.parent_uuids: set[UUID] = set()
+        self._consumer_declarations: dict[UUID, Options] = {}
 
         if child_options is None:
             child_options = Options({})
@@ -53,6 +54,7 @@ class Features:
         self, features: Sequence[Feature | str], child_options: Options, child_uuid: UUID | None = None
     ) -> None:
         for feature in features:
+            reused_entry: tuple[Feature, Feature] | None = None
             if child_options.group == {} and child_options.context == {}:
                 child_options = Options({})
 
@@ -61,6 +63,7 @@ class Features:
             else:
                 if child_uuid:
                     entry = self.input_copies.get(id(feature))
+                    reused_entry = entry
                     if entry is None:
                         entry = self.input_copies[id(feature)] = (feature, feature.copy_for_plan())
                     feature = entry[1]
@@ -71,6 +74,11 @@ class Features:
                 self.child_uuid = child_uuid
                 feature.child_options = child_options
                 self.merge_options(feature, child_options)
+                if reused_entry is not None:
+                    # The shared copy already holds the first consumer's forwarding; record this consumer's own.
+                    declared = reused_entry[0].options._fork()
+                    feature._inherit_consumer_options(declared, child_options, self.consumer_local_keys)
+                    self._consumer_declarations[feature.uuid] = declared
 
             self.check_duplicate_feature(feature)
             self.collection.append(feature)

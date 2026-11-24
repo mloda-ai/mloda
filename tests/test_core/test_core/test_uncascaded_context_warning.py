@@ -274,7 +274,23 @@ class UncascadedCtxTwinB(UncascadedCtxConsumer):
         return {Feature(FILTER_COL, Options(group={KEY: TWIN_VALUE}))}
 
 
+SHARED_A = "uncascaded_ctx_shared_a"
+SHARED_B = "uncascaded_ctx_shared_b"
+SHARED_SET_A = "uncascaded_ctx_shared_set_a"
+SHARED_SET_B = "uncascaded_ctx_shared_set_b"
+SHARED_INPUT = Feature(DEFAULT_ROOT)
+SHARED_SET_INPUT = Feature(DEFAULT_ROOT, Options(group={KEY: EXPLICIT_OVERRIDE}))
+
+
+class UncascadedCtxSharedInput(UncascadedCtxConsumer):
+    INPUTS = {SHARED_A: DEFAULT_ROOT, SHARED_B: DEFAULT_ROOT, SHARED_SET_A: DEFAULT_ROOT, SHARED_SET_B: DEFAULT_ROOT}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any]:
+        return {SHARED_INPUT if str(feature_name) in {SHARED_A, SHARED_B} else SHARED_SET_INPUT}
+
+
 GROUPS: set[type[FeatureGroup]] = {
+    UncascadedCtxSharedInput,
     UncascadedCtxDiamond,
     UncascadedCtxTwinA,
     UncascadedCtxTwinB,
@@ -721,6 +737,39 @@ def test_global_filter_injected_feature_does_not_hide_the_input_walk(
         assert _warnings(caplog) == []
     else:
         _assert_warning(caplog, [FILTER_CONSUMER], [UncascadedCtxFilterRoot])
+
+
+@pytest.mark.parametrize("a_propagates", [False, True], ids=["both-lost", "only-b-lost"])
+def test_shared_input_object_keeps_each_consumers_lost_key(
+    a_propagates: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    # The propagating consumer goes first; reversed, planning raises on the already-defaulted group key.
+    if a_propagates:
+        options_a = Options(context={KEY: PRIVATE_VALUE}, propagate_context_keys=frozenset({KEY}))
+        options_b = Options(context={KEY: OTHER_PRIVATE_VALUE})
+        expected = [SHARED_B]
+    else:
+        options_a = Options(context={KEY: PRIVATE_VALUE})
+        options_b = Options(context={KEY: PRIVATE_VALUE})
+        expected = [SHARED_A, SHARED_B]
+    with caplog.at_level(logging.WARNING):
+        engine = _prepare([Feature(SHARED_A, options_a), Feature(SHARED_B, options_b)])
+    assert [r for r in _warnings(caplog, DEFAULT_ROOT) if "default-equivalent options" in r.getMessage()] == []
+    _assert_warning(caplog, expected, [UncascadedCtxDefaultRoot])
+    root = _feature(engine, DEFAULT_ROOT)
+    assert engine.feature_link_parents[_feature(engine, SHARED_A).uuid] == {root.uuid}
+    assert engine.feature_link_parents[_feature(engine, SHARED_B).uuid] == {root.uuid}
+
+
+def test_shared_input_object_setting_the_key_itself_is_quiet(caplog: pytest.LogCaptureFixture) -> None:
+    requests = [
+        Feature(SHARED_SET_A, Options(context={KEY: PRIVATE_VALUE})),
+        Feature(SHARED_SET_B, Options(context={KEY: PRIVATE_VALUE})),
+    ]
+    with caplog.at_level(logging.WARNING):
+        engine = _prepare(requests)
+    assert _feature(engine, DEFAULT_ROOT).options.get(KEY) == EXPLICIT_OVERRIDE
+    assert [r for r in caplog.records if r.levelno >= logging.WARNING and r.name == "mloda.core.core.engine"] == []
 
 
 @pytest.mark.parametrize("twin_first", [True, False], ids=["b-first", "a-first"])

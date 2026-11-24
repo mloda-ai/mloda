@@ -429,6 +429,7 @@ class Engine:
             features.child_uuid,
             specialized_from=result.specialized_from,
             check_cascade=True,
+            declared=features._consumer_declarations.get(feature.uuid),
         )
 
         if added:
@@ -1342,6 +1343,7 @@ class Engine:
         *,
         check_cascade: bool = False,
         engine_injected: bool = False,
+        declared: Options | None = None,
     ) -> bool:
         # Materialize declared defaults at intake: default-equivalent twins become equal and merge
         # via the duplicate path below; name-bound values fill too (into context); identity no-op otherwise.
@@ -1408,7 +1410,9 @@ class Engine:
             if not (if_index_feature or engine_injected):
                 self._declared_options_by_uuid[feature.uuid] = declared_options
                 if child_uuid is not None:
-                    self._configured_option_keys_by_pair[(child_uuid, feature.uuid)].update(declared_options)
+                    self._configured_option_keys_by_pair[(child_uuid, feature.uuid)].update(
+                        declared if declared is not None else declared_options
+                    )
             if specialized_from:
                 self.specialized_from[feature.uuid] = specialized_from
             return True
@@ -1448,8 +1452,11 @@ class Engine:
                 # The first request to reach an engine-injected index or filter twin becomes its declaration.
                 self._declared_options_by_uuid.setdefault(existing_feature.uuid, declared_options)
                 if child_uuid is not None:
-                    self._configured_option_keys_by_pair[(child_uuid, existing_feature.uuid)].update(declared_options)
-                self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
+                    self._configured_option_keys_by_pair[(child_uuid, existing_feature.uuid)].update(
+                        declared if declared is not None else declared_options
+                    )
+                if existing_feature is not feature:
+                    self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:
                 existing_feature.initial_requested_data = True

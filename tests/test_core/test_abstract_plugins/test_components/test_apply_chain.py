@@ -158,6 +158,40 @@ class TestApplyChain:
         assert "_FwA" in message, message
 
 
+class TestApplyChainInspect:
+    def test_inspect_sees_each_hops_current_framework_and_data_in_order(self) -> None:
+        fw_a, fw_b, fw_c, trans_ab, trans_bc, transformer = _chain_env()
+        seen: list[tuple[Any, Any]] = []
+
+        def _inspect(current_fw: Any, data: Any) -> None:
+            seen.append((current_fw, list(data)))
+
+        result = transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["start"], None, inspect=_inspect)
+
+        assert seen == [(fw_a, ["start"]), (fw_b, ["start", "A->B"])]
+        assert result == ["start", "A->B", "B->C"]
+
+    def test_inspect_runs_before_the_hop_transforms(self) -> None:
+        fw_a, fw_b, _fw_c, trans_ab, _trans_bc, transformer = _chain_env()
+        payload = ["start"]
+        lengths: list[int] = []
+
+        transformer.apply_chain(
+            fw_a, fw_b, [trans_ab], payload, None, inspect=lambda fw, data: lengths.append(len(data))
+        )
+
+        assert lengths == [1]
+
+    def test_without_inspect_the_chain_is_unchanged(self) -> None:
+        fw_a, _fw_b, fw_c, trans_ab, trans_bc, transformer = _chain_env()
+
+        assert transformer.apply_chain(fw_a, fw_c, [trans_ab, trans_bc], ["s"], None, inspect=None) == [
+            "s",
+            "A->B",
+            "B->C",
+        ]
+
+
 class TestTransformFrameworkStepDelegatesToApplyChain:
     def test_transform_delegates_chain_application_to_apply_chain(self, monkeypatch: pytest.MonkeyPatch) -> None:
         """``TransformFrameworkStep.transform`` resolves via the destination ``cfw.transformer`` and hands
@@ -193,6 +227,7 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
             chain: list[type[BaseTransformer]],
             data: Any,
             connection: Any,
+            inspect: Any = None,
         ) -> Any:
             recorded["args"] = (from_framework, to_framework, list(chain), data, connection)
             return "CHAIN_APPLIED"

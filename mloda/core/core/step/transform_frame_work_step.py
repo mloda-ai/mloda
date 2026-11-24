@@ -2,6 +2,7 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from mloda.core.abstract_plugins.components.error_utils import internal_invariant_error
+from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossInspector
 from mloda.core.abstract_plugins.components.parallelization_modes import ParallelizationMode
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.core.cfw_manager import CfwManager
@@ -121,7 +122,7 @@ class TransformFrameworkStep(Step):
 
         data = self.get_data(from_cfw, location)
         source = data
-        data = self.transform(cfw, source)
+        data = self.transform(cfw, source, cfw_register)
 
         if data is source and not (isinstance(from_cfw, ComputeFramework) and source is from_cfw._pinned_frame):
             cfw.set_data(data)
@@ -155,7 +156,7 @@ class TransformFrameworkStep(Step):
     def set_data(self, cfw: ComputeFramework, data: Any) -> None:
         cfw.set_data(data)
 
-    def transform(self, cfw: ComputeFramework, data: Any) -> Any:
+    def transform(self, cfw: ComputeFramework, data: Any, cfw_register: CfwManager | None = None) -> Any:
         _from_fw = self.from_framework.expected_data_framework()
         _to_fw = self.to_framework.expected_data_framework()
 
@@ -182,4 +183,22 @@ class TransformFrameworkStep(Step):
                 f"Available transformers: {list(transformer.transformer_map.keys())}"
             )
 
-        return transformer.apply_chain(_from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object)
+        inspector = None
+        if cfw_register is not None:
+            description = (
+                f"transfer from {self.from_feature_group.get_class_name()} to {self.to_feature_group.get_class_name()}"
+            )
+            inspector = NanNullLossInspector.for_pair(
+                self.uuid,
+                self.from_framework,
+                self.to_framework,
+                description,
+                cfw.run_context.refuse_nan_null_loss,
+                cfw_register.add_nan_null_losses,
+            )
+        converted = transformer.apply_chain(
+            _from_fw, _to_fw, transformation_chain, data, cfw.framework_connection_object, inspect=inspector
+        )
+        if inspector is not None:
+            inspector.finish()
+        return converted

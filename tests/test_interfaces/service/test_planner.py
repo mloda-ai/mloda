@@ -1938,6 +1938,14 @@ class TestSessionSourceRoutes:
             getattr(session, route)(joinlike)
 
     @pytest.mark.parametrize("route", ["describe_columns", "count_rows"])
+    def test_a_transform_step_with_a_step_uuid_still_is_not_a_compute_step(self, tmp_path: Path, route: str) -> None:
+        session = _prepare_csv(_write_sales(tmp_path))
+        transformlike = dataclasses.replace(_csv_step(session), step_kind="transform")
+
+        with pytest.raises(ValueError, match="is not a compute step"):
+            getattr(session, route)(transformlike)
+
+    @pytest.mark.parametrize("route", ["describe_columns", "count_rows"])
     def test_a_step_from_another_session_raises(self, tmp_path: Path, route: str) -> None:
         path = _write_sales(tmp_path)
         step = _csv_step(_prepare_csv(path))

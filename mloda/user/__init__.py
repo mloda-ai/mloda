@@ -16,6 +16,7 @@ from mloda.core.api.request import mlodaAPI
 # Resolved execution plan
 from mloda.core.api.plan_info import PlanStep
 from mloda.core.api.run_result import ResultStream, RunResult
+from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss, NanNullLossError
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 
 # Features
@@ -87,6 +88,8 @@ __all__ = [
     "PlanStep",
     "RunResult",
     "ResultStream",
+    "NanNullLoss",
+    "NanNullLossError",
     "StepDuration",
     # Features
     "Feature",

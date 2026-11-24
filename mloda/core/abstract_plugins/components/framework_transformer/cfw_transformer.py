@@ -2,6 +2,7 @@ import logging
 import threading
 import weakref
 from collections import deque
+from collections.abc import Callable
 from typing import Any, ClassVar
 
 from mloda.core.abstract_plugins.components.framework_transformer.base_transformer import BaseTransformer
@@ -260,11 +261,15 @@ class ComputeFrameworkTransformer:
         chain: list[type[BaseTransformer]],
         data: Any,
         connection: Any,
+        inspect: Callable[[Any, Any], None] | None = None,
     ) -> Any:
         """Walk a transformation chain, resolving each intermediate hop's target framework
-        from the transformer map, and apply each transformer in sequence."""
+        from the transformer map, and apply each transformer in sequence.
+        ``inspect(current_fw, data)`` runs before each hop."""
         current_fw = from_framework
         for i, transformer_cls in enumerate(chain):
+            if inspect is not None:
+                inspect(current_fw, data)
             if i == len(chain) - 1:
                 target_fw: type[Any] = to_framework
             else:

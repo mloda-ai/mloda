@@ -32,7 +32,7 @@ from mloda.core.core.step.transform_frame_work_step import TransformFrameworkSte
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.error_utils import MlodaRunError, internal_invariant_error
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
-from mloda.core.abstract_plugins.feature_group import format_feature_group_class
+from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.runtime.validate_multiprocessing_link import (
     raise_on_multiprocessing_connection_conflict,
     raise_on_unpicklable_child_bootstrap,
@@ -197,6 +197,7 @@ class ExecutionOrchestrator:
         self._hook_extenders: dict[ExtenderHook, Extender] | None = None
         self._default_run_context: RunContext = run_context if run_context is not None else RunContext()
         self._graceful_shutdown_timeout: float = self._default_run_context.graceful_shutdown_timeout
+        self._refuse_nan_null_loss: bool = self._default_run_context.refuse_nan_null_loss
 
         # multiprocessing - delegate to WorkerManager
         self.location: str | None = None
@@ -533,7 +534,7 @@ class ExecutionOrchestrator:
                 cfw = self.executor.get_cfw(
                     step.compute_framework, step.features.any_uuid, step.tfs_ids, step.reads_join_result
                 )
-            self.add_to_result_data_collection(cfw, step.features, step.uuid)
+            self.add_to_result_data_collection(cfw, step.features, step.uuid, step.feature_group)
             self._drop_data_if_possible(cfw, step)
 
         return True
@@ -630,11 +631,25 @@ class ExecutionOrchestrator:
         """
         self.worker_manager.join_all(graceful_timeout=self._graceful_shutdown_timeout, abandon_threads=abandon_threads)
 
-    def add_to_result_data_collection(self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID) -> None:
+    def add_to_result_data_collection(
+        self,
+        cfw: ComputeFramework,
+        features: FeatureSet,
+        step_uuid: UUID,
+        feature_group: type[FeatureGroup] | None = None,
+    ) -> None:
         """
         Adds the result data to the result data collection.
         """
-        self.data_lifecycle_manager.add_to_result_data_collection(cfw, features, step_uuid, self.location)
+        self.data_lifecycle_manager.add_to_result_data_collection(
+            cfw,
+            features,
+            step_uuid,
+            self.location,
+            report=self.cfw_register.add_nan_null_losses,
+            refuse=self._refuse_nan_null_loss,
+            description=None if feature_group is None else f"{feature_group.get_class_name()} step output",
+        )
 
     def get_result_data(
         self, cfw: ComputeFramework, selected_feature_names: Sequence[FeatureName], location: str | None = None
@@ -685,6 +700,7 @@ class ExecutionOrchestrator:
         hook_extenders = build_hook_extenders(function_extender or ())
         self._hook_extenders = hook_extenders
         self._graceful_shutdown_timeout = run_context.graceful_shutdown_timeout
+        self._refuse_nan_null_loss = run_context.refuse_nan_null_loss
 
         if ParallelizationMode.MULTIPROCESSING not in parallelization_modes:
             self.cfw_register = CfwManager(parallelization_modes)

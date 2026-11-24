@@ -6,6 +6,7 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.abstract_plugins.components.feature_name import FeatureName
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
+from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss, NanNullLossInspector
 
 
 class DataLifecycleManager:
@@ -104,7 +105,14 @@ class DataLifecycleManager:
         cfw.drop_last_data(location)
 
     def add_to_result_data_collection(
-        self, cfw: ComputeFramework, features: FeatureSet, step_uuid: UUID, location: str | None = None
+        self,
+        cfw: ComputeFramework,
+        features: FeatureSet,
+        step_uuid: UUID,
+        location: str | None = None,
+        report: Callable[[list[NanNullLoss]], None] | None = None,
+        refuse: bool = False,
+        description: str | None = None,
     ) -> None:
         """
         Adds result data to the collection if features are requested.
@@ -114,13 +122,30 @@ class DataLifecycleManager:
             features: The feature set to extract from the CFW.
             step_uuid: The UUID of the step to associate with the result.
             location: Optional location string for remote data access.
+            report: Receives the NaN/null loss records of a lossy output conversion.
+            refuse: Raise NanNullLossError instead of reporting.
+            description: Names the step in a refusal message.
         """
         initial_requested_features = features.get_initial_requested_features()
         if not initial_requested_features:
             return
 
+        inspector = None
+        if report is not None and self.output_framework is not None:
+            inspector = NanNullLossInspector.for_pair(
+                step_uuid,
+                type(cfw),
+                self.output_framework,
+                f"{description or f'step {step_uuid}'} to output_framework",
+                refuse,
+                report,
+            )
         result = self.get_result_data(
-            cfw, initial_requested_features, location, result_index_columns=features.get_result_index_columns()
+            cfw,
+            initial_requested_features,
+            location,
+            result_index_columns=features.get_result_index_columns(),
+            loss_inspector=inspector,
         )
         if result is not None:
             self.result_data_collection[step_uuid] = result
@@ -131,6 +156,7 @@ class DataLifecycleManager:
         selected_feature_names: Sequence[FeatureName],
         location: str | None = None,
         result_index_columns: dict[str, tuple[str, ...]] | None = None,
+        loss_inspector: NanNullLossInspector | None = None,
     ) -> Any:
         """
         Gets result data from the compute framework.
@@ -167,7 +193,7 @@ class DataLifecycleManager:
         # reaches here with no columns is a schema-less pass-through. Selecting named columns from
         # a schema-less result is meaningless and must not raise; it skips selection but is still converted.
         if not cfw._extract_column_names(data):
-            return self._to_output_framework(cfw, data)
+            return self._to_output_framework(cfw, data, loss_inspector)
 
         if result_index_columns:
             present = set(cfw._extract_column_names(data))
@@ -194,9 +220,11 @@ class DataLifecycleManager:
             column_ordering=self.column_ordering,
             request_feature_order=self.request_feature_order,
         )
-        return self._to_output_framework(cfw, selected)
+        return self._to_output_framework(cfw, selected, loss_inspector)
 
-    def _to_output_framework(self, cfw: ComputeFramework, data: Any) -> Any:
+    def _to_output_framework(
+        self, cfw: ComputeFramework, data: Any, loss_inspector: NanNullLossInspector | None = None
+    ) -> Any:
         """Converts a selected result to the output framework's data type, once at the end of the run."""
         if self.output_framework is None:
             return data
@@ -210,7 +238,12 @@ class DataLifecycleManager:
         chain = self.transformer.get_transformation_chain(source, target)
         if chain is None:
             raise ValueError(f"No transformation from {source} to {target} for the output framework.")
-        return self.transformer.apply_chain(source, target, chain, data, self.output_connection)
+        converted = self.transformer.apply_chain(
+            source, target, chain, data, self.output_connection, inspect=loss_inspector
+        )
+        if loss_inspector is not None:
+            loss_inspector.finish()
+        return converted
 
     def get_results(self) -> list[Any]:
         """

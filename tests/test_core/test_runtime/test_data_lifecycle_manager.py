@@ -264,7 +264,9 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         with patch.object(manager, "get_result_data", return_value={"feature1": [1, 2, 3]}) as mock_get_result:
             manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid)
 
-            mock_get_result.assert_called_once_with(mock_cfw, {feature_name}, None, result_index_columns={})
+            mock_get_result.assert_called_once_with(
+                mock_cfw, {feature_name}, None, result_index_columns={}, loss_inspector=None
+            )
 
     def test_add_to_result_data_collection_passes_location(self) -> None:
         """Should pass location to get_result_data when provided."""
@@ -281,7 +283,9 @@ class TestDataLifecycleManagerAddToResultDataCollection:
         with patch.object(manager, "get_result_data", return_value={"feature1": [1, 2, 3]}) as mock_get_result:
             manager.add_to_result_data_collection(mock_cfw, mock_features, step_uuid, location=location)
 
-            mock_get_result.assert_called_once_with(mock_cfw, {feature_name}, location, result_index_columns={})
+            mock_get_result.assert_called_once_with(
+                mock_cfw, {feature_name}, location, result_index_columns={}, loss_inspector=None
+            )
 
     def test_add_to_result_data_collection_handles_none_result(self) -> None:
         """Should not add to collection when get_result_data returns None."""
@@ -554,6 +558,89 @@ class TestDataLifecycleManagerOutputFramework:
 
         assert isinstance(result, pa.Table)
         assert result.column_names == ["feature1"]
+
+    @staticmethod
+    def _collect(
+        output: Any, table: pa.Table, refuse: bool, transformer: Any = None
+    ) -> tuple[DataLifecycleManager, UUID, list[Any]]:
+        manager = DataLifecycleManager(output_framework=output, output_connection=None, transformer=transformer)
+        features = Mock(spec=FeatureSet)
+        features.get_result_index_columns.return_value = {}
+        features.get_initial_requested_features.return_value = (FeatureName("nl_col"),)
+        step_uuid = uuid4()
+        reported: list[Any] = []
+
+        manager.add_to_result_data_collection(
+            TestDataLifecycleManagerOutputFramework._arrow_cfw(table),
+            features,
+            step_uuid,
+            report=reported.extend,
+            refuse=refuse,
+        )
+        return manager, step_uuid, reported
+
+    _BOTH = pa.table({"nl_col": pa.array([1.0, float("nan"), None]), "other": [1, 2, 3]})
+
+    def test_a_lossy_output_conversion_reports_one_record_per_offending_column(self) -> None:
+        _, step_uuid, reported = self._collect(PandasDataFrame, self._BOTH, refuse=False)
+
+        assert [(r.step_uuid, r.column, r.source_framework, r.target_framework) for r in reported] == [
+            (step_uuid, "nl_col", "PyArrowTable", "PandasDataFrame")
+        ]
+
+    def test_refuse_raises_naming_the_step_frameworks_and_column(self) -> None:
+        from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError
+
+        with pytest.raises(NanNullLossError) as excinfo:
+            self._collect(PandasDataFrame, self._BOTH, refuse=True)
+
+        message = str(excinfo.value)
+        assert "PyArrowTable" in message
+        assert "PandasDataFrame" in message
+        assert "nl_col" in message
+
+    @pytest.mark.parametrize(
+        "table",
+        [
+            pa.table({"nl_col": pa.array([1.0, float("nan"), 2.0])}),
+            pa.table({"nl_col": pa.array([1.0, None, 2.0])}),
+        ],
+        ids=["only_nan", "only_null"],
+    )
+    def test_clean_data_under_refuse_neither_raises_nor_reports(self, table: pa.Table) -> None:
+        manager, step_uuid, reported = self._collect(PandasDataFrame, table, refuse=True)
+
+        assert reported == []
+        assert isinstance(manager.result_data_collection[step_uuid], pd.DataFrame)
+
+    @pytest.mark.parametrize("output", [None, "polars", "arrow"])
+    def test_an_unmarked_conversion_never_reports_or_refuses(self, output: str | None) -> None:
+        from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+
+        target = {None: None, "polars": PolarsDataFrame, "arrow": PyArrowTable}[output]
+
+        _, _, reported = self._collect(target, self._BOTH, refuse=True)
+
+        assert reported == []
+
+    def test_refuse_without_an_arrow_hop_is_refused_as_uncheckable(self) -> None:
+        from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError
+
+        transformer = Mock(spec=ComputeFrameworkTransformer)
+        transformer.get_transformation_chain.return_value = [Mock()]
+        transformer.apply_chain.return_value = pd.DataFrame({"nl_col": [1.0]})
+
+        with pytest.raises(NanNullLossError, match="could not be checked"):
+            self._collect(PandasDataFrame, self._BOTH, refuse=True, transformer=transformer)
+
+    def test_without_refuse_an_unchecked_conversion_records_nothing(self) -> None:
+        transformer = Mock(spec=ComputeFrameworkTransformer)
+        transformer.get_transformation_chain.return_value = [Mock()]
+        transformer.apply_chain.return_value = pd.DataFrame({"nl_col": [1.0]})
+
+        _, _, reported = self._collect(PandasDataFrame, self._BOTH, refuse=False, transformer=transformer)
+
+        assert reported == []
 
 
 class TestDataLifecycleManagerKeepIndex:

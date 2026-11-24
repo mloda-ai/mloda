@@ -8,6 +8,7 @@ from uuid import UUID
 
 from mloda.core.abstract_plugins.components.failed_rows import FailedRows
 from mloda.core.abstract_plugins.components.run_outcome import RunOutcome
+from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss
 from mloda.core.abstract_plugins.components.step_duration import StepDuration
 from mloda.core.abstract_plugins.components.validators.options_validator import redact_conflict_value
 from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION
@@ -37,6 +38,11 @@ class _RunOutcomeFields:
     def step_durations(self) -> tuple[StepDuration, ...]:
         """calculate_feature seconds per completed feature group step, in completion order."""
         return self._run_outcome().step_durations
+
+    @property
+    def nan_null_losses(self) -> tuple[NanNullLoss, ...]:
+        """Float columns that held both NaN and null when moved onto a NaN-is-null framework; empty when none."""
+        return self._run_outcome().nan_null_losses
 
     @property
     def artifacts(self) -> dict[str, Any]:

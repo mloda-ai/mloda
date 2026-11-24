@@ -29,6 +29,7 @@ from mloda.core.abstract_plugins.components.input_data.source_feature_group impo
     implementation_path,
 )
 from mloda.core.abstract_plugins.components.input_data.claim_route import SourceMatch
+from mloda.core.abstract_plugins.components.nan_null_loss import nan_null_loss_pair
 from mloda.core.abstract_plugins.components.options import Options, _safe_deepcopy
 from mloda.core.abstract_plugins.components.utils import as_str, is_nominal_subclass, safe_field
 from mloda.core.core.step.feature_group_step import FeatureGroupStep
@@ -43,11 +44,6 @@ if TYPE_CHECKING:
     from mloda.core.abstract_plugins.feature_group import FeatureGroup
     from mloda.core.abstract_plugins.implementation import Implementation
     from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
-
-
-def _nan_null_loss(source: "type[ComputeFramework] | None", target: "type[ComputeFramework] | None") -> bool:
-    """True when the target folds NaN into null and the source does not."""
-    return source is not None and target is not None and not bool(source.nan_is_null()) and bool(target.nan_is_null())
 
 
 @dataclass(frozen=True)
@@ -92,8 +88,9 @@ class PlanStep:
     (a mapping under a source group's name, a pointer, is redacted to its keys; other mappings have
     credential-shaped keys masked),
     and ``step_uuid`` its ``FeatureGroupStep.uuid`` (equal to ``HookContext.step_uuid`` on that step's hooks), the
-    key ``RunResult.frames()`` pairs frames by; both are None for join/transform steps and, like ``join_token``,
-    excluded from equality.
+    key ``RunResult.frames()`` pairs frames by; ``feature_set_options`` is None for join/transform steps, ``step_uuid`` is
+    None for join steps (a transform step carries its ``TransformFrameworkStep.uuid``), and both, like ``join_token``,
+    are excluded from equality.
     ``input_feature_edges`` maps each output feature name to its declared inputs (injected features absent);
     it participates in equality but is excluded from hashing.
 
@@ -218,9 +215,9 @@ class PlanStep:
     @property
     def potential_nan_null_loss(self) -> bool:
         if self.step_kind == "transform":
-            return _nan_null_loss(self.source_compute_framework, self.compute_framework)
+            return nan_null_loss_pair(self.source_compute_framework, self.compute_framework)
         if self.step_kind == "compute":
-            return _nan_null_loss(self.compute_framework, self.result_framework)
+            return nan_null_loss_pair(self.compute_framework, self.result_framework)
         return False
 
     @property
@@ -486,6 +483,7 @@ def build_plan_steps(
                     compute_framework=step.to_framework,
                     source_feature_group=step.from_feature_group,
                     source_compute_framework=step.from_framework,
+                    step_uuid=step.uuid,
                     leaves_connection=leaves(
                         min((h for source in sources if (h := home(source)) is not None), default=None)
                     )
@@ -536,7 +534,7 @@ def source_of(
 ) -> tuple[type[SourceFeatureGroup], SourceMatch, type["ComputeFramework"]]:
     """The (source group, source match, compute framework) of a compute step of this plan; ValueError when it has none."""
     name = step.feature_group_name or "unknown"
-    if step.step_uuid is None:
+    if step.step_kind != "compute":
         raise ValueError(f"Step of feature group {name} is not a compute step, so it has no source.")
     found = next((s for s in execution_plan if isinstance(s, FeatureGroupStep) and s.uuid == step.step_uuid), None)
     if found is None:

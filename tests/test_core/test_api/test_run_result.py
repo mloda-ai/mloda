@@ -398,6 +398,11 @@ class TestRunResultStepDurations:
 
         assert RunResult([], []).step_durations == ()
 
+    def test_nan_null_losses_default_to_an_empty_tuple(self) -> None:
+        from mloda.user import RunResult
+
+        assert RunResult([], []).nan_null_losses == ()
+
     @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
     def test_one_entry_per_step_with_plan_uuid_and_lower_bound(self, mode: ParallelizationMode) -> None:
         from mloda.user import StepDuration
@@ -626,6 +631,18 @@ class TestPublicExports:
         entry = StepDuration("g", uuid4(), 0.1)
         with pytest.raises(dataclasses.FrozenInstanceError):
             entry.duration_seconds = 1.0  # type: ignore[misc]
+
+    def test_nan_null_loss_types_are_exported_and_exposed_as_properties(self) -> None:
+        from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLoss as ModuleLoss
+        from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError as ModuleError
+        from mloda.user import NanNullLoss, NanNullLossError, ResultStream, RunResult
+
+        assert NanNullLoss is ModuleLoss
+        assert NanNullLossError is ModuleError
+        assert "NanNullLoss" in mloda_user.__all__
+        assert "NanNullLossError" in mloda_user.__all__
+        for cls in (RunResult, ResultStream):
+            assert isinstance(getattr(cls, "nan_null_losses"), property)
 
     def test_entry_points_return_the_exported_classes(self) -> None:
         from mloda.user import ResultStream, RunResult

@@ -73,7 +73,7 @@ import pytest
 # with the ``mloda`` mlodaAPI alias imported below.
 import mloda.steward as mloda_steward
 import mloda.user as mloda_user
-from mloda.core.api.plan_info import _dependency_order, build_plan_steps
+from mloda.core.api.plan_info import _dependency_order, build_plan_steps, source_of
 from mloda.core.abstract_plugins.components.options import RESERVED_READER_OPTION_KEY
 from mloda.core.abstract_plugins.implementation_pin_error import ImplementationPinError
 from mloda.core.api.plan_lock import _lock_text
@@ -3064,7 +3064,8 @@ class TestCrossFrameworkJoinStepMapping:
         assert join.join_keys == ("plan_info_xjid=plan_info_xjid",)
 
     def test_cross_framework_join_plan_has_a_transform_into_the_join_destination(self) -> None:
-        plan = _prepare_cross_framework_join_session().resolved_plan()
+        session = _prepare_cross_framework_join_session()
+        plan = session.resolved_plan()
 
         transform_steps = [step for step in plan if step.step_kind == "transform"]
         assert len(transform_steps) == 1, f"expected one transform step, got {[s.step_kind for s in plan]}"
@@ -3078,6 +3079,10 @@ class TestCrossFrameworkJoinStepMapping:
         assert transform.source_feature_group is PlanInfoCrossRightArrow
         assert transform.join_type is None
         assert transform.potential_nan_null_loss is True
+        assert transform.step_uuid is not None
+        assert transform.step_uuid in {raw.uuid for raw in _raw_steps_by_kind(session)["transform"]}
+        with pytest.raises(ValueError, match="is not a compute step"):
+            source_of(session._execution_plan(), transform)
         assert next(step for step in plan if step.step_kind == "join").potential_nan_null_loss is False
 
     def test_cross_framework_join_plan_shape(self) -> None:

@@ -193,6 +193,8 @@ for entry in results.step_durations:
     assert entry.duration_seconds < budget_seconds, f"{entry.feature_group} took {entry.duration_seconds:.3f}s"
 ```
 
+`nan_null_losses` on `RunResult` and `ResultStream` holds one `NanNullLoss` per float column that held both NaN and null in a marked conversion; `refuse_nan_null_loss=True` raises `NanNullLossError` instead ([Frameworks that hold NaN as null](divergence-records.md#frameworks-that-hold-nan-as-null)).
+
 To pin a resolved plan, see [Plan Lock](plan-lock.md).
 
 To match a `run_all` resolution, pass the same `parallelization_modes`: `run_all` defaults to `{ParallelizationMode.SYNC}`, `prepare`/`explain` default to `None`, and compute frameworks are filtered by mode.
@@ -235,7 +237,7 @@ for step in mloda.explain(["sales__mean_aggr"], compute_frameworks=["PandasDataF
 - **implementation_specialized_from** (`tuple[type[Implementation[Any]], ...]`): the winner's concrete `Implementation` ancestors that serve the step's pair, sorted by path; empty otherwise.
 - **credential_handles** (`tuple[str, ...]`): the credential handles a compute step declares (could read) plus the one its source binds (reads), `()` otherwise. Excluded from equality.
 - **bound_credential_handle** (`str | None`): the handle a compute step's source binds (`<unnamed>`, `<pointer>` for placeholders), `None` otherwise. Excluded from equality.
-- **step_uuid** (`UUID | None`): the compute step's uuid, the key `RunResult.frames()` and `ResultStream.frames()` pair by; None otherwise. Excluded from equality (fresh per planning run).
+- **step_uuid** (`UUID | None`): the compute or transform step's uuid, the key `RunResult.frames()` and `ResultStream.frames()` pair by; None for join steps. Excluded from equality (fresh per planning run).
 - **feature_group_name** / **compute_framework_name** / **source_feature_group_name** / **source_compute_framework_name** / **result_framework_name** (`str | None`): Class names of the above, None when unset.
 - **declared_left_framework_names** / **declared_right_framework_names** (`tuple[str, ...]`): class names of the two tuples above, same order.
 

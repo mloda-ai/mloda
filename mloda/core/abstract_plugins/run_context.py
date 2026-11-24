@@ -42,6 +42,7 @@ class RunContext:
     principal: str | None = None
     # Plan-time owning-distribution version per module. None field: nothing resolved; None value: no owner.
     plugin_versions: Mapping[str, str | None] | None = field(default=None, hash=False)
+    refuse_nan_null_loss: bool = False
     run_inputs: RunInputs = field(default_factory=RunInputs)
     structure_hash: str | None = field(default=None, compare=False)
 

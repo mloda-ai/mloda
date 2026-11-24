@@ -50,6 +50,8 @@ The declaration replaces the `nan_as_null` operation records that only restate i
 
 Known gap: Pandas is declared as folding NaN into null because mloda's transfers into it produce float64. A user-built nullable `Float64` frame moving to SQLite loses the distinction without a mark.
 
+At run time each marked transfer and output conversion is checked at its Arrow hop: a top-level float column holding both NaN and null is reported as a `NanNullLoss(step_uuid, column, source_framework, target_framework)` in `RunResult.nan_null_losses` (`step_uuid` is `PlanStep.step_uuid`). With `refuse_nan_null_loss=True` the run raises `NanNullLossError` naming the step and the column instead. A missing record proves a clean transfer only on routes through Arrow; a marked conversion that never passes Arrow cannot be checked and is refused under the option. Nested float fields are not checked.
+
 The service `lineage` field is a feature graph and carries no mark; OpenLineage consumers read the `PlanStep` property.
 
 ## Upgrading

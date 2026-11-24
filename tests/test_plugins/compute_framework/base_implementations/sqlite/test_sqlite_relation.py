@@ -11,7 +11,7 @@ from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSui
 from mloda._testing.framework_adapter import SqliteAdapter
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import DataType, Index
-from tests.helpers.time_zones import unnameable_zone_values
+from tests.helpers.time_zones import bad_zone_values
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
@@ -225,7 +225,7 @@ class TestSqliteRelation(SqlRelationWindowSuite):
     def test_from_dict_mixed_zone_column_raises_naming_column_and_leaves_no_table(
         self, connection: sqlite3.Connection
     ) -> None:
-        values, _ = unnameable_zone_values("mixed")
+        values, _ = bad_zone_values("mixed")
         with pytest.raises(ValueError) as error:
             SqliteRelation.from_dict(connection, {"zoned": values})
         assert "zoned" in str(error.value)

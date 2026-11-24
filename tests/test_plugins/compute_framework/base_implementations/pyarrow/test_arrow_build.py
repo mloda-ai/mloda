@@ -5,8 +5,10 @@ builder must give the same instants and zone with the variable unset or set.
 """
 
 import contextlib
+import itertools
+import time
 import sqlite3
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from datetime import UTC, datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
@@ -32,7 +34,7 @@ from mloda_plugins.feature_group.experimental.data_quality.missing_value.pyarrow
 from mloda_plugins.feature_group.experimental.time_window.base import TimeWindowFeatureGroup
 from mloda_plugins.feature_group.experimental.time_window.pyarrow import PyArrowTimeWindow
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
-from tests.helpers.time_zones import unnameable_zone_values
+from tests.helpers.time_zones import bad_zone_values
 from tests.mixins.reader_feature_groups.format_file_writers import write_sqlite
 
 NY = ZoneInfo("America/New_York")
@@ -120,7 +122,6 @@ class TestArrowBuildUnchanged:
         assert got.to_pylist() == want.to_pylist()
 
 
-_PLUS_0530 = timezone(timedelta(hours=5, minutes=30))
 _NAIVE = datetime(2023, 3, 11, 12, 0)
 _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
 
@@ -129,7 +130,7 @@ _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
     "values, expected",
     [
         pytest.param([None, NOON_NY, None], "America/New_York", id="ny"),
-        pytest.param([datetime(2023, 3, 11, tzinfo=_PLUS_0530)], "+05:30", id="fixed_offset"),
+        pytest.param([datetime(2023, 3, 11, tzinfo=KOLKATA)], "+05:30", id="fixed_offset"),
         pytest.param([_UTC_NOON, None], "UTC", id="utc"),
         pytest.param(
             [
@@ -161,9 +162,7 @@ def test_aware_zone(values: list[Any], expected: str | None) -> None:
 @pytest.mark.parametrize(
     "values, zones",
     [
-        pytest.param(
-            [NOON_NY, datetime(2023, 3, 11, tzinfo=_PLUS_0530)], ["America/New_York", "+05:30"], id="ny_kolkata"
-        ),
+        pytest.param([NOON_NY, datetime(2023, 3, 11, tzinfo=KOLKATA)], ["America/New_York", "+05:30"], id="ny_kolkata"),
         pytest.param(
             [
                 datetime(2023, 1, 1, tzinfo=timezone(timedelta(hours=1), "CET")),
@@ -192,9 +191,32 @@ def test_aware_zone_rejects_mixed_zones(values: list[Any], zones: list[str]) -> 
         assert zone in str(unnamed.value)
 
 
-@pytest.mark.parametrize("kind", ["keyless", "custom"])
-def test_aware_zone_rejects_unnameable_zone(kind: str) -> None:
-    values, texts = unnameable_zone_values(kind)
+@pytest.fixture
+def new_york_local(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
+    monkeypatch.setenv("TZ", "America/New_York")
+    time.tzset()
+    yield
+    monkeypatch.undo()
+    time.tzset()
+
+
+def _summer(tz: Any) -> list[Any]:
+    return [datetime(2023, 7, 1, 12, 0, tzinfo=tz)]
+
+
+@pytest.mark.parametrize("kind", ["keyless", "custom", "tzoffset_cet", "tzstr_est5edt", "tzlocal"])
+def test_aware_zone_rejects_unnameable_zone(kind: str, request: pytest.FixtureRequest) -> None:
+    from dateutil import tz
+
+    if kind == "tzoffset_cet":
+        values, texts = _summer(tz.tzoffset("CET", 3600)), ["CET"]
+    elif kind == "tzstr_est5edt":
+        values, texts = _summer(tz.tzstr("EST5EDT")), ["EST"]
+    elif kind == "tzlocal":
+        request.getfixturevalue("new_york_local")
+        values, texts = _summer(tz.tzlocal()), []
+    else:
+        values, texts = bad_zone_values(kind)
     with pytest.raises(ValueError) as named:
         _builders().aware_zone(values, "zoned_col")
     for text in ["zoned_col", *texts]:
@@ -301,7 +323,7 @@ class TestEntryPointsRejectUnnameableZones:
     def test_dict_build_raises_naming_column_and_zone(
         self, build: Callable[[dict[str, list[Any]]], Any], kind: str
     ) -> None:
-        values, texts = unnameable_zone_values(kind)
+        values, texts = bad_zone_values(kind)
         with pytest.raises(ValueError) as error:
             build({"zoned": values})
         for text in ["zoned", *texts]:
@@ -342,13 +364,10 @@ def _sqlite_produce(tmp_path: Path, feature: Feature, zones: tuple[Any, ...] = (
     feature_set = FeatureSet()
     feature_set.add(feature)
     with contextlib.closing(SqliteFG.connect({"sqlite": str(path)})) as connection:
-        reads = iter(range(len(values)))
+        cycle = itertools.cycle(zones)
 
         def to_zone(_cursor: Any, row: tuple[Any, ...]) -> tuple[Any, ...]:
-            return tuple(
-                datetime.fromisoformat(v).astimezone(zones[next(reads) % len(zones)]) if isinstance(v, str) else v
-                for v in row
-            )
+            return tuple(datetime.fromisoformat(v).astimezone(next(cycle)) if isinstance(v, str) else v for v in row)
 
         connection.row_factory = to_zone
         table = SqliteFG.produce_rows(connection, "t", feature_set)

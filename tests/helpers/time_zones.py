@@ -35,7 +35,7 @@ def keyless_ny() -> ZoneInfo:
     pytest.skip("no system America/New_York tzfile")
 
 
-def unnameable_zone_values(kind: str) -> tuple[list[Any], list[str]]:
+def bad_zone_values(kind: str) -> tuple[list[Any], list[str]]:
     """Two aware values for kind mixed, keyless or custom, and the strings the error must contain."""
     if kind == "mixed":
         return [

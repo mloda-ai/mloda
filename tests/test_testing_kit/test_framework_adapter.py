@@ -414,9 +414,9 @@ def test_to_arrow_table_keeps_instants_and_zone(
 def test_to_arrow_table_rejects_mixed_and_unnameable_zones_naming_column(kind: str) -> None:
     pytest.importorskip("pyarrow")
     from mloda._testing.framework_adapter import to_arrow_table
-    from tests.helpers.time_zones import unnameable_zone_values
+    from tests.helpers.time_zones import bad_zone_values
 
-    values, texts = unnameable_zone_values(kind)
+    values, texts = bad_zone_values(kind)
     with pytest.raises(ValueError) as error:
         to_arrow_table(TypedTestData({"zoned": (DataType.TIMESTAMP_MICROS_TZ, values)}))
 

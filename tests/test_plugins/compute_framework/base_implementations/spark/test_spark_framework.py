@@ -33,7 +33,7 @@ from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import JoinType
 import pytest
-from tests.helpers.time_zones import unnameable_zone_values
+from tests.helpers.time_zones import bad_zone_values
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
 from mloda.user import FeatureName
 from mloda.user import ParallelizationMode
@@ -207,7 +207,7 @@ class TestSparkFrameworkComputeFramework:
     ) -> None:
         import pyarrow as pa
 
-        values, texts = unnameable_zone_values(kind)
+        values, texts = bad_zone_values(kind)
         with SparkAdapter() as adapter:
             framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
             framework.set_framework_connection_object(adapter.connection)
@@ -791,10 +791,37 @@ def test_exact_column_data_type_jvm_free() -> None:
     assert framework._exact_column_data_type(frame, "nope") is None
 
 
-def test_column_field_types_int_column_with_leading_none_jvm_free() -> None:
+@pytest.mark.parametrize(
+    ("values", "type_name", "zone"),
+    [
+        pytest.param([None, 1, 2], "IntegerType", None, id="int_leading_none"),
+        pytest.param([None, datetime(2023, 3, 12, 6, 30)] * 2, "TimestampNTZType", None, id="naive_leading_none"),
+        pytest.param([None, _NY_START.astimezone(_NY)], "TimestampType", "America/New_York", id="aware_ny"),
+    ],
+)
+def test_column_field_types_jvm_free(values: list[Any], type_name: str, zone: str | None) -> None:
     from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _column_field
 
     framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
-    field, zone = _column_field("n", [None, 1, 2], framework._infer_spark_type)
-    assert isinstance(field.dataType, _spark_types().IntegerType)
-    assert zone is None
+    field, got_zone = _column_field("n", values, framework._infer_spark_type)
+    assert isinstance(field.dataType, getattr(_spark_types(), type_name))
+    assert got_zone == zone
+
+
+@pytest.mark.parametrize(
+    ("values", "words"),
+    [
+        pytest.param(
+            [datetime(2023, 3, 12, 6, 30), _NY_START.astimezone(_NY)], ["naive", "aware"], id="naive_and_aware"
+        ),
+        pytest.param([_NY_START.astimezone(_NY), _NY_START.astimezone(_PLUS_0530)], [], id="mixed_zones"),
+    ],
+)
+def test_column_field_rejects_mixed_columns_naming_column_jvm_free(values: list[Any], words: list[str]) -> None:
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _column_field
+
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    with pytest.raises(ValueError) as error:
+        _column_field("n", values, framework._infer_spark_type)
+    for text in ["n", *words]:
+        assert text in str(error.value)

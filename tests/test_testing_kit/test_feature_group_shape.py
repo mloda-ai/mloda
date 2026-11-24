@@ -169,7 +169,7 @@ def make_run_group(
 
         @classmethod
         def return_data_type_rule(cls, feature: Feature) -> DataType | None:
-            if kind in ("undeclared_out", "int32_on_zero_rows", "raises_on_reframed_rerun"):
+            if kind in ("undeclared_out", "int32_on_zero_rows", "raises_on_reframed_rerun", "helper_missing_on_rerun"):
                 return None
             if kind == "double_out":
                 return DataType.DOUBLE
@@ -281,6 +281,11 @@ def make_run_group(
                 if len(data) == 0 and str(data["rg_src"].dtype) == "float64":
                     raise RuntimeError("zero rows with a float64 rg_src")
                 return _double_into(data, "rg_out", "rg_src")
+            if kind == "helper_missing_on_rerun":
+                data = _double_into(data, "rg_out", "rg_src")
+                if not (len(data) == 0 and str(data["rg_src"].dtype) == "float64"):
+                    data["rg_helper"] = data["rg_src"] * 3
+                return data
             if kind == "wrong_type":
                 if _is_columnar_dict(data):
                     data["rg_out"] = [str(v) for v in data["rg_src"]]
@@ -1037,8 +1042,17 @@ def _null_int_data() -> TypedTestData:
         ("undeclared_out", False, _ProductionPandasAdapter, False),
         ("int32_on_zero_rows", True, _ProductionPandasAdapter, True),
         ("raises_on_reframed_rerun", True, _ProductionPandasAdapter, True),
+        ("helper_missing_on_rerun", True, _ProductionPandasAdapter, False),
     ],
-    ids=["widened", "retyped", "narrowed", "follows_reframed_int", "group_retype_still_fails", "rerun_raises"],
+    ids=[
+        "widened",
+        "retyped",
+        "narrowed",
+        "follows_reframed_int",
+        "group_retype_still_fails",
+        "rerun_raises",
+        "helper_missing_on_rerun",
+    ],
 )
 def test_pandas_null_input_zero_rows_excuses_only_the_adapter_retype(
     kind: str, fails: bool, adapter_cls: type[Any], names_out: bool

@@ -748,7 +748,13 @@ def _check_zero_rows(
             note = _excused(text, covering.get(column, []), used, DivergenceKind.TYPE) if changed else None
             if note is not None:
                 notes.append(note)
-            elif changed and column not in data.types and (frame := rerun_frame()) is not None and not differs(frame):
+            elif (
+                changed
+                and column not in data.types
+                and (frame := rerun_frame()) is not None
+                and column in adapter.column_names(frame)
+                and not differs(frame)
+            ):
                 continue
             elif changed:
                 failures.append(f"zero_rows: {text}")

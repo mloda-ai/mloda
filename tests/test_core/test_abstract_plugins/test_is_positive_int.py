@@ -75,7 +75,7 @@ class TestIsPositiveInt:
         assert is_positive_int("٣") is True
 
 
-NN_ACCEPTED: list[Any] = [0, 0.0, -0.0, 1, 2.5, 10**400, Fraction(1, 3)]
+NN_ACCEPTED: list[Any] = [0, 0.0, -0.0, 1, 2.5, 10**400, Fraction(1, 3), np.int64(3), np.float64(0.5)]
 NN_REJECTED: list[Any] = [
     True,
     False,
@@ -89,6 +89,8 @@ NN_REJECTED: list[Any] = [
     None,
     [],
     Decimal("1"),
+    np.bool_(True),
+    np.float64("nan"),
 ]
 
 
@@ -99,14 +101,6 @@ class TestIsNonNegativeNumber:
 
     @pytest.mark.parametrize("value", NN_REJECTED)
     def test_rejects_everything_else(self, value: Any) -> None:
-        assert is_non_negative_number(value) is False
-
-    @pytest.mark.parametrize("value", [np.int64(3), np.float64(0.5)])
-    def test_accepts_numpy_numbers(self, value: Any) -> None:
-        assert is_non_negative_number(value) is True
-
-    @pytest.mark.parametrize("value", [np.bool_(True), np.float64("nan")])
-    def test_rejects_numpy_bool_and_nan(self, value: Any) -> None:
         assert is_non_negative_number(value) is False
 
 

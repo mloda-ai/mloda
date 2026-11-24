@@ -1437,6 +1437,7 @@ class TestRuntimeParametersPerRun:
         with pytest.raises(ValueError, match="rtp_scalar") as caught:
             session.run(parameters={"rtp_scalar": container})
         assert "scalar" in str(caught.value)
+        assert f"got a {type(container).__name__}" in str(caught.value)
 
     def test_none_is_refused_unless_the_spec_allows_it(self) -> None:
         session = _edge_session()

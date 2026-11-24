@@ -1,6 +1,7 @@
-"""Typing and runtime pins for the VarScope values returned by activate()."""
+"""Typing and runtime pins for the VarScope values returned by activate() and the scope helpers."""
 
 from mloda.core.abstract_plugins.close_context import CloseContext
+from mloda.core.abstract_plugins.components.input_data.api_data_scope import api_data_scope
 from mloda.core.abstract_plugins.components.input_data.claim_route import ChainCheck, chain_check_scope
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework
 from mloda.core.abstract_plugins.implementation import accessible_implementations
@@ -40,3 +41,8 @@ def test_chain_check_scope_yields_non_optional() -> None:
 def test_accessible_implementations_yields_non_optional() -> None:
     with accessible_implementations([]) as implementations:
         assert len(implementations) == 0
+
+
+def test_api_data_scope_yields_non_optional() -> None:
+    with api_data_scope(lambda: {}, "k") as bound:
+        assert bound[0] == "k"

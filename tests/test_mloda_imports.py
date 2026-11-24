@@ -203,6 +203,11 @@ def test_import_provider_base_classes() -> None:
     # Credential scrubbing
     assert callable(scrub_credentials)
     assert "scrub_credentials" in provider_module.__all__
+    from mloda.core.abstract_plugins.components.credential_scrub import source_identity as core_source_identity
+    from mloda.provider import source_identity
+
+    assert source_identity is core_source_identity
+    assert "source_identity" in provider_module.__all__
     # Source probe outcome: what SourceFeatureGroup.gated_probe returns
     from mloda.core.abstract_plugins.components.input_data.reader_probe import SourceProbeOutcome as CoreOutcome
     from mloda.provider import SourceProbeOutcome

@@ -3369,6 +3369,28 @@ class TestRegisteredSecretsScope:
         assert _LITERAL not in masked
         assert "***" in masked
 
+    @pytest.mark.parametrize(
+        "key, literal, redacted",
+        [
+            pytest.param("locator", "s3://bucket/dataset-2026/data.csv", "***", id="plugin-locator"),
+            pytest.param("password", "dataset-2026", "s3://bucket/***/data.csv", id="secret-path-literal"),
+        ],
+    )
+    def test_source_identity_ignores_collection_credential_literals(
+        self, key: str, literal: str, redacted: str
+    ) -> None:
+        from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope, source_identity
+        from mloda.user import DataAccessCollection
+
+        uri = "s3://bucket/dataset-2026/data.csv"
+        collection = DataAccessCollection(credentials={"source": {key: literal}})
+        outside = source_identity(uri)
+        assert outside == uri
+
+        with registered_secrets_scope(collection.secret_literals(), collection.identity_literals()):
+            assert scrub_credentials(uri) == redacted
+            assert source_identity(uri) == outside
+
     def test_a_multi_line_block_and_a_registered_literal_on_a_sibling_line_are_both_masked(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import registered_secrets_scope
 

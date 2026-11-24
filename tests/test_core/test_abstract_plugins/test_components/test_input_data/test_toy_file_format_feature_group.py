@@ -696,6 +696,8 @@ class TestFileSourceUriProjection:
         match = ToyFileFormatFG._source(path)
         assert match.source == expected.format(s=TOY_SUFFIX)
         assert match.access == path
+        if "://" in path:
+            assert provider.source_identity(path) == expected.format(s=TOY_SUFFIX)
 
     def test_generated_matrix(self) -> None:
         failures: list[str] = []

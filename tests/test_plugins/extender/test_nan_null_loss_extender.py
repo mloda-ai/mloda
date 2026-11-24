@@ -15,6 +15,7 @@ from mloda.core.abstract_plugins.function_extender import ExtenderHook
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.function_extender.base_implementations.nan_null_loss import nan_null_loss_extender
 from mloda_plugins.function_extender.base_implementations.nan_null_loss.nan_null_loss_extender import (
@@ -61,8 +62,11 @@ def _context(source: Any = PyArrowTable, target: Any = PandasDataFrame, step_uui
     )
 
 
-def _final_hop(table: pa.Table) -> tuple[Any, ...]:
-    return (pa.Table, pd.DataFrame, table, None)
+_NAN_IS_NULL_TARGETS = [PandasDataFrame, SqliteFramework]
+
+
+def _final_hop(table: pa.Table, target: Any = PandasDataFrame) -> tuple[Any, ...]:
+    return (pa.Table, target.expected_data_framework(), table, None)
 
 
 class TestNanAndNullColumns:
@@ -109,50 +113,55 @@ class TestNanAndNullColumns:
 
 
 class TestObserving:
-    def test_one_record_per_offending_column_in_order_and_the_wrapped_result(self) -> None:
+    @pytest.mark.parametrize("target", _NAN_IS_NULL_TARGETS)
+    def test_one_record_per_offending_column_in_order_and_the_wrapped_result(self, target: Any) -> None:
         step_uuid = uuid4()
         extender = _Collecting()
         func = _Func()
         table = pa.table({"b": _BOTH, "clean": pa.array([1.0, 2.0, 3.0]), "a": _BOTH})
 
-        with _context(step_uuid=step_uuid).activate():
-            result = extender(func, *_final_hop(table))
+        with _context(target=target, step_uuid=step_uuid).activate():
+            result = extender(func, *_final_hop(table, target))
 
         assert result is _RESULT
         assert func.calls == 1
         assert extender.records == [
-            NanNullLoss(step_uuid, "b", "PyArrowTable", "PandasDataFrame"),
-            NanNullLoss(step_uuid, "a", "PyArrowTable", "PandasDataFrame"),
+            NanNullLoss(step_uuid, "b", "PyArrowTable", target.get_class_name()),
+            NanNullLoss(step_uuid, "a", "PyArrowTable", target.get_class_name()),
         ]
 
-    def test_the_default_report_logs_one_warning_per_column(self, caplog: pytest.LogCaptureFixture) -> None:
+    @pytest.mark.parametrize("target", _NAN_IS_NULL_TARGETS)
+    def test_the_default_report_logs_one_warning_per_column(
+        self, caplog: pytest.LogCaptureFixture, target: Any
+    ) -> None:
         step_uuid = uuid4()
         logger_name = nan_null_loss_extender.__name__
         table = pa.table({"b": _BOTH, "a": _BOTH})
 
         with caplog.at_level(logging.WARNING, logger=logger_name):
-            with _context(step_uuid=step_uuid).activate():
-                NanNullLossExtender()(_Func(), *_final_hop(table))
+            with _context(target=target, step_uuid=step_uuid).activate():
+                NanNullLossExtender()(_Func(), *_final_hop(table, target))
 
         records = [r for r in caplog.records if r.name == logger_name]
         assert [r.levelno for r in records] == [logging.WARNING, logging.WARNING]
         for record, column in zip(records, ("b", "a")):
-            for part in (str(step_uuid), column, "PyArrowTable", "PandasDataFrame"):
+            for part in (str(step_uuid), column, "PyArrowTable", target.get_class_name()):
                 assert part in record.getMessage(), record.getMessage()
 
 
 class TestRefusing:
-    def test_raises_naming_step_frameworks_and_every_column_without_calling_the_hop(self) -> None:
+    @pytest.mark.parametrize("target", _NAN_IS_NULL_TARGETS)
+    def test_raises_naming_step_frameworks_and_every_column_without_calling_the_hop(self, target: Any) -> None:
         step_uuid = uuid4()
         func = _Func()
         table = pa.table({"b": _BOTH, "a": _BOTH})
 
-        with _context(step_uuid=step_uuid).activate():
+        with _context(target=target, step_uuid=step_uuid).activate():
             with pytest.raises(NanNullLossError) as excinfo:
-                NanNullLossExtender(refuse=True)(func, *_final_hop(table))
+                NanNullLossExtender(refuse=True)(func, *_final_hop(table, target))
 
         message = str(excinfo.value)
-        for part in (str(step_uuid), "PyArrowTable", "PandasDataFrame", "'b', 'a'", "hold both NaN and null"):
+        for part in (str(step_uuid), "PyArrowTable", target.get_class_name(), "'b', 'a'", "hold both NaN and null"):
             assert part in message, message
         assert func.calls == 0
 

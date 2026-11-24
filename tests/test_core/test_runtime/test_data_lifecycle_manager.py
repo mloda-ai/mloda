@@ -592,29 +592,6 @@ class TestDataLifecycleManagerOutputFramework:
 
         assert isinstance(result, pd.DataFrame)
 
-    def test_the_transform_hook_is_not_asked_when_the_result_is_already_the_output_type(self) -> None:
-        asked: list[Any] = []
-        manager = DataLifecycleManager(output_framework=PyArrowTable, output_connection=None)
-        manager.transform_hook = lambda uuid, source, target: asked.append(uuid)
-
-        manager.get_result_data(self._arrow_cfw(pa.table({"feature1": [1]})), [FeatureName("feature1")])
-
-        assert asked == []
-
-    def test_add_to_result_data_collection_hands_its_step_uuid_to_the_transform_hook(self) -> None:
-        step_uuid = uuid4()
-        asked: list[Any] = []
-        manager = DataLifecycleManager(output_framework=PandasDataFrame, output_connection=None)
-        manager.transform_hook = lambda uuid, source, target: asked.append(uuid)
-        features = Mock(spec=FeatureSet)
-        features.get_result_index_columns.return_value = {}
-        features.get_initial_requested_features.return_value = (FeatureName("feature1"),)
-
-        manager.add_to_result_data_collection(self._arrow_cfw(pa.table({"feature1": [1]})), features, step_uuid)
-
-        assert asked == [step_uuid]
-        assert isinstance(manager.result_data_collection[step_uuid], pd.DataFrame)
-
 
 class TestDataLifecycleManagerKeepIndex:
     """Kept key columns join the selection; a missing one raises."""

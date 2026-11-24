@@ -11,7 +11,7 @@ import pyarrow as pa
 import pytest
 
 from mloda.core.abstract_plugins.components.framework_transformer.transform_hook import transform_hook_invoker
-from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook
+from mloda.core.abstract_plugins.function_extender import Extender, ExtenderHook, GateBypassError
 from mloda.core.abstract_plugins.hook_context import HookContext
 from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.core.abstract_plugins.verified_context import verified_context
@@ -134,21 +134,65 @@ def _assert_identity(context: HookContext, session: Any, carrier: dict[str, str]
     assert context.rows_out is None
 
 
+class _BypassingExtender(Extender):
+    """Returns without calling the wrapped function."""
+
+    def __init__(self, raise_on_error: bool) -> None:
+        self.priority = 100
+        self.raise_on_error = raise_on_error
+
+    def wraps(self) -> set[ExtenderHook]:
+        return {ExtenderHook.FRAMEWORK_TRANSFORM}
+
+    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
+        return "bypassed"
+
+
 class TestInvokerWithoutExtender:
     def test_returns_none_when_there_is_no_extender(self) -> None:
         assert transform_hook_invoker(None, RunContext(), None, PyArrowTable, PandasDataFrame) is None
 
+    def test_a_breaking_extender_that_skips_the_hop_raises_gate_bypass(self) -> None:
+        calls: list[Any] = []
+        invoke = transform_hook_invoker(_BypassingExtender(True), RunContext(), None, PyArrowTable, PandasDataFrame)
+        assert invoke is not None
+
+        with pytest.raises(GateBypassError):
+            invoke(lambda *args: calls.append(args), 1)
+
+        assert calls == []
+
+    def test_a_warning_only_extender_that_skips_the_hop_falls_back_to_it_once(self) -> None:
+        calls: list[Any] = []
+
+        def func(*args: Any) -> str:
+            calls.append(args)
+            return "converted"
+
+        invoke = transform_hook_invoker(_BypassingExtender(False), RunContext(), None, PyArrowTable, PandasDataFrame)
+        assert invoke is not None
+
+        assert invoke(func, 1) == "converted"
+        assert len(calls) == 1
+
+    def test_the_worker_index_reaches_the_hook_context(self) -> None:
+        extender = _CapturingExtender()
+        invoke = transform_hook_invoker(extender, RunContext(), None, PyArrowTable, PandasDataFrame, worker_index=3)
+        assert invoke is not None
+
+        invoke(lambda *args: None, 1)
+
+        assert extender.captured[0][1].worker_index == 3
+
 
 class TestTransferHop:
-    def test_a_two_hop_transfer_fires_twice_with_the_hop_and_the_framework_pair(self, flight_server: Any) -> None:
+    def test_a_two_hop_transfer_fires_twice_with_the_hop_and_the_framework_pair(self) -> None:
         extender = _CapturingExtender()
         carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
         session = _prepare("FtPandasConsumer", extender)
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
-            result = session.run(
-                parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server, carrier=carrier
-            )
+            result = session.run(parallelization_modes={ParallelizationMode.SYNC}, carrier=carrier)
 
         assert list(result[0]["FtPandasConsumer"]) == [2, 4, 6]
         assert len(extender.captured) == 2
@@ -174,15 +218,13 @@ class TestTransferHop:
 
 
 class TestOutputFrameworkConversion:
-    def test_fires_once_with_the_compute_step_and_the_run_and_output_frameworks(self, flight_server: Any) -> None:
+    def test_fires_once_with_the_compute_step_and_the_run_and_output_frameworks(self) -> None:
         extender = _CapturingExtender()
         carrier = {"traceparent": "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-01"}
         session = _prepare("ft_arrow_value", extender, output_framework="PandasDataFrame")
 
         with verified_context(tenant_id="acme", project_id="proj1", principal="hash123"):
-            result = session.run(
-                parallelization_modes={ParallelizationMode.SYNC}, flight_server=flight_server, carrier=carrier
-            )
+            result = session.run(parallelization_modes={ParallelizationMode.SYNC}, carrier=carrier)
 
         assert isinstance(result[0], pd.DataFrame)
         assert len(extender.captured) == 1

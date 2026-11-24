@@ -43,6 +43,6 @@ def transform_hook_invoker(
             worker_index=worker_index,
         )
         with context.activate():
-            return _invoke_extender(extender, instrument(context, func, row_count=_no_rows), *args)
+            return _invoke_extender(extender, instrument(context, func, row_count=_no_rows), *args, gate_inside=True)
 
     return invoke

@@ -317,13 +317,16 @@ class TestScalarKeyRefusesContainersAtMatch:
 
     @pytest.mark.parametrize("strict", [True, False], ids=["strict", "non-strict"])
     @pytest.mark.parametrize(
-        ("label", "value"),
-        [*CONTAINERS, *EMPTY_CONTAINERS, ("singleton", ["a"]), ("dict", {"a": 1})],
-        ids=[*(f"{label}" for label, _ in CONTAINERS), *(f"empty-{label}" for label, _ in EMPTY_CONTAINERS)]
-        + ["singleton", "dict"],
+        "value",
+        [
+            *(pytest.param(value, id=label) for label, value in CONTAINERS),
+            *(pytest.param(value, id=f"empty-{label}") for label, value in EMPTY_CONTAINERS),
+            pytest.param(["a"], id="singleton"),
+            pytest.param({"a": 1}, id="dict"),
+        ],
     )
     def test_container_is_a_recorded_non_match(
-        self, strict: bool, label: str, value: Any, rejection_window: dict[str, Any]
+        self, strict: bool, value: Any, rejection_window: dict[str, Any]
     ) -> None:
         group = _scalar_group(strict)
 

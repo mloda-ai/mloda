@@ -7,6 +7,7 @@ and these tests pin that contract for the predicate itself and for WINDOW_SIZE, 
 and K_VALUE.
 """
 
+import sys
 from decimal import Decimal
 from fractions import Fraction
 from typing import Any
@@ -75,8 +76,20 @@ class TestIsPositiveInt:
         assert is_positive_int("٣") is True
 
 
-NN_ACCEPTED: list[Any] = [0, 0.0, -0.0, 1, 2.5, 10**400, Fraction(1, 3), np.int64(3), np.float64(0.5)]
+NN_ACCEPTED: list[Any] = [
+    0,
+    0.0,
+    -0.0,
+    1,
+    2.5,
+    Fraction(1, 3),
+    np.int64(3),
+    np.float64(0.5),
+    pytest.param(sys.float_info.max, id="float-max"),
+]
 NN_REJECTED: list[Any] = [
+    pytest.param(10**400, id="huge-int"),
+    pytest.param(Fraction(10**400, 3), id="huge-fraction"),
     True,
     False,
     -1,

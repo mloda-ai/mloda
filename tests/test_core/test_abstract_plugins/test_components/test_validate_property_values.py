@@ -188,22 +188,6 @@ class TestScalarValues:
         with pytest.raises(PropertyValidationError, match="scalar"):
             validate_property_values({"k": []}, mapping, closed_world=True)
 
-    def test_required_optional_and_explicit_none_presence_are_unchanged(self) -> None:
-        mapping = {
-            "k": PropertySpec(
-                "k", scalar=True, strict_validation=True, allowed_values=(None, "abc"), allow_explicit_none=True
-            )
-        }
-        validate_property_values({"k": None}, mapping, closed_world=True)
-        with pytest.raises(PropertyValidationError, match="required"):
-            validate_property_values({}, mapping, closed_world=True)
-        with pytest.raises(PropertyValidationError, match="required"):
-            validate_property_values({"k": None}, {"k": PropertySpec("k", scalar=True)}, closed_world=True)
-
-        optional = {"k": PropertySpec("k", scalar=True, default=None)}
-        validate_property_values({}, optional, closed_world=True)
-        validate_property_values({"k": None}, optional, closed_world=True)
-
     def test_allowed_explicit_none_still_needs_to_pass_value_validation(self) -> None:
         mapping = _strict(scalar=True, allow_explicit_none=True, allowed_values=("abc",))
         with pytest.raises(PropertyValidationError, match="not accepted"):

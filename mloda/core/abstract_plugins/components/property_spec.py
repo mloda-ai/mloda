@@ -7,8 +7,8 @@ its ``strict=`` keyword maps to the ``strict_validation=`` field.
 
 from __future__ import annotations
 
-import math
 import numbers
+import sys
 from collections.abc import Callable, Iterable, Mapping
 from dataclasses import dataclass
 from typing import Any
@@ -37,10 +37,10 @@ def is_positive_int(value: Any) -> bool:
 
 
 def is_non_negative_number(value: Any) -> bool:
-    """Element validator for finite real numbers >= 0; refuses bool, NaN, infinities and strings."""
+    """Real number >= 0 within float range; refuses bool, NaN, infinities, values beyond the float range, Decimal, strings."""
     if isinstance(value, bool) or not isinstance(value, numbers.Real):
         return False
-    return bool(not value < 0 and value < math.inf)
+    return bool(not value < 0 and value <= sys.float_info.max)
 
 
 class _NoDefault:
@@ -111,7 +111,7 @@ class PropertySpec:
     runtime: bool = False
     # A group option a caller may not move to the context; refused at plan time.
     group_only: bool = False
-    # One value only; containers are refused.
+    # One value only: a list, tuple, set, frozenset or mapping is refused.
     scalar: bool = False
 
     def __post_init__(self) -> None:

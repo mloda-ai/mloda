@@ -165,6 +165,7 @@ and `reason`) on the first failure.
 | "Each value must satisfy a rule I cannot enumerate" (positive int, float in range) | `element_validator` (requires strict) |
 | "The value as a whole must have this shape" (a dict, a list of exactly 3, an ordering) | `match_guard` |
 | "This option is required only when another option says so" | `required_when` |
+| "This option is one value, never a container" | `scalar=True` |
 
 ### Positive-integer options: use the shared predicate
 
@@ -188,7 +189,7 @@ It accepts positive Python ints, numpy integers and decimal strings, and rejects
 zero, negatives, and non-integers. Shipped plugins (`window_size`, `horizon`, `k_value`,
 `dimension`) all use it, so the value space stays consistent across feature groups.
 For finite floats such as weights, `is_non_negative_number` accepts real numbers `>= 0` and refuses
-`bool`, NaN, infinities and strings (a name-bound key needs `name_converter=float`). If a key
+`bool`, NaN, infinities, values beyond the float range, `Decimal` and strings (a name-bound key needs `name_converter=float`). If a key
 allows an extra sentinel, compose rather than fork it, as clustering does for `"auto"`:
 
 ```python

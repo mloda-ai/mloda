@@ -1047,9 +1047,9 @@ class Engine:
     def _fold_consumers_fit(
         self, group_class: type[FeatureGroup], host: Feature, survivor: Feature, live: Mapping[UUID, Feature]
     ) -> bool:
-        """Refuse folds forcing a host consumer onto a conversion it avoids; whole/part folds need fixed consumers."""
-        # Judged on live state at fold time; a consumer that also lists the survivor's framework is not guarded.
+        """Restricted producers keep host consumers native; whole/part folds need consumers fixed to the survivor."""
         if self._rejected_frameworks.get((group_class, str(host.name))):
+            # Judged on live state at fold time; a consumer also listing the survivor's framework is not guarded.
             survivor_cfs = survivor.compute_frameworks or set()
             host_cfs = host.compute_frameworks or set()
             for consumer, parents in self.feature_link_parents.items():

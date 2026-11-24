@@ -2,7 +2,6 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from copy import copy
 from dataclasses import replace
-from functools import cached_property
 import logging
 from typing import Any, cast
 from uuid import UUID
@@ -77,6 +76,7 @@ from mloda.core.abstract_plugins.components.handle_option_names import CONNECTIO
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import (
     group_only_keys,
+    group_scoped_keys,
     runtime_parameter_keys,
     unforwarded_keys,
 )
@@ -171,6 +171,8 @@ class Engine:
         self._intake_options_memo: dict[tuple[type[FeatureGroup], int, Any], tuple[Options, Options]] = {}
         # Declared (pre-default) options per uuid for the default-equivalent merge warning; injected twins record none.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
+        # Pre-default key presence across merged declarations, for context delivery diagnostics only.
+        self._configured_option_keys_by_uuid: dict[UUID, set[str]] = defaultdict(set)
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
         # Per feature uuid, the sorted columns its declared inputs bind to in the incoming data.
@@ -506,29 +508,31 @@ class Engine:
                 f"input_features."
             )
 
-    @cached_property
-    def _configured_option_keys_by_uuid(self) -> dict[UUID, set[str]]:
-        """Pre-default key presence across merged declarations, for context delivery diagnostics only."""
-        return defaultdict(set)
-
     def _warn_on_uncascaded_context(self) -> None:
         """Warn when a requested local context misses a resolved group-scoped consumer."""
+        candidates = [
+            (group, feature, keys)
+            for group, features in self.feature_group_collection.items()
+            for feature in features
+            if feature.initial_requested_data
+            and (
+                keys := feature.options.own_context_keys
+                - feature.options.cascade_context_keys
+                - self._property_mapping_keys(group)
+            )
+        ]
+        if not candidates:
+            return
         resolved = {
             feature.uuid: (group, feature)
             for group, features in self.feature_group_collection.items()
             for feature in features
         }
         missing: set[str] = set()
-        for group, feature in resolved.values():
-            if not feature.initial_requested_data:
-                continue
-            keys = (
-                feature.options.own_context_keys
-                - feature.options.cascade_context_keys
-                - self._property_mapping_keys(group)
-            )
-            if not keys:
-                continue
+        requested_names: set[str] = set()
+        input_groups: set[str] = set()
+        refused: set[str] = set()
+        for group, feature, keys in candidates:
             pending = list(self.feature_link_parents.get(feature.uuid, ()))
             seen = {feature.uuid}
             while pending:
@@ -537,9 +541,12 @@ class Engine:
                     continue
                 seen.add(uuid)
                 input_group, input_feature = resolved[uuid]
-                group_keys = {key for key, spec in (input_group.PROPERTY_MAPPING or {}).items() if not spec.context}
+                group_keys = group_scoped_keys(input_group).keys()
                 configured = self._configured_option_keys_by_uuid.get(uuid, ())
+                restricted = group_only_keys(input_group).keys() | credential_handle_keys(input_group)
                 for key in keys & group_keys:
+                    # Keys are unioned per merged feature: an explicit default-valued setting on one consumer's
+                    # path also silences another path that lost the key.
                     if key in configured:
                         continue
                     # An equal effective default already supplies the requested setting.
@@ -548,14 +555,30 @@ class Engine:
                     ):
                         continue
                     missing.add(key)
+                    requested_names.add(str(feature.name))
+                    input_groups.add(input_group.get_class_name())
+                    if key in restricted:
+                        refused.add(key)
                 pending.extend(self.feature_link_parents.get(uuid, ()))
-        if missing:
-            logger.warning(
-                "Uncascaded context option key(s) %s are not consumed by the requested feature's group "
-                "and do not reach a resolved input group that declares them as group-scoped. "
-                "Put them in Options(group={...}) or include them in cascade_context_keys.",
-                sorted(missing),
+        if not missing:
+            return
+        remedies = []
+        plain = sorted(missing - refused)
+        if plain:
+            remedies.append(f"Pass {plain} in Options(group=...) or list them in cascade_context_keys.")
+        if refused:
+            remedies.append(
+                f"Pass {sorted(refused)} in Options(group=...); a group-only or credential handle key is "
+                "refused in the context."
             )
+        logger.warning(
+            "Context option(s) %s of requested feature(s) %s stay on the requested feature and do not reach "
+            "input feature group(s) %s, which declare them as group options. %s",
+            sorted(missing),
+            sorted(requested_names),
+            sorted(input_groups),
+            " ".join(remedies),
+        )
 
     def _identify_feature_group_and_frameworks(
         self, feature: Feature, depth: int = 0

@@ -324,3 +324,9 @@ def group_only_keys(feature_group: Any) -> dict[str, PropertySpec]:
     """The group's declared group-only keys."""
     mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
     return {key: spec for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.group_only}
+
+
+def group_scoped_keys(feature_group: Any) -> dict[str, PropertySpec]:
+    """The group's declared keys that are not context-scoped."""
+    mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
+    return {key: spec for key, spec in mapping.items() if isinstance(spec, PropertySpec) and not spec.context}

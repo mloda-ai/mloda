@@ -14,6 +14,7 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import numpy as np
 import pandas as pd
 import pyarrow as pa
 import pytest
@@ -170,6 +171,24 @@ _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
 )
 def test_aware_zone(values: list[Any], expected: str | None) -> None:
     assert _builders().aware_zone(values) == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param(None, True, id="none"),
+        pytest.param(pd.NaT, True, id="pd_nat"),
+        pytest.param(float("nan"), False, id="nan"),
+        pytest.param(np.datetime64("NaT"), False, id="np_nat"),
+        pytest.param(0, False, id="zero"),
+        pytest.param("", False, id="empty_string"),
+        pytest.param(_NAIVE, False, id="naive"),
+        pytest.param(NOON_NY, False, id="aware"),
+        pytest.param(pd.Timestamp("2023-03-11 12:00", tz="America/New_York"), False, id="pd_timestamp"),
+    ],
+)
+def test_is_gap(value: Any, expected: bool) -> None:
+    assert _builders().is_gap(value) is expected
 
 
 @pytest.mark.parametrize(

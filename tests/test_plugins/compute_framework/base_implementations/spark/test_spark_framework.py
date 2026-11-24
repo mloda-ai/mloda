@@ -789,3 +789,12 @@ def test_exact_column_data_type_jvm_free() -> None:
     frame = _jvm_free_spark_frame(_spark_types().TimestampType())
     assert framework._exact_column_data_type(frame, "c") == DataType.TIMESTAMP_MICROS_TZ
     assert framework._exact_column_data_type(frame, "nope") is None
+
+
+def test_column_field_types_int_column_with_leading_none_jvm_free() -> None:
+    from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import _column_field
+
+    framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    field, zone = _column_field("n", [None, 1, 2], framework._infer_spark_type)
+    assert isinstance(field.dataType, _spark_types().IntegerType)
+    assert zone is None

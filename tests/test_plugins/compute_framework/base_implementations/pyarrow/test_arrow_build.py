@@ -283,13 +283,18 @@ class TestEntryPointsKeepNonUtcInstants:
         assert result.type == pa.timestamp("us", tz="America/New_York")
         assert _utc(result.to_pylist()) == _utc(values)
 
+    def test_value_set_on_dictionary_column_with_aware_values_keeps_instants_and_zone(self) -> None:
+        values = [NOON_NY.astimezone(KOLKATA), LATER_NY.astimezone(KOLKATA)]
+        column = pa.array(_utc([NOON_NY, LATER_NY]), type=pa.timestamp("us", tz="America/New_York")).dictionary_encode()
+        result = value_set(column, values)
+        assert result.type == pa.timestamp("us", tz="America/New_York")
+        assert _utc(result.to_pylist()) == _utc(values)
+
     def test_value_set_naive_values_on_aware_column_stay_naive(self) -> None:
         column = pa.array([NOON_NY.astimezone(UTC)], type=pa.timestamp("us", tz="America/New_York"))
         assert value_set(column, [_NAIVE]).type == pa.timestamp("us")
 
 
-@ENV_VALUES
-@pytest.mark.usefixtures("ignore_timezone_env")
 class TestEntryPointsRejectUnnameableZones:
     @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))

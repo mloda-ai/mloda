@@ -11,6 +11,7 @@ from mloda._testing.compute_framework.relation_suite import SqlRelationWindowSui
 from mloda._testing.framework_adapter import SqliteAdapter
 from mloda.core.abstract_plugins.components.link import AsOfJoinConfig
 from mloda.user import DataType, Index
+from tests.helpers.time_zones import unnameable_zone_values
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_merge_engine import SqliteMergeEngine
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 from mloda_plugins.compute_framework.base_implementations.sql.sql_window import OrderBy
@@ -220,6 +221,27 @@ class TestSqliteRelation(SqlRelationWindowSuite):
             relation_type = dict(zip(built.columns, built.types, strict=True))[column]
             assert arrow.schema.field(column).type == expected
             assert relation_type == expected
+
+    def test_from_dict_mixed_zone_column_raises_naming_column_and_leaves_no_table(
+        self, connection: sqlite3.Connection
+    ) -> None:
+        values, _ = unnameable_zone_values("mixed")
+        with pytest.raises(ValueError) as error:
+            SqliteRelation.from_dict(connection, {"zoned": values})
+        assert "zoned" in str(error.value)
+        assert connection.execute("SELECT name FROM sqlite_temp_master WHERE type = 'table'").fetchall() == []
+
+    def test_to_arrow_table_mixed_zone_rows_raise_naming_column(self, connection: sqlite3.Connection) -> None:
+        connection.execute("CREATE TABLE zoned_rows (zoned)")
+        connection.executemany(
+            "INSERT INTO zoned_rows VALUES (?)", [("2023-03-11T12:00:00-05:00",), ("2023-03-11T12:00:00+05:30",)]
+        )
+        connection.row_factory = lambda _cursor, row: tuple(
+            datetime.datetime.fromisoformat(v) if isinstance(v, str) else v for v in row
+        )
+        with pytest.raises(ValueError) as error:
+            SqliteRelation(connection, "zoned_rows").to_arrow_table()
+        assert "zoned" in str(error.value)
 
     def test_mixed_storage_classes_become_string(self, connection: sqlite3.Connection) -> None:
         connection.execute("CREATE TABLE loose (a)")

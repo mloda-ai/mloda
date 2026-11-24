@@ -1007,13 +1007,15 @@ class Engine:
 
     @staticmethod
     def _name_derived_keys(group_class: type[FeatureGroup], name: str, declared: Any) -> set[str]:
-        """Keys the feature name may bind; every declared key when the group has no readable name patterns."""
+        """Keys the feature name may bind; every declared key when the name patterns cannot read the name."""
         patterns: list[Any] = safe_field(group_class._get_prefix_patterns, [])
+        if not patterns:
+            return {DefaultOptionKeys.in_features.value}
         unresolved: Any = object()  # a raise means the name is unreadable; no match (None) is a clean resolution
         resolution: Any = safe_field(
             lambda: FeatureChainParser.resolve_name(name, patterns, group_class.PROPERTY_MAPPING), unresolved
         )
-        if not patterns or resolution is unresolved:
+        if resolution is unresolved:
             return {str(k) for k in declared}
         bound = {str(k) for k in resolution.bindings} if resolution is not None else set()
         return bound | {DefaultOptionKeys.in_features.value}

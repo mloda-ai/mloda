@@ -103,21 +103,32 @@ def _run(
     )
 
 
-def _assert_explicit_source_marker(observed: list[Options], top_k: int) -> None:
-    marked = [options for options in observed if options.get("top_k") == top_k]
-    assert marked
-    assert all("top_k" in options.split_context_keys for options in marked)
+def _assert_explicit_source_marker(observed: list[Options], top_k: int, marked: bool = True) -> None:
+    matching = [options for options in observed if options.get("top_k") == top_k]
+    assert matching
+    if marked:
+        assert all("top_k" in options.split_context_keys for options in matching)
     assert all(options.inherited_context_keys == frozenset() for options in observed)
-    assert all(options.twin_split_keys == frozenset() for options in observed)
     assert all(options.get("padding") == "filled" for options in observed)
 
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
 @pytest.mark.parametrize("reverse", [False, True], ids=["direct-first", "consumer-first"])
 @pytest.mark.parametrize("direct_top_k", [2, 3], ids=["equal-values", "different-values"])
+@pytest.mark.parametrize("marked", [True, False], ids=["marked", "unmarked"])
 def test_renamed_input_context_shares_equal_values_and_splits_different_values(
-    framework: type[ComputeFramework], reverse: bool, direct_top_k: int
+    framework: type[ComputeFramework],
+    reverse: bool,
+    direct_top_k: int,
+    marked: bool,
+    monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    if not marked:
+
+        def input_features(self: RenamingContextConsumer, options: Options, feature_name: FeatureName) -> set[Feature]:
+            return {Feature(ROOT, Options(context={"top_k": options.get("candidates_top_k")}))}
+
+        monkeypatch.setattr(RenamingContextConsumer, "input_features", input_features)
     calls: list[tuple[int, ...]] = []
     observed: list[Options] = []
     root, consumer, _ = _groups(calls, observed)
@@ -132,7 +143,18 @@ def test_renamed_input_context_shares_equal_values_and_splits_different_values(
 
     assert _columns(results) == {ROOT: [[direct_top_k * 10]], CONSUMERS[0]: [[21]]}
     assert sorted(calls) == ([(2,)] if direct_top_k == 2 else [(2,), (3,)])
-    _assert_explicit_source_marker(observed, 2)
+    _assert_explicit_source_marker(observed, 2, marked)
+
+
+@pytest.mark.parametrize("framework", FRAMEWORKS)
+def test_direct_unmarked_requests_differing_in_a_declared_key_are_rejected(
+    framework: type[ComputeFramework],
+) -> None:
+    root, _, _ = _groups([], [])
+    requests: list[Feature | str] = [Feature(ROOT, Options(context={"top_k": k})) for k in (2, 3)]
+
+    with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
+        _run(requests, {root}, [framework])
 
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
@@ -317,10 +339,10 @@ class MarkedTwinConsumer(FeatureGroup):
 
 @pytest.mark.parametrize(
     "marking",
-    [{"marked_twin_one", "marked_twin_two"}, {"marked_twin_one"}, {"marked_twin_two"}],
-    ids=["both", "only_first", "only_second"],
+    [{"marked_twin_one", "marked_twin_two"}, {"marked_twin_one"}, {"marked_twin_two"}, set()],
+    ids=["both", "only_first", "only_second", "none"],
 )
-def test_marked_non_root_input_reached_with_differing_values_is_rejected_at_plan_time(
+def test_non_root_input_reached_with_differing_values_is_rejected_at_plan_time(
     marking: set[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(f"{__name__}.MARKING_TWINS", marking)

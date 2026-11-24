@@ -827,8 +827,10 @@ where a single value silently won. Same-named copies that differ in undeclared c
 but read the same inputs on one framework are rejected; use the same values,
 `cascade_context_keys`, or a forwarded group option. This also covers root features requested directly more than once
 and declared option keys that the feature name does not bind. A declared key that the
-name does not bind, pushed by a consumer onto a root input, is not checked; the
-`split_context_keys` marker is what splits it.
+name does not bind (every declared key of a group without name patterns) and that differs
+between a consumer's root input and another read copy splits by value without a marker. The
+`split_context_keys` marker is still what splits copies that are all direct requests;
+otherwise they are rejected.
 
 ### Previewing the forwarded options
 

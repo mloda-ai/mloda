@@ -59,7 +59,7 @@ def test_sub_floor_small_run_does_not_inflate_ratio(monkeypatch: pytest.MonkeyPa
     advance = _fake_clock(monkeypatch)
 
     def operation(text: str) -> str:
-        advance(1e-4 if len(text) == 1000 else 1e-2)
+        advance(1e-4 if len(text) < 4000 else 1e-2)
         return text
 
     assert assert_runs_linearly(operation, _build, 4000, "fake op") == _build(4000)
@@ -73,6 +73,16 @@ def test_one_noisy_run_is_retried(monkeypatch: pytest.MonkeyPatch) -> None:
         calls[0] += 1
         noise = 0.5 if calls[0] == 2 else 0.0
         advance(len(text) * 1e-5 + noise)
+        return text
+
+    assert assert_runs_linearly(operation, _build, 4000, "fake op") == _build(4000)
+
+
+def test_linear_operation_with_slow_large_run_passes(monkeypatch: pytest.MonkeyPatch) -> None:
+    advance = _fake_clock(monkeypatch)
+
+    def operation(text: str) -> str:
+        advance(len(text) * 1e-5 * (2.1 if len(text) == 4000 else 1.0))
         return text
 
     assert assert_runs_linearly(operation, _build, 4000, "fake op") == _build(4000)

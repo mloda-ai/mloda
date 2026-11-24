@@ -6,11 +6,14 @@ from typing import TypeVar
 
 ResultT = TypeVar("ResultT")
 
+GAP = 8
+
 
 def assert_runs_linearly(fn: Callable[[str], ResultT], build: Callable[[int], str], n: int, what: str) -> ResultT:
-    """Fail if min CPU time at n hits 8x that at n // 4 (2 ms floor) or 2 s; linear ~4x, quadratic ~16x."""
+    """Fail if min CPU time at n hits GAP**1.5x that at n // GAP (2 ms floor) or 2 s; linear ~8x, quadratic ~64x."""
     name = getattr(fn, "__name__", "function")
-    small, large = build(n // 4), build(n)
+    threshold = GAP**1.5
+    small, large = build(n // GAP), build(n)
     min_small = min_large = float("inf")
     ratio = float("inf")
     for _ in range(3):
@@ -21,9 +24,9 @@ def assert_runs_linearly(fn: Callable[[str], ResultT], build: Callable[[int], st
         result = fn(large)
         min_large = min(min_large, time.process_time() - start)
         ratio = min_large / max(min_small, 2e-3)
-        if ratio < 8.0:
+        if ratio < threshold:
             break
-    assert ratio < 8.0, (
+    assert ratio < threshold, (
         f"{name} scales super-linearly on {what}: "
         f"min small {min_small:.4f}s, min large {min_large:.4f}s, ratio {ratio:.1f}"
     )

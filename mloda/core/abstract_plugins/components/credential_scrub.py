@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from contextvars import ContextVar, Token
@@ -867,6 +868,19 @@ def _cut_path_parameter_regions(uri: str) -> str:
         cursor = end
     out.append(uri[cursor:])
     return "".join(out)
+
+
+def source_identity(path: str) -> str:
+    """The source identity core's file groups publish; independent of registered credential literals.
+
+    A URI loses userinfo, query and fragment, credential-shaped path segments are masked and path parameter
+    regions cut to `;***`; other text is made absolute. Lossy: URIs that differ only in those parts share an identity.
+    """
+    if "://" not in path:
+        return os.path.abspath(path)
+    return _cut_path_parameter_regions(
+        mask_identity_credentials(strip_uri_userinfo(path)).partition("?")[0].partition("#")[0]
+    )
 
 
 _REGISTERED_SECRETS: ContextVar[frozenset[str]] = ContextVar("mloda_registered_secrets", default=frozenset())

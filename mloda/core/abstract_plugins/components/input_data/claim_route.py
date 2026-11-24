@@ -135,7 +135,7 @@ def remembered_probe(name: str, group: type, probe: Callable[[], Any]) -> Any:
     return check.probes[group]
 
 
-def chain_check_scope(check: ChainCheck) -> VarScope[ChainCheck | None]:
+def chain_check_scope(check: ChainCheck) -> VarScope[ChainCheck]:
     """Install check for the block."""
     return VarScope(_CHAIN_CHECK, check)
 

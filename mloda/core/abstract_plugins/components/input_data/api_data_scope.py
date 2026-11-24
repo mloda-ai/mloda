@@ -19,7 +19,7 @@ class ApiDataRef:
     value_type: type | None = None
 
 
-class api_data_scope(VarScope[tuple[str, Callable[[], Any]] | None]):  # noqa: N801
+class api_data_scope(VarScope[tuple[str, Callable[[], Any]]]):  # noqa: N801
     """Make lookup, bound to the set key, the reader of api_data inside the block."""
 
     def __init__(self, lookup: Callable[[], Any], key: str) -> None:

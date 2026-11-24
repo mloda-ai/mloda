@@ -32,7 +32,7 @@ def verified_context(
     tenant_id: str | None = None,
     project_id: str | None = None,
     principal: str | None = None,
-) -> VarScope[VerifiedContext | None]:
+) -> VarScope[VerifiedContext]:
     """Make tenant_id/project_id/principal the current_verified_context() for the scope, restoring the previous value on exit."""
     return VarScope(
         _current_verified_context,

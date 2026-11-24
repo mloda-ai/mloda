@@ -66,7 +66,9 @@ class PolarsLazyDataFrame(PolarsDataFrame):
         rows = data.select(pl.len()).collect().item()
         if any(len(values) != rows for values in columns.values()):
             return None
-        appended = data.with_columns([aware.get(name, pl.Series(name, values)) for name, values in columns.items()])
+        appended = data.with_columns(
+            [aware[name] if name in aware else pl.Series(name, values) for name, values in columns.items()]
+        )
         return appended.collect().lazy()
 
     @classmethod

@@ -96,7 +96,9 @@ class PolarsDataFrame(ComputeFramework):
         if any(len(values) != data.height for values in columns.values()):
             return None
         aware = self._aware_series(columns)
-        return data.with_columns([aware.get(name, pl.Series(name, values)) for name, values in columns.items()])
+        return data.with_columns(
+            [aware[name] if name in aware else pl.Series(name, values) for name, values in columns.items()]
+        )
 
     @staticmethod
     def _aware_series(columns: Mapping[str, Any]) -> dict[str, Any]:

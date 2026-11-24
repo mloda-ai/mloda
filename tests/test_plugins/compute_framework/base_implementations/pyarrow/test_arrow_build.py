@@ -86,6 +86,13 @@ class TestArrowBuild:
         assert arr.type == target
         assert _utc(arr.to_pylist()) == _utc([NOON_NY])
 
+    def test_explicit_type_rejects_naive_aware_mix(self) -> None:
+        target = pa.timestamp("us", tz="UTC")
+        with pytest.raises(ValueError) as err:
+            _builders().arrow_array([_NAIVE, _UTC_NOON], type=target, column="t")
+        for text in ["t", "naive", "aware"]:
+            assert text in str(err.value)
+
     def test_table_keeps_instants_and_zone(self) -> None:
         table = _builders().arrow_table({"t": [NOON_NY, LATER_NY], "n": [1, 2]})
         assert table.schema.field("t").type == pa.timestamp("us", tz="America/New_York")
@@ -151,6 +158,7 @@ _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
         pytest.param([None, None], None, id="all_none"),
         pytest.param([], None, id="empty"),
         pytest.param([1, 2], None, id="ints"),
+        pytest.param([_NAIVE, _UTC_NOON, "x"], None, id="datetimes_and_non_datetime"),
     ],
 )
 def test_aware_zone(values: list[Any], expected: str | None) -> None:
@@ -331,9 +339,17 @@ _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
 @ENV_VALUES
 @pytest.mark.usefixtures("ignore_timezone_env")
 class TestEntryPointsKeepNonUtcInstants:
+    @pytest.mark.parametrize("zone_source", ["zoneinfo", "dateutil"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
-    def test_dict_build_keeps_instants_and_zone(self, build: Callable[[dict[str, list[Any]]], Any]) -> None:
-        table = _arrow_of(build({"t": [NOON_NY, LATER_NY]}))
+    def test_dict_build_keeps_instants_and_zone(
+        self, build: Callable[[dict[str, list[Any]]], Any], zone_source: str
+    ) -> None:
+        if zone_source == "dateutil":
+            tz: Any = pytest.importorskip("dateutil.tz").gettz("America/New_York")
+        else:
+            tz = NY
+        values = [NOON_NY.replace(tzinfo=tz), LATER_NY.replace(tzinfo=tz)]
+        table = _arrow_of(build({"t": values}))
         field_type = table.schema.field("t").type
         assert pa.types.is_timestamp(field_type)
         assert field_type.tz == "America/New_York"

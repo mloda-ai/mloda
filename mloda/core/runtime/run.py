@@ -126,8 +126,10 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
     return count
 
 
-def planned_worker_modules(execution_plan: Any, register_modes: set[ParallelizationMode]) -> tuple[str, ...]:
-    """Cfw modules a standby warms: every framework class the plan's multiprocessing steps ship to a worker."""
+def planned_worker_modules(
+    execution_plan: Any, register_modes: set[ParallelizationMode], *, feature_groups: bool = True
+) -> tuple[str, ...]:
+    """Modules a standby warms: framework and (if feature_groups) feature group classes, minus `__main__`."""
     classes: list[Any] = []
     for step in execution_plan:
         if not runs_in_worker(register_modes, step.get_parallelization_mode()):
@@ -136,11 +138,17 @@ def planned_worker_modules(execution_plan: Any, register_modes: set[Parallelizat
             classes.append(step.compute_framework)
             for feature in step.features.features:
                 classes.extend(feature.compute_frameworks or ())
+            if feature_groups:
+                classes.append(step.feature_group)
         elif isinstance(step, TransformFrameworkStep):
             classes.extend((step.from_framework, step.to_framework))
+            if feature_groups:
+                classes.extend((step.from_feature_group, step.to_feature_group))
         elif isinstance(step, JoinStep):
             classes.extend((step.source_framework, step.destination_framework))
-    return tuple(sorted({cls.__module__ for cls in classes if cls is not None}))
+            if feature_groups:
+                classes.extend((step.link.left_feature_group, step.link.right_feature_group))
+    return tuple(sorted({cls.__module__ for cls in classes if cls is not None} - {"__main__"}))
 
 
 class ExecutionOrchestrator:
@@ -691,11 +699,17 @@ class ExecutionOrchestrator:
             )
 
             # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
-            # A bound worker imports the cfw classes its steps reference; the standby warms those off the critical path.
+            # Standbys warm step modules early; feature group ones only without a child_bootstrap, which runs first.
             self.worker_manager.prestart_workers(
                 min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
                 standby_worker,
-                (planned_worker_modules(self.execution_planner, parallelization_modes),),
+                (
+                    planned_worker_modules(
+                        self.execution_planner,
+                        parallelization_modes,
+                        feature_groups=run_context.child_bootstrap is None,
+                    ),
+                ),
             )
             manager: Any = shared_manager()
             self.manager = manager

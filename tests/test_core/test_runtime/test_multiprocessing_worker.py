@@ -7,6 +7,7 @@ import logging
 import multiprocessing
 import pickle  # nosec B403
 import queue
+import sys
 import threading
 import time
 from collections.abc import Mapping
@@ -25,7 +26,7 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker import multiprocessing_worker as worker_module
-from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, _execute_command, worker
+from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, _execute_command, standby_worker, worker
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -1239,3 +1240,17 @@ class TestWorkerHonoursTheEnableProcessWideLogMaskingCommand:
         assert log_masking.log_masking_disabled() is disable_first
         assert len(_SEEN_BY_STEPS) == 1
         cfw_register.set_error.assert_not_called()
+
+
+class TestStandbyWorkerWarm:
+    """Warming is best-effort: an unimportable module is skipped, the others still load."""
+
+    def test_unimportable_warm_module_is_skipped(self) -> None:
+        sys.modules.pop("this_module_does_not_exist_for_warm", None)
+        sys.modules.pop("colorsys", None)
+        commands: queue.Queue[Any] = queue.Queue()
+        commands.put("STOP")
+
+        standby_worker(commands, queue.Queue(), ("this_module_does_not_exist_for_warm", "colorsys"))  # type: ignore[arg-type]
+
+        assert "colorsys" in sys.modules

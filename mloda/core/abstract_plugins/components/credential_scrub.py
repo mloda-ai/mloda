@@ -2,6 +2,7 @@
 
 import io
 import json
+import os
 import re
 from collections.abc import Iterable, Iterator, Mapping
 from contextvars import ContextVar, Token
@@ -869,14 +870,16 @@ def _cut_path_parameter_regions(uri: str) -> str:
     return "".join(out)
 
 
-def source_identity(text: str) -> str:
-    """The identity core's file groups give a URI; it does not depend on registered credential literals.
+def source_identity(path: str) -> str:
+    """The source identity core's file groups publish; independent of registered credential literals.
 
-    Drops userinfo, query and fragment, masks credential-shaped path segments, cuts path parameter regions to `;***`.
-    Text is not resolved to an absolute path.
+    A URI loses userinfo, query and fragment, credential-shaped path segments are masked and path parameter
+    regions cut to `;***`; other text is made absolute. Lossy: URIs that differ only in those parts share an identity.
     """
+    if "://" not in path:
+        return os.path.abspath(path)
     return _cut_path_parameter_regions(
-        mask_identity_credentials(strip_uri_userinfo(text)).partition("?")[0].partition("#")[0]
+        mask_identity_credentials(strip_uri_userinfo(path)).partition("?")[0].partition("#")[0]
     )
 
 

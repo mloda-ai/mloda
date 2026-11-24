@@ -183,9 +183,7 @@ class _FileSourceFG(SourceFeatureGroup):
 
     @staticmethod
     def _source(path: str) -> SourceMatch:
-        if "://" in path:
-            return SourceMatch(source=source_identity(path), access=path)
-        return SourceMatch(source=os.path.abspath(path), access=path)
+        return SourceMatch(source=source_identity(path), access=path)
 
     @classmethod
     def _document_suffixes(cls, options: Options) -> tuple[str, ...]:

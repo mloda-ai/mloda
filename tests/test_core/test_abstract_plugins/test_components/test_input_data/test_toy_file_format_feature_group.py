@@ -696,8 +696,7 @@ class TestFileSourceUriProjection:
         match = ToyFileFormatFG._source(path)
         assert match.source == expected.format(s=TOY_SUFFIX)
         assert match.access == path
-        if "://" in path:
-            assert provider.source_identity(path) == expected.format(s=TOY_SUFFIX)
+        assert provider.source_identity(path) == expected.format(s=TOY_SUFFIX)
 
     def test_generated_matrix(self) -> None:
         failures: list[str] = []
@@ -711,6 +710,9 @@ class TestFileSourceUriProjection:
                 failures.append(f"{label}: secret leaked in {match.source!r}")
             if match.access != uri:
                 failures.append(f"{label}: access {match.access!r} != raw {uri!r}")
+            identity = provider.source_identity(uri)
+            if identity != expected:
+                failures.append(f"{label}: source_identity {identity!r} != {expected!r}")
 
         assert cases == 2592
         assert not failures, f"{len(failures)} failures, first 20:\n" + "\n".join(failures[:20])

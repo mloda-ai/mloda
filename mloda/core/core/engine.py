@@ -1097,7 +1097,7 @@ class Engine:
             ) or (host.data_type is None and not host.initial_requested_data)
             if host.data_type != survivor.data_type and not untyped_free:
                 continue
-            if not self._whole_part_consumers_fit(host, survivor, live):
+            if not self._fold_consumers_fit(group_class, host, survivor, live):
                 continue
             collection = self.feature_group_collection[group_class]
             if survivor.data_type is None and host.data_type is not None:
@@ -1115,8 +1115,23 @@ class Engine:
         ties = [(final(a), final(b)) for a, b in self.filter_ties]
         self.filter_ties = list(dict.fromkeys(ties))
 
-    def _whole_part_consumers_fit(self, host: Feature, survivor: Feature, live: Mapping[UUID, Feature]) -> bool:
-        """Every live consumer must be fixed to the survivor's one framework; a flexible one may convert the frame."""
+    def _fold_consumers_fit(
+        self, group_class: type[FeatureGroup], host: Feature, survivor: Feature, live: Mapping[UUID, Feature]
+    ) -> bool:
+        """No forced conversion for host consumers of a restricted producer; whole/part folds need fixed consumers."""
+        # Judged on live state at fold time; a consumer also listing the survivor's framework is not guarded.
+        survivor_cfs = survivor.compute_frameworks or set()
+        host_cfs = host.compute_frameworks or set()
+        for consumer, parents in self.feature_link_parents.items():
+            if host.uuid not in parents:
+                continue
+            if consumer in live:
+                consumer_cfs = live[consumer].compute_frameworks or set()
+                if consumer_cfs & survivor_cfs or not consumer_cfs & host_cfs:
+                    continue
+            if self._producer_restricts(group_class, host):
+                return False
+            break
         if (host.parts_only and survivor.parts_only) or not (host.requested_parts or survivor.requested_parts):
             return True
         frameworks = survivor.compute_frameworks
@@ -1127,6 +1142,16 @@ class Engine:
             len(frameworks) == 1 and consumer in live and live[consumer].compute_frameworks == frameworks
             for consumer, parents in self.feature_link_parents.items()
             if parents & folded
+        )
+
+    @staticmethod
+    def _producer_restricts(group_class: type[FeatureGroup], host: Feature) -> bool:
+        """True when the producer refuses the host (or its requested parts) on some declared framework."""
+        parts: list[str | None] = [*sorted(host.requested_parts)] if host.parts_only else [None]
+        return any(
+            not group_class.supports_compute_framework(host.name, host.options, cf, part=part)
+            for cf in group_class.compute_framework_definition()
+            for part in parts
         )
 
     def _same_merge_scope(self, a: Feature, b: Feature, *, parts: bool = True) -> bool:

@@ -6,9 +6,10 @@ With PYARROW_IGNORE_TIMEZONE=1 plain pyarrow reads the wall time of an aware dat
 from __future__ import annotations
 
 from collections.abc import Mapping
-from datetime import UTC, datetime, timezone, tzinfo
+from datetime import UTC, datetime, timedelta, timezone, tzinfo
+from functools import cache
 from typing import Any
-from zoneinfo import ZoneInfo
+from zoneinfo import ZoneInfo, available_timezones
 
 try:
     import pyarrow as pa
@@ -18,7 +19,7 @@ except ImportError:
 
 def _zone_name(tz: tzinfo, values: list[datetime], where: str) -> str:
     if pa is None:
-        return _zone_name_without_pyarrow(tz, where)
+        return _zone_name_without_pyarrow(tz, values, where)
     name = None
     resolved = None
     # pyarrow has no validating API, so its errors are translated into the rule's ValueError.
@@ -32,17 +33,29 @@ def _zone_name(tz: tzinfo, values: list[datetime], where: str) -> str:
     return str(name)
 
 
-def _zone_name_without_pyarrow(tz: tzinfo, where: str) -> str:
+@cache
+def _known_zones() -> frozenset[str]:
+    return frozenset(available_timezones())
+
+
+def _zone_name_without_pyarrow(tz: tzinfo, values: list[datetime], where: str) -> str:
+    if tz is UTC:
+        return "UTC"
     if isinstance(tz, ZoneInfo) and tz.key is not None:
         return tz.key
     if isinstance(tz, timezone):
         offset = tz.utcoffset(None)
         minutes, seconds = divmod(int(offset.total_seconds()), 60)
         if seconds == 0 and not offset.microseconds:
-            if minutes == 0:
-                return "UTC"
             hours, mins = divmod(abs(minutes), 60)
             return f"{'-' if minutes < 0 else '+'}{hours:02d}:{mins:02d}"
+    elif tz.utcoffset(None) == timedelta(0) and tz.tzname(None) == "UTC":
+        return "UTC"
+    zone = getattr(tz, "zone", None)
+    if isinstance(zone, str) and zone in _known_zones():
+        resolved = ZoneInfo(zone)
+        if all(v.astimezone(resolved).utcoffset() == v.utcoffset() for v in values if v.tzinfo == tz):
+            return zone
     raise ValueError(_unnameable(tz, None, where))
 
 

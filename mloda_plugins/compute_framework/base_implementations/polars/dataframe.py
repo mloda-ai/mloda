@@ -1,5 +1,4 @@
 from collections.abc import Mapping, Sequence
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
 from typing import Any
 from mloda.core.abstract_plugins.components.data_types import DataType
 from mloda.core.abstract_plugins.hook_context import OutputSchema
@@ -11,6 +10,7 @@ from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import PolarsMaskEngine
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
 
 try:
     import polars as pl

@@ -16,41 +16,51 @@ except ImportError:
     sys.exit(0)
 """
 
-_NAMES_BODY: str = (
-    _PRELUDE
-    + """
+_NAMES_BODY: str = """
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
 
+from datetime import tzinfo
+from tests.helpers.time_zones import MyZone
+
 def at(tz):
     return datetime(2023, 3, 11, 12, 0, tzinfo=tz)
 
+class PytzLike(tzinfo):
+    zone = "America/New_York"
+
+    def utcoffset(self, dt):
+        return ZoneInfo("America/New_York").utcoffset(dt)
+    def dst(self, dt):
+        return ZoneInfo("America/New_York").dst(dt)
+    def tzname(self, dt):
+        return ZoneInfo("America/New_York").tzname(dt)
+
+cases = [
+    (ZoneInfo("America/New_York"), "America/New_York"),
+    (timezone.utc, "UTC"),
+    (timezone(timedelta(hours=5, minutes=30)), "+05:30"),
+    (timezone(timedelta(hours=-5)), "-05:00"),
+    (timezone(timedelta(0), "GMT"), "+00:00"),
+    (PytzLike(), "America/New_York"),
+]
 try:
-    cases = [
-        (ZoneInfo("America/New_York"), "America/New_York"),
-        (timezone.utc, "UTC"),
-        (timezone(timedelta(hours=5, minutes=30)), "+05:30"),
-        (timezone(timedelta(hours=-5)), "-05:00"),
-    ]
-    for tz, want in cases:
+    from dateutil import tz as dateutil_tz
+
+    cases.append((dateutil_tz.UTC, "UTC"))
+except ImportError:
+    print("DATEUTIL_SKIP")
+for tz, want in cases:
+    try:
         got = aware_zone([at(tz), None], "zoned")
         print("NAME:" + want + ":" + str(got))
-except Exception as e:
-    print("NAME_FAILED:" + type(e).__name__ + ":" + str(e))
+    except Exception as e:
+        print("NAME_FAILED:" + want + ":" + type(e).__name__ + ":" + str(e))
 
 import io
-from datetime import tzinfo
 from pathlib import Path
 import zoneinfo
-
-class Odd(tzinfo):
-    def utcoffset(self, dt):
-        return timedelta(hours=3)
-    def dst(self, dt):
-        return timedelta(0)
-    def tzname(self, dt):
-        return "ODD"
 
 keyless = None
 for root in zoneinfo.TZPATH:
@@ -61,7 +71,7 @@ for root in zoneinfo.TZPATH:
 if keyless is None:
     print("KEYLESS_SKIP")
 
-bad = [("SUBMIN", timezone(timedelta(seconds=30))), ("CUSTOM", Odd())]
+bad = [("SUBMIN", timezone(timedelta(seconds=30))), ("CUSTOM", MyZone())]
 if keyless is not None:
     bad.append(("KEYLESS", keyless))
 for label, tz in bad:
@@ -83,7 +93,6 @@ except ValueError as e:
 except Exception as e:
     print("MIXED_WRONG:" + type(e).__name__ + ":" + str(e))
 """
-)
 
 _BUILD_BODY: str = (
     _PRELUDE
@@ -91,9 +100,12 @@ _BUILD_BODY: str = (
 from datetime import datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 from mloda.user import ParallelizationMode
+import polars as pl
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
 
 framework = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+lazy_framework = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
 ny = datetime(2023, 3, 11, 12, 0, tzinfo=ZoneInfo("America/New_York"))
 kolkata = datetime(2023, 3, 11, 12, 0, tzinfo=timezone(timedelta(hours=5, minutes=30)))
 
@@ -105,6 +117,21 @@ except ValueError as e:
     print("MIXED_OK" if ok else "MIXED_WRONGMSG:" + str(e))
 except Exception as e:
     print("MIXED_WRONG:" + type(e).__name__ + ":" + str(e))
+
+def expect_mixed(label, call):
+    try:
+        call()
+        print(label + "_NO_RAISE")
+    except ValueError as e:
+        ok = "zoned" in str(e) and "America/New_York" in str(e) and "+05:30" in str(e)
+        print(label + "_OK" if ok else label + "_WRONGMSG:" + str(e))
+    except Exception as e:
+        print(label + "_WRONG:" + type(e).__name__ + ":" + str(e))
+
+mixed = {"zoned": [ny, kolkata]}
+expect_mixed("APPEND", lambda: framework._append_columns(pl.DataFrame({"id": [1, 2]}), mixed))
+expect_mixed("LAZY_APPEND", lambda: lazy_framework._append_columns(pl.LazyFrame({"id": [1, 2]}), mixed))
+expect_mixed("LAZY_BUILD", lambda: lazy_framework.transform(mixed, ["zoned"]))
 
 try:
     frame = framework.transform({"zoned": [ny, None]}, ["zoned"])
@@ -126,8 +153,10 @@ def _run(body: str) -> str:
 @pytest.mark.timeout(30)
 def test_aware_zone_names_zones_without_pyarrow() -> None:
     out = _run(_NAMES_BODY)
-    for want in ["America/New_York", "UTC", "+05:30", "-05:00"]:
+    for want in ["America/New_York", "UTC", "+05:30", "-05:00", "+00:00"]:
         assert f"NAME:{want}:{want}" in out, f"stdout: {out!r}"
+    assert out.count("NAME:America/New_York:America/New_York") == 2, f"stdout: {out!r}"
+    assert out.count("NAME:UTC:UTC") == 2 or "DATEUTIL_SKIP" in out, f"stdout: {out!r}"
     assert "MIXED_OK" in out, f"stdout: {out!r}"
     assert "SUBMIN_OK" in out, f"stdout: {out!r}"
     assert "CUSTOM_OK" in out, f"stdout: {out!r}"
@@ -138,4 +167,6 @@ def test_aware_zone_names_zones_without_pyarrow() -> None:
 def test_polars_dict_build_aware_zones_without_pyarrow() -> None:
     out = _run(_BUILD_BODY)
     assert "MIXED_OK" in out, f"stdout: {out!r}"
+    for label in ["APPEND", "LAZY_APPEND", "LAZY_BUILD"]:
+        assert f"{label}_OK" in out, f"stdout: {out!r}"
     assert "SINGLE_OK" in out, f"stdout: {out!r}"

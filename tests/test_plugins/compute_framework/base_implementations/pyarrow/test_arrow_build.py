@@ -256,6 +256,22 @@ def _pyarrow_framework(data: dict[str, list[Any]]) -> Any:
     return framework.transform(data, ["t"])
 
 
+def _polars_framework(data: dict[str, list[Any]]) -> Any:
+    pytest.importorskip("polars")
+    from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+
+    framework = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    return framework.transform(data, list(data)).to_arrow()
+
+
+def _polars_lazy_framework(data: dict[str, list[Any]]) -> Any:
+    pytest.importorskip("polars")
+    from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+
+    framework = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    return framework.transform(data, list(data)).collect().to_arrow()
+
+
 def _append_columns(data: dict[str, list[Any]]) -> Any:
     return arrow_append_columns(pa.table({"id": pa.array([1, 2], type=pa.int64())}), data)
 
@@ -277,6 +293,8 @@ _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
     _duckdb_framework,
     _iceberg_framework,
     _pyarrow_framework,
+    _polars_framework,
+    _polars_lazy_framework,
     _append_columns,
     _sqlite_from_dict,
     _duckdb_append_columns,

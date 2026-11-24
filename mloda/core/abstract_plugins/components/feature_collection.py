@@ -74,8 +74,8 @@ class Features:
                 self.child_uuid = child_uuid
                 feature.child_options = child_options
                 self.merge_options(feature, child_options)
-                if reused_entry is not None:
-                    # The shared copy already holds the first consumer's forwarding; record this consumer's own.
+                # The shared copy holds an earlier consumer's forwarding and intake defaults; record this one's own.
+                if reused_entry is not None and reused_entry[0] is not reused_entry[1]:
                     declared = reused_entry[0].options._fork()
                     feature._inherit_consumer_options(declared, child_options, self.consumer_local_keys)
                     self._consumer_declarations[feature.uuid] = declared

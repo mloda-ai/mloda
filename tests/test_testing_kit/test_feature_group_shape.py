@@ -36,6 +36,7 @@ from tests.mixins.name_path_group import make_name_path_group
 from mloda.provider import DefaultOptionKeys, FeatureChainParserMixin, SubtypeDeclaration
 from mloda.user.python_dict import PythonDictFramework
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
 from mloda_plugins.feature_group.experimental.environment.installed_packages_feature_group import (
     InstalledPackagesFeatureGroup,
 )
@@ -617,6 +618,58 @@ def test_falsy_first_allowed_value_is_buildable(values: tuple[Any, ...]) -> None
 def test_undeclared_option_failure_is_named() -> None:
     result = check_feature_group_shape(make_matches_any_name_with_undeclared_option())
     assert any("undeclared option" in f for f in result.failures), result.failures
+
+
+def test_option_based_request_on_a_mixin_group_drops_in_features_from_the_foreign_probe() -> None:
+    base = Options(context={"aggregation_type": "sum", DefaultOptionKeys.in_features: frozenset(["x"])})
+    result = check_feature_group_shape(AggregatedFeatureGroup, requests=["my_sum"], base_options=base)
+    # `required:` still fails on this path (out of scope), so `passed` is not asserted.
+    assert not any(f.startswith("foreign:") for f in result.failures), result.failures
+    assert any(n.startswith("foreign:") and "in_features" in n for n in result.notes), result.notes
+
+
+def _make_config_gated_mixin_group(*, name_only: bool, needs: tuple[str, ...]) -> type[FeatureGroup]:
+    def match(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
+        keys = {str(getattr(k, "value", k)) for k in (*options.group, *options.context)}
+        if all(k in keys for k in needs):
+            return True
+        return str(feature_name) in {"cg_a", cls.get_class_name()}
+
+    namespace: dict[str, Any] = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": r".*__cg$",
+        "MIN_IN_FEATURES": 1,
+        "MAX_IN_FEATURES": 1,
+        "NAME_ONLY_MATCH": name_only,
+        "PROPERTY_MAPPING": {"mode": PropertySpec("Mode.", context=True, default="a")},
+        "feature_names_supported": classmethod(lambda cls: {"cg_a"}),
+        "match_feature_group_criteria": classmethod(match),
+    }
+    return type("ConfigGatedMixinGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
+
+
+@pytest.mark.parametrize(
+    ("name_only", "needs", "foreign_fails", "label", "in_group"),
+    [
+        (False, ("mode",), True, "without in_features", False),
+        (True, ("in_features",), True, "with base options", False),
+        (False, ("in_features",), False, "", True),
+    ],
+    ids=["option_gated_matcher", "name_only_keeps_full_base", "in_features_gated_not_name_only"],
+)
+def test_foreign_probe_strips_in_features_only_on_the_configuration_path(
+    name_only: bool, needs: tuple[str, ...], foreign_fails: bool, label: str, in_group: bool
+) -> None:
+    group = _make_config_gated_mixin_group(name_only=name_only, needs=needs)
+    entries = {"mode": "a", DefaultOptionKeys.in_features: frozenset(["x"])}
+    base = Options(group=entries) if in_group else Options(context=entries)
+    result = check_feature_group_shape(group, base_options=base)
+    foreign = [f for f in result.failures if f.startswith("foreign:")]
+    assert bool(foreign) is foreign_fails, result.failures
+    if foreign_fails:
+        assert label in foreign[0], foreign
+    notes = [n for n in result.notes if n.startswith("foreign:") and "in_features" in n]
+    assert bool(notes) is (not name_only), result.notes
 
 
 @pytest.mark.parametrize(

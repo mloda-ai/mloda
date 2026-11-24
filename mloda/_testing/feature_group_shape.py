@@ -30,6 +30,7 @@ from mloda.core.abstract_plugins.components.data_access_collection import (
     credential_handle_of,
 )
 from mloda.core.abstract_plugins.components.data_types import DataType
+from mloda.core.abstract_plugins.components.default_options_key import DefaultOptionKeys
 from mloda.core.abstract_plugins.components.divergence import Divergence, DivergenceKind
 from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
@@ -159,13 +160,29 @@ def _check_names(
     return failures
 
 
-def _check_foreign(cls: type[FeatureGroup], base: Options, dac: DataAccessCollection | None = None) -> list[str]:
+def _check_foreign(
+    cls: type[FeatureGroup], base: Options, dac: DataAccessCollection | None = None
+) -> tuple[list[str], list[str]]:
     name = _foreign_name(cls)
     undeclared = "conformance_undeclared_key"
     while undeclared in cls.declared_option_keys():
         undeclared = "x" + undeclared
     failures = []
-    for label, options in (("base options", base), ("an undeclared option", Options(group={undeclared: "1"}))):
+    notes = []
+    base_label = "base options"
+    foreign_base = base
+    in_features = DefaultOptionKeys.in_features
+    if (
+        is_nominal_subclass(cls, FeatureChainParserMixin)
+        and not cls.NAME_ONLY_MATCH
+        and (in_features in base.group or in_features in base.context)
+    ):
+        foreign_base = _without_key(base, in_features)
+        base_label = "base options without in_features"
+        notes.append(
+            f"foreign: in_features puts a mixin group on its configuration path, so '{name}' was probed without it"
+        )
+    for label, options in ((base_label, foreign_base), ("an undeclared option", Options(group={undeclared: "1"}))):
         matched, rejection, aborted, _ = _probe(cls, name, options, dac)
         if aborted is not None:
             failures.append(f"foreign: matching '{name}' with {label} aborted: {aborted}")
@@ -173,7 +190,7 @@ def _check_foreign(cls: type[FeatureGroup], base: Options, dac: DataAccessCollec
             failures.append(f"foreign: matches the undeclared name '{name}' with {label}")
         elif rejection is not None and rejection.code is None:
             failures.append(f"foreign: rejection of '{name}' with {label} carries no decline code")
-    return failures
+    return failures, notes
 
 
 def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> list[str]:
@@ -1036,6 +1053,8 @@ def check_feature_group_shape(
     note. An unresolved type on a framework with exact readback fails unless a GAP record covers it. A TYPE record
     on the serving Implementation whose columns all match exactly on a typed framework fails as stale (scope a
     data-dependent one with subtypes or outputs); a group-level one is only a note, since it applies on every framework.
+    On a mixin group's configuration path (in_features in base_options, NAME_ONLY_MATCH off) the foreign name
+    is probed without in_features.
     data_access_collection= is matched against by every match probe and checks a source's match_credentials.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them
     is a failure with the abort text.
@@ -1067,12 +1086,13 @@ def check_feature_group_shape(
     names = requested if requested is not None else [cls.get_class_name(), *declared]
     dac = data_access_collection
     failures = _check_names(cls, names, base, requested is not None, dac)
-    failures += _check_foreign(cls, base, dac)
+    foreign_failures, foreign_notes = _check_foreign(cls, base, dac)
+    failures += foreign_failures
     failures += _check_inputs(cls, names, base)
     failures += _check_required(cls, names, base, bound_keys, dac)
     failures += _check_strict(cls, names, base, dac)
     failures += secret_failures
-    notes: list[str] = list(secret_notes)
+    notes: list[str] = [*secret_notes, *foreign_notes]
     if is_nominal_subclass(cls, SourceFeatureGroup):
         if dac is None:
             notes.append("credentials: match-time credential binding not checked (no data_access_collection)")

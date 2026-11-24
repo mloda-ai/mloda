@@ -825,10 +825,6 @@ class Engine:
             host.framework_pinned = True
             collection.add(host)
             return host
-        declared = self._declared_options_by_uuid.get(host.uuid)
-        # An injected twin records no declaration; comparing a lone request with its options would warn falsely.
-        if declared is not None and existing.uuid in self._declared_options_by_uuid:
-            self._warn_on_default_equivalent_merge(host, declared, existing)
         self._merge_host_into(existing, host)
         existing.framework_pinned = True
         return existing
@@ -1034,9 +1030,6 @@ class Engine:
                 collection = {promoted if f is survivor else f for f in collection}
                 live[promoted.uuid] = survivor = promoted
             self.feature_group_collection[group_class] = {f for f in collection if f.uuid != host.uuid}
-            declared = self._declared_options_by_uuid.get(host.uuid)
-            if declared is not None and survivor.uuid in self._declared_options_by_uuid:
-                self._warn_on_default_equivalent_merge(host, declared, survivor)
             self._merge_host_into(survivor, host)
             survivor.framework_pinned = survivor.framework_pinned or host.framework_pinned
             if self.global_filter is not None:
@@ -1047,8 +1040,7 @@ class Engine:
         self.filter_ties = list(dict.fromkeys(ties))
 
     def _whole_part_consumers_fit(self, host: Feature, survivor: Feature, live: Mapping[UUID, Feature]) -> bool:
-        """Whole/part folds need each live consumer fixed to the survivor's single native framework.
-        Flexible domains can choose another framework to avoid implementation divergence."""
+        """Whole/part folds need every live consumer fixed to the survivor's single framework; a flexible one may convert the whole frame."""
         if (host.parts_only and survivor.parts_only) or not (host.requested_parts or survivor.requested_parts):
             return True
         frameworks = survivor.compute_frameworks
@@ -1175,6 +1167,10 @@ class Engine:
 
     def _merge_host_into(self, existing: Feature, host: Feature) -> None:
         """Folds a displaced host into its equal feature, as the duplicate path of add_feature_to_collection does."""
+        declared = self._declared_options_by_uuid.get(host.uuid)
+        # An injected twin records no declaration; comparing a lone request with its options would warn falsely.
+        if declared is not None and existing.uuid in self._declared_options_by_uuid:
+            self._warn_on_default_equivalent_merge(host, declared, existing, at_intake=False)
         existing.options.union_own_keys(host.options)
         existing.absorb_parts(host)
         if not host.link_key_only:
@@ -1380,7 +1376,7 @@ class Engine:
         return compatible
 
     def _warn_on_default_equivalent_merge(
-        self, feature: Feature, declared_options: Options, existing_feature: Feature
+        self, feature: Feature, declared_options: Options, existing_feature: Feature, *, at_intake: bool = True
     ) -> None:
         """Warn when a merge holds only post-materialization: the declared (pre-default) options differ."""
         survivor_declared = self._declared_options_by_uuid.get(existing_feature.uuid, existing_feature.options)
@@ -1389,10 +1385,16 @@ class Engine:
             declared_options.context, survivor_declared.context
         ):
             return
+        when = "at intake" if at_intake else "after resolution"
+        advice = (
+            "Deduplicate the request; dependency declaration follows the first-listed request."
+            if at_intake
+            else "Deduplicate the request."
+        )
         logger.warning(
             f"Feature '{feature.name}' was requested twice with default-equivalent options: the requests "
-            f"differ only in explicitly-set declared defaults or name-bound values and merged into one feature at intake. "
-            f"Deduplicate the request; dependency declaration follows the first-listed request."
+            f"differ only in explicitly-set declared defaults or name-bound values and merged into one feature {when}. "
+            f"{advice}"
         )
 
     def _update_feature_link_parents(self, child_uuid: UUID, original_uuid: UUID, wanted_uuid: UUID) -> None:

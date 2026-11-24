@@ -27,7 +27,11 @@ from mloda.provider import FeatureGroup
 from mloda.provider import FeatureSet
 from mloda.provider import DataCreatorFeatureGroup
 from mloda.provider import ComputeFramework
-from mloda.provider import Cause, Divergence, DivergenceKind, Implementation, OperationFeatureGroup
+from mloda.provider import Cause
+from mloda.provider import Divergence
+from mloda.provider import DivergenceKind
+from mloda.provider import Implementation
+from mloda.provider import OperationFeatureGroup
 from mloda.user import Feature
 from mloda.user import FeatureName
 from mloda.user import FeatureResolutionError
@@ -47,6 +51,7 @@ from mloda.user import mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
+from tests.test_core.test_abstract_plugins.test_components.test_input_data.toy_source_group import column_values
 
 
 class SubColumnTestDataCreator(DataCreatorFeatureGroup):
@@ -2056,13 +2061,7 @@ class TestPartAwareFrameworkCheck:
         assert _columns(results) == set(expected) | ({"pmeasure"} if tier == "child-options" else set())
         for name, values in expected.items():
             frame = next(frame for frame in results if name in _frame_column_names(frame))
-            if isinstance(frame, pa.Table):
-                actual = frame[name].to_pylist()
-            elif isinstance(frame, dict):
-                actual = frame[name]
-            else:
-                actual = [row[name] for row in frame]
-            assert actual == values
+            assert column_values([frame], name) == values
         assert producer.calls == (1 if consumers == "dict" else 2)
         assert "PythonDictFramework" in producer.ran_on
 

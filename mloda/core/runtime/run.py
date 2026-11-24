@@ -699,7 +699,7 @@ class ExecutionOrchestrator:
             )
 
             # Cold starts overlap Manager and flight server startup; count is capped at the CPU count.
-            # Standbys warm step modules off the critical path; feature groups only without a child_bootstrap, which must run first.
+            # Standbys warm step modules early; feature group ones only without a child_bootstrap, which runs first.
             self.worker_manager.prestart_workers(
                 min(planned_worker_count(self.execution_planner, parallelization_modes), os.cpu_count() or 1),
                 standby_worker,

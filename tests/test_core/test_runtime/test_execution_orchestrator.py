@@ -766,12 +766,13 @@ class TestPlannedWorkerModules:
 
     mp = {ParallelizationMode.MULTIPROCESSING}
 
-    def test_chain_plan_yields_the_framework_and_feature_group_modules(self) -> None:
-        expected = tuple(sorted({_PYDICT_MODULE, _ChainRootFG.__module__, _ChainChildFG.__module__}))
-        assert planned_worker_modules(_chain_plan(), self.mp) == expected
+    @pytest.mark.parametrize("feature_groups", [True, False], ids=["with_fgs", "without_fgs"])
+    def test_chain_plan_yields_framework_and_optionally_feature_group_modules(self, feature_groups: bool) -> None:
+        modules = {_PYDICT_MODULE}
+        if feature_groups:
+            modules |= {_ChainRootFG.__module__, _ChainChildFG.__module__}
 
-    def test_chain_plan_without_feature_groups_yields_only_framework_modules(self) -> None:
-        assert planned_worker_modules(_chain_plan(), self.mp, feature_groups=False) == (_PYDICT_MODULE,)
+        assert planned_worker_modules(_chain_plan(), self.mp, feature_groups=feature_groups) == tuple(sorted(modules))
 
     def test_side_path_plan_yields_the_modules_of_both_transfer_sides(self) -> None:
         plan = _side_path_prepare(
@@ -795,7 +796,8 @@ class TestPlannedWorkerModules:
             sorted(expected | {s.compute_framework.__module__ for s in plan if isinstance(s, FeatureGroupStep)})
         )
 
-    def test_transfer_and_join_steps_outside_any_feature_group_step_are_included(self) -> None:
+    @pytest.mark.parametrize("feature_groups", [True, False], ids=["with_fgs", "without_fgs"])
+    def test_transfer_and_join_steps_outside_any_feature_group_step_are_included(self, feature_groups: bool) -> None:
         def _fw(module: str) -> type:
             return type("Fw", (), {"__module__": module})
 
@@ -831,17 +833,10 @@ class TestPlannedWorkerModules:
             to_feature_group=_fw("fg.skipped_to"),
         )
 
-        result = planned_worker_modules(ReiterablePlan(tfs, join, skipped), self.mp)
+        result = planned_worker_modules(ReiterablePlan(tfs, join, skipped), self.mp, feature_groups=feature_groups)
 
-        assert result == (
-            "fg.join_right",
-            "fg.tfs_from",
-            "fg.tfs_to",
-            "fw.join_dst",
-            "fw.join_src",
-            "fw.tfs_from",
-            "fw.tfs_to",
-        )
+        fw_modules = ("fw.join_dst", "fw.join_src", "fw.tfs_from", "fw.tfs_to")
+        assert result == (("fg.join_right", "fg.tfs_from", "fg.tfs_to") if feature_groups else ()) + fw_modules
 
     @pytest.mark.parametrize(
         "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "thread"]

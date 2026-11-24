@@ -825,12 +825,11 @@ context. A key that no feature in scope ever forwards or declares stays metadata
 not split. This isolates per-value results that previously collapsed into one computation
 where a single value silently won. Same-named copies that differ in undeclared context keys
 but read the same inputs on one framework are rejected; use the same values,
-`cascade_context_keys`, or a forwarded group option. This also covers root features requested directly more than once
-and declared option keys that the feature name does not bind. A declared key that the
-name does not bind (every declared key of a group without name patterns) and that differs
-between a consumer's root input and another read copy splits by value without a marker. The
-`split_context_keys` marker is still what splits copies that are all direct requests;
-otherwise they are rejected.
+`cascade_context_keys`, or a forwarded group option. This also covers root features
+requested directly more than once and declared option keys that the feature name does not
+bind. Such a key (every declared key of a group without name patterns) splits by value
+without a marker when a consumer reads one of the copies; `split_context_keys` is what
+splits copies that are all direct requests.
 
 ### Previewing the forwarded options
 

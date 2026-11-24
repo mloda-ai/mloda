@@ -506,10 +506,11 @@ does not).
 
 ### Splitting on hand-set context with `split_context_keys`
 
-A consumer can hand a renamed value to its input by setting it in the input's context.
-That forwards nothing. Copies of the same feature that are all direct requests with differing
-values would otherwise be rejected. Declare the key with
-`split_context_keys` to split them instead (it also works on root inputs): the keys must already be in the feature's `options.context`
+A consumer can hand a renamed value to its input by setting it in the input's context;
+that forwards nothing. Copies of a root input that differ in such a key still compute
+separately when a consumer reads one of them, but copies that are all direct requests with
+differing values are rejected. Declare the key with `split_context_keys` to split them
+instead: the keys must already be in the feature's `options.context`
 (otherwise `ValueError`), and the declaration only marks them. Within the feature group's
 scope every feature then splits on the key by value, so a direct request of the same input
 with another value computes separately; equal values still share one call. Duplicate
@@ -529,6 +530,7 @@ The split applies to root inputs and `replaces_rows` groups. A marked input with
 its own, reached twice with differing values over the same parents, is still rejected;
 use `cascade_context_keys` there. For a `replaces_rows` input, mark every copy: a marker
 on only some copies does not split the others and planning fails.
+
 ### Resolution errors from over-forwarding
 
 Because forwarding is the default, the consumer's query-specific group keys (for

@@ -57,6 +57,11 @@ class PandasDataFrame(ComputeFramework):
         return cls.pd_dataframe()
 
     @classmethod
+    def nan_is_null(cls) -> bool:
+        """Pandas float64 columns fold NaN and null."""
+        return True
+
+    @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
         if pd is None:
             return False

@@ -182,6 +182,7 @@ def test_written_text_is_canonical_json_and_passes_check(tmp_path: Path) -> None
         "from_compute_framework",
         "to_compute_framework",
         "leaves_connection",
+        "potential_nan_null_loss",
     }
     assert text == _lock_text(plan)
     check_plan_lock(plan, lock)
@@ -1123,6 +1124,67 @@ def test_a_pre_field_lock_fails_for_a_new_field_plan_with_a_diff_naming_only_tha
     assert changed
     assert all(ln.startswith("+") for ln in changed)
     assert {ln[1:].strip() for ln in changed} == expected
+
+
+_NAN_KEY = "potential_nan_null_loss"
+
+
+def test_the_nan_key_is_true_on_a_marked_transform_and_absent_on_an_unmarked_one() -> None:
+    marked = _transform_step()
+    unmarked = dataclasses.replace(
+        marked, compute_framework=PyArrowTable, source_compute_framework=PandasDataFrame, step_kind="transform"
+    )
+
+    assert json.loads(_lock_text([marked]))["transforms"][0][_NAN_KEY] is True
+    assert _NAN_KEY not in json.loads(_lock_text([unmarked]))["transforms"][0]
+
+
+def test_the_nan_key_is_true_on_a_marked_compute_record_and_absent_otherwise() -> None:
+    plain = _compute_step()
+    converted = _compute_step(compute_framework=PyArrowTable, result_framework=PandasDataFrame)
+    neutral = _compute_step(_neutral=True)
+
+    assert _NAN_KEY not in json.loads(_lock_text([plain]))["compute"][0]
+    assert json.loads(_lock_text([converted]))["compute"][0][_NAN_KEY] is True
+    assert json.loads(_lock_text([neutral]))["compute"][0][_NAN_KEY] is True
+
+
+def test_the_nan_key_is_never_written_on_a_join_record() -> None:
+    assert _NAN_KEY not in json.loads(_lock_text([_join_step()]))["joins"][0]
+
+
+def test_plan_content_hash_ignores_the_nan_key_and_the_structure_hash_includes_it(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    marked = [_transform_step()]
+    with_key = (plan_content_hash(marked), plan_structure_hash(marked))
+
+    monkeypatch.setattr(PandasDataFrame, "nan_is_null", classmethod(lambda cls: False))
+    without_key = (plan_content_hash(marked), plan_structure_hash(marked))
+
+    assert with_key[0] == without_key[0]
+    assert with_key[1] != without_key[1]
+
+
+def test_a_pre_field_lock_of_a_pyarrow_to_pandas_plan_fails_with_a_diff_naming_only_the_nan_key(
+    tmp_path: Path,
+) -> None:
+    plan = [_transform_step()]
+    pre_field = "".join(ln for ln in _lock_text(plan).splitlines(keepends=True) if _NAN_KEY not in ln)
+    lock = tmp_path / "plan.lock"
+    lock.write_text(pre_field, encoding="utf-8")
+
+    with pytest.raises(PlanLockMismatchError) as caught:
+        check_plan_lock(plan, lock)
+
+    lines = str(caught.value).splitlines()
+    changed = [ln for ln in lines if ln[:1] in "+-" and not ln.startswith(("+++", "---"))]
+    assert changed
+    assert all(ln.startswith("+") for ln in changed)
+    assert {ln[1:].strip() for ln in changed} == {f'"{_NAN_KEY}": true,'}
+
+    write_plan_lock(plan, lock)
+    check_plan_lock(plan, lock)
 
 
 _RECORD_KEYS = {"source", "framework", "kind", "cause", "subtypes", "outputs", "reason", "variant", "docs"}

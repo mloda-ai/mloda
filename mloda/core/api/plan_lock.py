@@ -76,6 +76,8 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 record["divergences"] = divergence_dicts(step.divergences)
             if step.allowed_variants:
                 record["allowed_variants"] = list(step.allowed_variants)
+            if step.potential_nan_null_loss:
+                record["potential_nan_null_loss"] = True
             lock["compute"].append(record)
             wide_record: dict[str, Any] = {
                 key: value
@@ -88,6 +90,7 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                     "runtime_parameters",
                     "divergences",
                     "allowed_variants",
+                    "potential_nan_null_loss",
                 )
             }
             options = step.content_options
@@ -112,8 +115,12 @@ def _build(plan: Sequence[PlanStep]) -> tuple[dict[str, Any], dict[str, Any]]:
                 "to_compute_framework": _class_path(step.compute_framework),
                 "leaves_connection": step.leaves_connection,
             }
+            if step.potential_nan_null_loss:
+                record["potential_nan_null_loss"] = True
             lock["transforms"].append(record)
-            wide["transforms"].append({k: v for k, v in record.items() if k != "leaves_connection"})
+            wide["transforms"].append(
+                {k: v for k, v in record.items() if k not in ("leaves_connection", "potential_nan_null_loss")}
+            )
         else:
             raise ValueError(f"Unknown plan step kind {step.step_kind!r}.")
     sorted_requested = sorted(requested)

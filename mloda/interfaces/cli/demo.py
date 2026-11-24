@@ -44,7 +44,11 @@ def _plan_detail(step: Mapping[str, Any]) -> str:
 def plan_lines(steps: Sequence[Mapping[str, Any]]) -> list[str]:
     """One aligned line per plan step."""
     labels = [step["feature_group"] if step["kind"] == "compute" else step["kind"] for step in steps]
-    return _aligned([[f"step {step['step']}", label, _plan_detail(step)] for step, label in zip(steps, labels)])
+    details = [
+        _plan_detail(step) + ("  (possible NaN/null loss)" if step.get("potential_nan_null_loss") else "")
+        for step in steps
+    ]
+    return _aligned([[f"step {step['step']}", label, detail] for step, label, detail in zip(steps, labels, details)])
 
 
 def write_demo(explained: Mapping[str, Any], ran: Mapping[str, Any], out: TextIO) -> None:

@@ -300,6 +300,17 @@ def test_result_framework_per_shipped_framework(module: str, name: str, _require
     assert framework.result_framework() is expected
 
 
+@pytest.mark.parametrize(("module", "name", "_requirement"), _REQUIREMENTS)
+def test_nan_is_null_per_shipped_framework(module: str, name: str, _requirement: str) -> None:
+    framework = _load_framework(module, name)
+
+    assert framework.nan_is_null() is (name in {"PandasDataFrame", "SqliteFramework"})
+
+
+def test_nan_is_null_is_false_on_the_base_class() -> None:
+    assert ComputeFramework.nan_is_null() is False
+
+
 def test_connection_requirement_members() -> None:
     from mloda.provider import ConnectionRequirement
 

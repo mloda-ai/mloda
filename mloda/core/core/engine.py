@@ -541,11 +541,13 @@ class Engine:
                     continue
                 seen.add(uuid)
                 input_group, input_feature = resolved[uuid]
-                group_keys = group_scoped_keys(input_group).keys()
-                configured = self._configured_option_keys_by_uuid.get(uuid, ())
-                restricted = group_only_keys(input_group).keys() | credential_handle_keys(input_group)
-                for key in keys & group_keys:
-                    # Keys are unioned per merged feature, so one explicit setting silences every path.
+                candidate_keys = keys & group_scoped_keys(input_group).keys()
+                if candidate_keys:
+                    configured = self._configured_option_keys_by_uuid.get(uuid, ())
+                    restricted = group_only_keys(input_group).keys() | credential_handle_keys(input_group)
+                for key in candidate_keys:
+                    # Keys set through any consumer are unioned per merged feature, so one consumer's setting
+                    # silences every path to that input.
                     if key in configured:
                         continue
                     if key in input_feature.options and _deep_equal(
@@ -570,7 +572,7 @@ class Engine:
                 "refused in the context."
             )
         logger.warning(
-            "Context option(s) %s of requested feature(s) %s stay on the requested feature and do not reach "
+            "Context option(s) %s of requested feature(s) %s do not reach "
             "input feature group(s) %s, which declare them as group options. %s",
             sorted(missing),
             sorted(requested_names),
@@ -1364,7 +1366,8 @@ class Engine:
             feature_collection.add(feature)
             if not (if_index_feature or engine_injected):
                 self._declared_options_by_uuid[feature.uuid] = declared_options
-                self._configured_option_keys_by_uuid[feature.uuid].update(declared_options)
+                if child_uuid is not None:
+                    self._configured_option_keys_by_uuid[feature.uuid].update(declared_options)
             if specialized_from:
                 self.specialized_from[feature.uuid] = specialized_from
             return True
@@ -1402,7 +1405,8 @@ class Engine:
             if not (if_index_feature or engine_injected):
                 # The first request to reach an engine-injected index or filter twin becomes its declaration.
                 self._declared_options_by_uuid.setdefault(existing_feature.uuid, declared_options)
-                self._configured_option_keys_by_uuid[existing_feature.uuid].update(declared_options)
+                if child_uuid is not None:
+                    self._configured_option_keys_by_uuid[existing_feature.uuid].update(declared_options)
                 self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:

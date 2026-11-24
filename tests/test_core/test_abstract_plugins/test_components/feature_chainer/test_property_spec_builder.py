@@ -962,6 +962,10 @@ class TestPropertySpecGroupOnly:
 
         assert group_only_keys(_Bare) == {}
 
+
+class TestPropertySpecGroupScoped:
+    """``group_scoped_keys`` lists the group options a group declares with ``context=False``."""
+
     def test_group_scoped_keys_are_the_context_false_specs_of_the_mapping(self) -> None:
         from mloda.core.abstract_plugins.components.property_spec import group_scoped_keys
 

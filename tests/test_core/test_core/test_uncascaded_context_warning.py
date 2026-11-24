@@ -338,8 +338,8 @@ def _assert_warning(
     assert records[0].name == "mloda.core.core.engine"
     message = records[0].getMessage()
     assert message == (
-        f"Context option(s) {sorted(keys)} of requested feature(s) {sorted(requested)} stay on the requested "
-        f"feature and do not reach input feature group(s) {sorted(group.get_class_name() for group in groups)}, "
+        f"Context option(s) {sorted(keys)} of requested feature(s) {sorted(requested)} "
+        f"do not reach input feature group(s) {sorted(group.get_class_name() for group in groups)}, "
         f"which declare them as group options. {remedy}"
     )
     for value in (PRIVATE_VALUE, OTHER_PRIVATE_VALUE, DECLARED_DEFAULT, EXPLICIT_OVERRIDE):
@@ -535,6 +535,21 @@ def test_folded_default_keeps_the_requesting_path_diagnostic(
         assert _context_warnings(caplog) == []
 
 
+@pytest.mark.parametrize("direct_first", [False, True], ids=["dependency-first", "direct-first"])
+def test_direct_request_with_an_explicit_key_does_not_silence_a_lost_key(
+    direct_first: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    direct = Feature(DEFAULT_ROOT, Options(group={KEY: DECLARED_DEFAULT}))
+    consumer = Feature(DEFAULT_CONSUMER, Options(context={KEY: PRIVATE_VALUE}))
+    with caplog.at_level(logging.WARNING):
+        engine = _prepare([direct, consumer] if direct_first else [consumer, direct])
+    root = _feature(engine, DEFAULT_ROOT)
+    assert root.initial_requested_data is True
+    assert root.options.get(KEY) == DECLARED_DEFAULT
+    assert engine.feature_link_parents[_feature(engine, DEFAULT_CONSUMER).uuid] == {root.uuid}
+    _assert_warning(caplog, [DEFAULT_CONSUMER], [UncascadedCtxDefaultRoot])
+
+
 @pytest.mark.parametrize("requested", [PARTIAL_DELIVERY, PARTIAL_DEFAULT])
 def test_delivery_to_one_branch_does_not_hide_the_other(requested: str, caplog: pytest.LogCaptureFixture) -> None:
     joined_source = UncascadedCtxUnusedRoot if requested == PARTIAL_DELIVERY else UncascadedCtxDefaultRoot
@@ -617,12 +632,23 @@ def test_two_requested_features_losing_keys_log_one_warning(caplog: pytest.LogCa
     _assert_warning(caplog, [DIRECT, DEEP], [UncascadedCtxGroupRoot])
 
 
-def test_delivered_key_is_quiet_when_a_global_filter_injects_a_filter_feature(caplog: pytest.LogCaptureFixture) -> None:
+@pytest.mark.parametrize("delivered", [True, False], ids=["delivered", "lost"])
+def test_global_filter_injected_feature_does_not_hide_the_input_walk(
+    delivered: bool, caplog: pytest.LogCaptureFixture
+) -> None:
     global_filter = GlobalFilter()
     global_filter.add_filter(FILTER_COL, FilterType.MIN, {"value": 1})
+    options = (
+        Options(context={KEY: PRIVATE_VALUE}, propagate_context_keys=frozenset({KEY}))
+        if delivered
+        else Options(context={KEY: PRIVATE_VALUE})
+    )
     with caplog.at_level(logging.WARNING):
-        engine = _prepare([Feature(FILTER_CONSUMER, Options(group={KEY: PRIVATE_VALUE}))], global_filter=global_filter)
+        engine = _prepare([Feature(FILTER_CONSUMER, options)], global_filter=global_filter)
     root_features = engine.feature_group_collection[UncascadedCtxFilterRoot]
     assert {str(feature.name) for feature in root_features} == {FILTER_ROOT, FILTER_COL}
-    assert all(feature.options.get(KEY) == PRIVATE_VALUE for feature in root_features)
-    assert _warnings(caplog) == []
+    if delivered:
+        assert _feature(engine, FILTER_ROOT).options.get(KEY) == PRIVATE_VALUE
+        assert _warnings(caplog) == []
+    else:
+        _assert_warning(caplog, [FILTER_CONSUMER], [UncascadedCtxFilterRoot])

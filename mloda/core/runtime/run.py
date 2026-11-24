@@ -127,9 +127,9 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
 
 
 def planned_worker_modules(
-    execution_plan: Any, register_modes: set[ParallelizationMode], feature_groups: bool = True
+    execution_plan: Any, register_modes: set[ParallelizationMode], *, feature_groups: bool = True
 ) -> tuple[str, ...]:
-    """Modules a standby warms: framework and (if feature_groups) feature group classes of worker steps."""
+    """Modules a standby warms: framework and (if feature_groups) feature group classes, minus `__main__`."""
     classes: list[Any] = []
     for step in execution_plan:
         if not runs_in_worker(register_modes, step.get_parallelization_mode()):

@@ -762,7 +762,7 @@ class _MultiCandidateFG(DataCreatorFeatureGroup):
 
 
 class TestPlannedWorkerModules:
-    """planned_worker_modules lists the cfw modules a MULTIPROCESSING worker may need."""
+    """planned_worker_modules lists the cfw and feature group modules a MULTIPROCESSING worker may need."""
 
     mp = {ParallelizationMode.MULTIPROCESSING}
 
@@ -824,6 +824,13 @@ class TestPlannedWorkerModules:
             destination_framework=_fw("fw.join_dst"),
             link=SimpleNamespace(left_feature_group=_fw("__main__"), right_feature_group=_fw("fg.join_right")),
         )
+        fg_step = _step(
+            FeatureGroupStep,
+            mp,
+            feature_group=_fw("fg.step"),
+            compute_framework=_fw("fw.step"),
+            features=SimpleNamespace(features=[]),
+        )
         skipped = _step(
             TransformFrameworkStep,
             ParallelizationMode.THREADING,
@@ -833,10 +840,14 @@ class TestPlannedWorkerModules:
             to_feature_group=_fw("fg.skipped_to"),
         )
 
-        result = planned_worker_modules(ReiterablePlan(tfs, join, skipped), self.mp, feature_groups=feature_groups)
+        result = planned_worker_modules(
+            ReiterablePlan(tfs, join, fg_step, skipped), self.mp, feature_groups=feature_groups
+        )
 
-        fw_modules = ("fw.join_dst", "fw.join_src", "fw.tfs_from", "fw.tfs_to")
-        assert result == (("fg.join_right", "fg.tfs_from", "fg.tfs_to") if feature_groups else ()) + fw_modules
+        fw_modules = ("fw.join_dst", "fw.join_src", "fw.step", "fw.tfs_from", "fw.tfs_to")
+        assert (
+            result == (("fg.join_right", "fg.step", "fg.tfs_from", "fg.tfs_to") if feature_groups else ()) + fw_modules
+        )
 
     @pytest.mark.parametrize(
         "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "thread"]

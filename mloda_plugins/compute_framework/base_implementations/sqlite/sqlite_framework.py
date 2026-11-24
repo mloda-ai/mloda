@@ -81,6 +81,11 @@ class SqliteFramework(ComputeFramework):
         return SqliteRelation
 
     @classmethod
+    def nan_is_null(cls) -> bool:
+        """SQLite stores NaN as NULL."""
+        return True
+
+    @classmethod
     def is_missing_column_error(cls, error: Exception) -> bool:
         if isinstance(error, MissingRelationColumnError):
             return True

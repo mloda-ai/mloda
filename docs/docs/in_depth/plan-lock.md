@@ -49,6 +49,7 @@ Sorted JSON with a `format` number (not in the content hash), the `requested_fea
 | `contract_version` | The group's `CONTRACT_VERSION`. | only when set | yes |
 | `divergences` | The stamped, scrubbed records of the group and its serving implementation that apply, each with `source`, `framework`, `kind`, `cause`, `subtypes`, `outputs`, `reason`, `variant` and `docs`, sorted. | only when non-empty | no |
 | `allowed_variants` | The rule variants the step's features allow, sorted. | only when non-empty | no |
+| `potential_nan_null_loss` | `true` when the step has a requested result conversion onto a framework that folds NaN into null. | only when true | no |
 
 **Join records**
 
@@ -70,10 +71,11 @@ Sorted JSON with a `format` number (not in the content hash), the `requested_fea
 | `from_compute_framework` | The framework the data comes from. | always | yes |
 | `to_compute_framework` | The framework the data is transformed into. | always | yes |
 | `leaves_connection` | The handle of the connection the transform leaves, `<unnamed>` for an auto-named connection. | always, may be null | no |
+| `potential_nan_null_loss` | `true` when the destination framework folds NaN into null and the source does not. | only when true | no |
 
 For `leaves_connection`, a step bound implicitly to the same handle as its parent counts as on that connection.
 
-An older lock of a plan whose records carry `feature_group_hash`, `credential_handles` or `divergences` fails once until rewritten; for `credential_handles` that includes a plan whose source binds a handle sorting before a declared one. `allowed_variants` came without a format bump, so existing locks stay valid. A `format` bump (now 9) makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`.
+An older lock of a plan whose records carry `feature_group_hash`, `credential_handles` or `divergences` fails once until rewritten; for `credential_handles` that includes a plan whose source binds a handle sorting before a declared one. `allowed_variants` came without a format bump, so existing locks stay valid. `potential_nan_null_loss` also came without one, but a lock of a plan with such a step fails `check_plan_lock` once; rewrite it with `write_plan_lock`. A `format` bump (now 9) makes a lock file written by an older mloda fail `check_plan_lock` until rewritten with `write_plan_lock`.
 
 When the only difference from the lock is a group's `contract_version`, `check_plan_lock` does not raise: it warns with `PlanLockContractVersionWarning` (from `mloda.steward`), naming each group with its locked and resolved version. A steward makes it fail with `warnings.filterwarnings("error", category=PlanLockContractVersionWarning)`.
 

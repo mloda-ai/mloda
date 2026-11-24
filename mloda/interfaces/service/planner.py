@@ -169,6 +169,7 @@ def _step_record(index: int, step: PlanStep, alias: str | None) -> dict[str, Any
         "contract_version": step.contract_version,
         "divergences": _divergences(step),
         "allowed_variants": [sanitize_text(v, MAX_NAME_LENGTH) for v in step.allowed_variants],
+        "potential_nan_null_loss": step.potential_nan_null_loss,
     }
 
 

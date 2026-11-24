@@ -385,6 +385,10 @@ A requested feature computed on DuckDB or SQLite comes back as a `pa.Table`, fet
 
 Framework authors: `select_native_data_by_column_names` returns the selection in the framework's own type (the default delegates to `select_data_by_column_names`). A framework whose `select_data_by_column_names` returns another framework's data type must also override `result_framework()` to name that framework. With that framework as `output_framework`, a run calls `select_native_data_by_column_names` instead of `select_data_by_column_names`, so a subclass that customizes one should customize the other.
 
+### NaN as null
+
+A framework that holds NaN as null overrides the classmethod `nan_is_null()` to return `True` (default `False`). The plan then marks steps that move data onto it ([details](divergence-records.md#frameworks-that-hold-nan-as-null)).
+
 ### Reading column types
 
 The `.types` property returns column types aligned with `.columns`. The element type differs by backend:

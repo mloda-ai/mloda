@@ -28,6 +28,8 @@ Text fields are credential-scrubbed when stamped. A group may also declare `CONT
 | Service, MCP and CLI explain step record | `contract_version`, `divergences`, `allowed_variants` ([MCP Server and CLI](mcp-server.md#tools)) |
 | OpenLineage | the registry's `mlodaStep` facet |
 
+`PlanStep`, the plan lock, and the service and CLI step records also carry `potential_nan_null_loss` ([Frameworks that hold NaN as null](#frameworks-that-hold-nan-as-null)).
+
 A step lists the records of its group and its serving Implementation that apply, `gap` records included; `gap` records never rank an Implementation.
 
 ## Rule variants
@@ -39,6 +41,16 @@ A group lists the rule variants its contract allows in `VARIANTS`. An Implementa
 ```
 
 When the group does not list the variant, the line ends `which MyOperationFG.VARIANTS does not list, so it cannot be allowed` and offers no option. The stage is the `rule variant` row of [the eliminated candidates block](troubleshooting/feature-group-resolution-errors.md#the-eliminated-candidates-block); `Elimination.variants` and `Elimination.allow_variants` carry the names ([Feature Group Matching](feature-group-matching.md)). What gets blocked, and when a pin raises, is in [Operation Groups](compute-framework-integration.md#operation-groups-one-group-one-implementation-per-framework). The service reports a `variant_not_allowed` detail with a `fix` of `{"allow_variants": [...]}` only when the group lists every blocking variant and the caller may set the option ([Tools](mcp-server.md#tools)).
+
+## Frameworks that hold NaN as null
+
+`ComputeFramework.nan_is_null()` declares that a framework cannot tell NaN from null (Pandas and SQLite return `True`, every other shipped framework `False`). The plan marks `potential_nan_null_loss` on a transfer or a requested result conversion onto such a framework. A join step is never marked; the transform into its destination carries it. A source load is not marked either: a load is where the data is born, and the plan cannot tell whether the source held both values. The mark is advisory: nothing is rerouted and no `allow_variants` is needed.
+
+The declaration replaces the `nan_as_null` operation records that only restate it: NaN and null merging as partition or group keys, tying in `order_by`, or being treated as the same missing value in fill, offset and smoothing operations. Records for what an operation does with a missing value stay, such as skipping NaN in `sum` or not counting it in `count`. Until the registry retires the old records, the fact is stated twice.
+
+Known gap: Pandas is declared as folding NaN into null because mloda's transfers into it produce float64. A user-built nullable `Float64` frame moving to SQLite loses the distinction without a mark.
+
+The service `lineage` field is a feature graph and carries no mark; OpenLineage consumers read the `PlanStep` property.
 
 ## Upgrading
 

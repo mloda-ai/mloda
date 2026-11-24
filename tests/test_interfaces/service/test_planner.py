@@ -59,6 +59,7 @@ from mloda.provider import (
 )
 from mloda.user import PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.input_data.file_formats.csv_fg import CsvFG
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
@@ -109,6 +110,7 @@ STEP_KEYS = {
     "contract_version",
     "divergences",
     "allowed_variants",
+    "potential_nan_null_loss",
 }
 SUCCESS_KEYS = {"plan_id", "expires_at", "normalized_request", "steps", "lineage", "estimate", "egress", "policy"}
 DENIED_CALLS: list[str] = []
@@ -1518,6 +1520,21 @@ class TestSuccess:
         assert step["join_type"] is None
         assert step["contract_version"] is None
         assert step["divergences"] == []
+        assert step["potential_nan_null_loss"] is False
+
+    def test_step_record_reports_the_potential_nan_null_loss_of_a_transform(self) -> None:
+        step = PlanStep(
+            step_kind="transform",
+            feature_names=(),
+            feature_group=CsvFG,
+            compute_framework=PandasDataFrame,
+            source_feature_group=JsonFG,
+            source_compute_framework=PyArrowTable,
+        )
+
+        record = _step_record(1, step, None)
+
+        assert record["potential_nan_null_loss"] is True
 
     def test_join_step_record_names_both_sides_and_join_type(self) -> None:
         step = PlanStep(

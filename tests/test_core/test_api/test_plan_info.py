@@ -131,6 +131,7 @@ from mloda.user import (
     mlodaAPI,
 )
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -144,6 +145,14 @@ from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import Parqu
 # ---------------------------------------------------------------------------
 # Test feature groups
 # ---------------------------------------------------------------------------
+
+
+class _TruthyNanFramework(PyArrowTable):
+    """A plugin whose nan_is_null returns a truthy non-bool."""
+
+    @classmethod
+    def nan_is_null(cls) -> bool:
+        return 1  # type: ignore[return-value]
 
 
 class PlanInfoPandasSource(DataCreatorFeatureGroup):
@@ -2564,6 +2573,69 @@ class TestTransformStepMapping:
         assert plan[-1].step_kind == "compute"
         assert plan[-1].implementation is PandasAggregation
 
+    def test_a_real_requested_result_conversion_is_marked_and_a_plain_pyarrow_compute_is_not(self) -> None:
+        def compute_step(**options: Any) -> PlanStep:
+            plan = mloda.explain(
+                ["plan_info_arrow_sales"],
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_TRANSFORM_PLUGINS,
+                **options,
+            )
+            (step,) = [s for s in plan if s.step_kind == "compute"]
+            assert step.compute_framework is PyArrowTable
+            return step
+
+        assert compute_step(output_framework=PandasDataFrame).potential_nan_null_loss is True
+        assert compute_step().potential_nan_null_loss is False
+
+    @pytest.mark.parametrize(
+        ("kind", "framework", "source", "result", "neutral", "expected"),
+        [
+            ("transform", PandasDataFrame, PyArrowTable, None, False, True),
+            ("transform", SqliteFramework, PyArrowTable, None, False, True),
+            ("transform", PandasDataFrame, PolarsDataFrame, None, False, True),
+            ("transform", SqliteFramework, PandasDataFrame, None, False, False),
+            ("transform", PandasDataFrame, SqliteFramework, None, False, False),
+            ("transform", PyArrowTable, PandasDataFrame, None, False, False),
+            ("transform", _TruthyNanFramework, PyArrowTable, None, False, True),
+            ("transform", PandasDataFrame, PandasDataFrame, None, False, False),
+            ("transform", PyArrowTable, PyArrowTable, None, False, False),
+            ("compute", PyArrowTable, None, PandasDataFrame, False, True),
+            ("compute", PyArrowTable, None, SqliteFramework, False, True),
+            ("compute", PandasDataFrame, None, PyArrowTable, False, False),
+            ("compute", PandasDataFrame, None, PandasDataFrame, False, False),
+            ("compute", SqliteFramework, None, PandasDataFrame, False, False),
+            ("compute", PandasDataFrame, None, None, False, False),
+            ("compute", PandasDataFrame, None, None, True, False),
+            ("compute", SqliteFramework, None, None, True, False),
+            ("compute", PyArrowTable, None, None, True, False),
+            ("join", PandasDataFrame, PyArrowTable, None, False, False),
+            ("join", PyArrowTable, PandasDataFrame, None, False, False),
+            ("join", SqliteFramework, PyArrowTable, None, False, False),
+        ],
+    )
+    def test_potential_nan_null_loss_follows_the_framework_pair(
+        self,
+        kind: Literal["compute", "join", "transform"],
+        framework: type[ComputeFramework],
+        source: type[ComputeFramework] | None,
+        result: type[ComputeFramework] | None,
+        neutral: bool,
+        expected: bool,
+    ) -> None:
+        step = PlanStep(
+            step_kind=kind,
+            feature_names=(),
+            feature_group=None,
+            compute_framework=framework,
+            source_feature_group=None,
+            source_compute_framework=source,
+            result_framework=result,
+            _neutral=neutral,
+        )
+
+        assert step.potential_nan_null_loss is expected
+
     def test_transform_step_sits_between_its_compute_steps(self) -> None:
         session = mloda.prepare(
             [Feature("plan_info_arrow_sales__mean_aggr", implementation=PandasAggregation)],
@@ -3005,6 +3077,8 @@ class TestCrossFrameworkJoinStepMapping:
         assert transform.feature_group is PlanInfoCrossLeftPandas
         assert transform.source_feature_group is PlanInfoCrossRightArrow
         assert transform.join_type is None
+        assert transform.potential_nan_null_loss is True
+        assert next(step for step in plan if step.step_kind == "join").potential_nan_null_loss is False
 
     def test_cross_framework_join_plan_shape(self) -> None:
         plan = _prepare_cross_framework_join_session().resolved_plan()
@@ -3168,6 +3242,7 @@ class TestInvertedCrossFrameworkJoin:
         assert transform.source_feature_group is PlanInfoCrossLeftPandas
         assert transform.compute_framework is PyArrowTable
         assert transform.source_compute_framework is PandasDataFrame
+        assert transform.potential_nan_null_loss is False
 
 
 # ---------------------------------------------------------------------------

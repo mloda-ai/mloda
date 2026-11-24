@@ -333,6 +333,11 @@ class ComputeFramework(ABC):
         return cls
 
     @classmethod
+    def nan_is_null(cls) -> bool:
+        """True when the framework holds NaN as null, so it cannot tell the two apart."""
+        return False
+
+    @classmethod
     def filter_engine(cls) -> type[BaseFilterEngine]:
         """
         This function should return the filtered data.

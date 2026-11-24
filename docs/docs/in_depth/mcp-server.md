@@ -136,7 +136,7 @@ call has `isError` set and one error shape: `{"error": {"code", "message", "deta
 `internal`. Details point at the request by JSON pointer, with a suggestion when a close name exists. A
 `missing_input_feature` detail holds `feature_group`, `feature` and `missing_inputs` (never the available columns). A `variant_not_allowed` detail holds `feature_group` and `variants`, plus a `fix` of `{"allow_variants": [...]}` only when the group lists every variant blocking some framework and the caller may set `allow_variants`. It is reported at the requested feature when an input is variant-blocked or a chained implementation pin hits a blocked implementation. Competing consumers over a variant-blocked input give one `variant_not_allowed` detail per competing consumer whose input is variant-blocked, whose `feature_group` names the consumer. An input the request never names (neither as a feature nor in `in_features`) that cannot be resolved is reported as `unresolved` at the requested feature, without the input's name or a suggestion.
 
-Each step record of an explain result carries `contract_version`, `divergences` and `allowed_variants` (see [Divergence Records](divergence-records.md)).
+Each step record of an explain result carries `contract_version`, `divergences`, `allowed_variants` and `potential_nan_null_loss` (see [Divergence Records](divergence-records.md)).
 
 ## What stays on the server
 
@@ -215,6 +215,8 @@ mloda run income segment -o model=small -c timeout:=30
 ```
 
 `mloda --version` prints the installed mloda version.
+
+`--format text` ends a step line with `(possible NaN/null loss)` when the step record's `potential_nan_null_loss` is true.
 
 `mloda run FEATURE ... -o KEY=VALUE -c KEY=VALUE` builds the request from feature names: `-o` sets group options and
 `-c` context options on every feature, and both repeat. A value is `KEY=VALUE` (string), `KEY:=JSON` (parsed JSON) or

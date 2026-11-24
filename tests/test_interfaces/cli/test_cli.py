@@ -1099,6 +1099,40 @@ class TestDemo:
             "step 3  join       CsvFG + JsonFG  (inner)",
         ]
 
+    def test_plan_lines_mark_a_possible_nan_null_loss_only_when_set(self) -> None:
+        idle: dict[str, Any] = {
+            "features": [],
+            "source": None,
+            "inputs": [],
+            "source_feature_group": None,
+            "join_type": None,
+        }
+        steps = [
+            {**idle, "step": 1, "kind": "transform", "feature_group": "JsonFG", "source_feature_group": "CsvFG"},
+            {
+                **idle,
+                "step": 2,
+                "kind": "transform",
+                "feature_group": "JsonFG",
+                "source_feature_group": "CsvFG",
+                "potential_nan_null_loss": True,
+            },
+            {
+                **idle,
+                "step": 3,
+                "kind": "transform",
+                "feature_group": "JsonFG",
+                "source_feature_group": "CsvFG",
+                "potential_nan_null_loss": False,
+            },
+        ]
+
+        assert demo.plan_lines(steps) == [
+            "step 1  transform  CsvFG -> JsonFG",
+            "step 2  transform  CsvFG -> JsonFG  (possible NaN/null loss)",
+            "step 3  transform  CsvFG -> JsonFG",
+        ]
+
     @pytest.mark.parametrize(
         ("toml", "env"),
         [

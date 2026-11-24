@@ -4,10 +4,13 @@ TestSbfixSafeFieldWithErrorSwallowsRaisingStr is a red-phase test: it currently 
 caught exception's own str(exc) is read eagerly and escapes the guard.
 """
 
+import pytest
+
 from mloda.core.abstract_plugins.components.utils import (
     mark_credential_abort,
     safe_field_with_abort,
     safe_field_with_error,
+    safe_field_with_exception,
 )
 
 
@@ -86,3 +89,27 @@ class TestSafeFieldWithAbort:
 
     def test_blank_message_falls_back_to_the_type_name(self) -> None:
         assert safe_field_with_abort(_sbfix852_blank_boom, 0) == (0, "RuntimeError", "RuntimeError", False)
+
+
+class TestSafeFieldWithException:
+    """safe_field_with_exception(read, fallback, catching) returns (value, None) or (fallback, the exception)."""
+
+    def test_success(self) -> None:
+        assert safe_field_with_exception(lambda: 5, 0) == (5, None)
+
+    def test_failure_returns_the_same_exception_object(self) -> None:
+        caught: list[Exception] = []
+
+        def raises() -> int:
+            exc = ValueError("same object")
+            caught.append(exc)
+            raise exc
+
+        value, error = safe_field_with_exception(raises, 0)
+
+        assert value == 0
+        assert error is caught[0]
+
+    def test_non_matching_catching_propagates(self) -> None:
+        with pytest.raises(ValueError, match="sbfix boom"):
+            safe_field_with_exception(_sbfix_boom, 0, catching=(KeyError,))

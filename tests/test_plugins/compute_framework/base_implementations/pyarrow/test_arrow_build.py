@@ -86,6 +86,13 @@ class TestArrowBuild:
         assert arr.type == target
         assert _utc(arr.to_pylist()) == _utc([NOON_NY])
 
+    def test_explicit_type_rejects_naive_aware_mix(self) -> None:
+        target = pa.timestamp("us", tz="UTC")
+        with pytest.raises(ValueError) as err:
+            _builders().arrow_array([_NAIVE, _UTC_NOON], type=target, column="t")
+        for text in ["t", "naive", "aware"]:
+            assert text in str(err.value)
+
     def test_table_keeps_instants_and_zone(self) -> None:
         table = _builders().arrow_table({"t": [NOON_NY, LATER_NY], "n": [1, 2]})
         assert table.schema.field("t").type == pa.timestamp("us", tz="America/New_York")
@@ -107,11 +114,10 @@ class TestArrowBuildUnchanged:
             [datetime(2023, 3, 11, 12, 0), None],
             [1, 2, None],
             ["a", None],
-            [NOON_NY, datetime(2023, 3, 11, 12, 0)],
             [],
             [None, None],
         ],
-        ids=["naive", "ints", "strings", "mixed_aware_naive", "empty", "all_none"],
+        ids=["naive", "ints", "strings", "empty", "all_none"],
     )
     @ENV_VALUES
     @pytest.mark.usefixtures("ignore_timezone_env")
@@ -148,11 +154,11 @@ _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
             "Europe/Berlin",
             id="winter_and_summer_one_zone",
         ),
-        pytest.param([_UTC_NOON, _NAIVE], None, id="mixed_aware_naive"),
         pytest.param([_NAIVE, _NAIVE], None, id="naive"),
         pytest.param([None, None], None, id="all_none"),
         pytest.param([], None, id="empty"),
         pytest.param([1, 2], None, id="ints"),
+        pytest.param([_NAIVE, _UTC_NOON, "x"], None, id="datetimes_and_non_datetime"),
     ],
 )
 def test_aware_zone(values: list[Any], expected: str | None) -> None:
@@ -176,6 +182,8 @@ def test_aware_zone(values: list[Any], expected: str | None) -> None:
             ["UTC", "Etc/UTC"],
             id="utc_and_etc_utc",
         ),
+        pytest.param([_UTC_NOON, _NAIVE], ["naive", "aware"], id="aware_then_naive"),
+        pytest.param([_NAIVE, None, _UTC_NOON], ["naive", "aware"], id="naive_then_aware"),
     ],
 )
 def test_aware_zone_rejects_mixed_zones(values: list[Any], zones: list[str]) -> None:
@@ -287,14 +295,38 @@ def _duckdb_append_columns(data: dict[str, list[Any]]) -> Any:
     return base.append_columns(data)
 
 
+def _polars_append_columns(data: dict[str, list[Any]]) -> Any:
+    pl = pytest.importorskip("polars")
+    from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
+
+    framework = PolarsDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    appended: Any = framework._append_columns(pl.DataFrame({"id": [1, 2]}), data)
+    return appended.to_arrow()
+
+
+def _polars_lazy_append_columns(data: dict[str, list[Any]]) -> Any:
+    pl = pytest.importorskip("polars")
+    from mloda_plugins.compute_framework.base_implementations.polars.lazy_dataframe import PolarsLazyDataFrame
+
+    framework = PolarsLazyDataFrame(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+    appended: Any = framework._append_columns(pl.LazyFrame({"id": [1, 2]}), data)
+    return appended.collect().to_arrow()
+
+
+_POLARS_ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
+    _polars_framework,
+    _polars_lazy_framework,
+    _polars_append_columns,
+    _polars_lazy_append_columns,
+]
+
 _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
     _python_dict,
     _duckdb_from_dict,
     _duckdb_framework,
     _iceberg_framework,
     _pyarrow_framework,
-    _polars_framework,
-    _polars_lazy_framework,
+    *_POLARS_ENTRY_POINTS,
     _append_columns,
     _sqlite_from_dict,
     _duckdb_append_columns,
@@ -304,13 +336,32 @@ _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
 @ENV_VALUES
 @pytest.mark.usefixtures("ignore_timezone_env")
 class TestEntryPointsKeepNonUtcInstants:
+    @pytest.mark.parametrize("zone_source", ["zoneinfo", "dateutil"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
-    def test_dict_build_keeps_instants_and_zone(self, build: Callable[[dict[str, list[Any]]], Any]) -> None:
-        table = _arrow_of(build({"t": [NOON_NY, LATER_NY]}))
+    def test_dict_build_keeps_instants_and_zone(
+        self, build: Callable[[dict[str, list[Any]]], Any], zone_source: str
+    ) -> None:
+        if zone_source == "dateutil":
+            tz: Any = pytest.importorskip("dateutil.tz").gettz("America/New_York")
+        else:
+            tz = NY
+        values = [NOON_NY.replace(tzinfo=tz), LATER_NY.replace(tzinfo=tz)]
+        table = _arrow_of(build({"t": values}))
         field_type = table.schema.field("t").type
         assert pa.types.is_timestamp(field_type)
         assert field_type.tz == "America/New_York"
         assert _utc(table.column("t").to_pylist()) == _utc([NOON_NY, LATER_NY])
+
+    @pytest.mark.parametrize("hours", [5, -3], ids=["plus_05", "minus_03"])
+    @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_dict_build_keeps_whole_hour_offset(self, build: Callable[[dict[str, list[Any]]], Any], hours: int) -> None:
+        offset = timezone(timedelta(hours=hours))
+        values = [NOON_NY.astimezone(offset), LATER_NY.astimezone(offset)]
+        table = _arrow_of(build({"t": values}))
+        assert pa.types.is_timestamp(table.schema.field("t").type)
+        got = table.column("t").to_pylist()
+        assert _utc(got) == _utc(values)
+        assert [v.utcoffset() for v in got] == [v.utcoffset() for v in values]
 
     @pytest.mark.parametrize(
         "values",
@@ -336,7 +387,7 @@ class TestEntryPointsKeepNonUtcInstants:
 
 
 class TestEntryPointsRejectUnnameableZones:
-    @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom"])
+    @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom", "aware_naive", "naive_aware"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
     def test_dict_build_raises_naming_column_and_zone(
         self, build: Callable[[dict[str, list[Any]]], Any], kind: str
@@ -345,6 +396,16 @@ class TestEntryPointsRejectUnnameableZones:
         with pytest.raises(ValueError) as error:
             build({"zoned": values})
         for text in ["zoned", *texts]:
+            assert text in str(error.value)
+
+    @pytest.mark.parametrize("build", _POLARS_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_polars_rejects_sub_hour_offset_naming_column_and_zone(
+        self, build: Callable[[dict[str, list[Any]]], Any]
+    ) -> None:
+        values = [NOON_NY.astimezone(KOLKATA), LATER_NY.astimezone(KOLKATA)]
+        with pytest.raises(ValueError) as error:
+            build({"zoned": values})
+        for text in ["zoned", "+05:30"]:
             assert text in str(error.value)
 
 

@@ -13,6 +13,7 @@ fixture is needed.
 
 from __future__ import annotations
 
+import abc
 import contextvars
 from collections.abc import Iterator
 from typing import Any, cast
@@ -1099,6 +1100,22 @@ class CpmTooManyFG(CpmBaseFG):
     }
 
 
+class CpmDeferredFG(CpmBaseFG):
+    """A set plain key plus an absent required key declared deferred_binding."""
+
+    PROPERTY_MAPPING = {
+        "op_cpmd": property_spec("Op.", allowed_values={"sum"}),
+        "extra_cpmd": property_spec("Required deferred key.", deferred_binding=True),
+    }
+
+
+class CpmAbstractFG(CpmPlainFG):
+    """Abstract subclass of CpmPlainFG."""
+
+    @abc.abstractmethod
+    def abstract_hook_cpm(self) -> None: ...
+
+
 class CpmSiblingFG(FeatureGroup):
     """Name-matching sibling that wins next to a near-miss group."""
 
@@ -1127,8 +1144,9 @@ class TestConfigPathMissingRequiredKeyNearMiss:
         [
             (CpmPlainFG, {"op_cpm": "sum"}, ["extra_cpm"]),
             (CpmInFeaturesFG, {"op_cpmi": "sum"}, ["extra_cpmi", DefaultOptionKeys.in_features]),
+            (CpmDeferredFG, {"op_cpmd": "sum"}, ["extra_cpmd"]),
         ],
-        ids=["plain-key", "plain-key-and-in-features"],
+        ids=["plain-key", "plain-key-and-in-features", "deferred-binding-key"],
     )
     def test_the_absent_required_keys_are_named(
         self, group: type[CpmBaseFG], options: dict[str, str], absent: list[str]
@@ -1159,8 +1177,9 @@ class TestConfigPathMissingRequiredKeyNearMiss:
             (CpmGuardFG, {"kind_cpmg": "other"}, None),
             (CpmDomainFG, {"op_cpm": "sum"}, "cpm_dom_b"),
             (CpmTooManyFG, {"op_cpmt": "sum", DefaultOptionKeys.in_features: "a,b"}, None),
+            (CpmAbstractFG, {"op_cpm": "sum"}, None),
         ],
-        ids=["unrelated-key", "guard-declines", "other-domain", "nothing-absent"],
+        ids=["unrelated-key", "guard-declines", "other-domain", "nothing-absent", "abstract-group"],
     )
     def test_a_group_that_is_not_a_near_miss_is_not_listed(
         self, group: type[CpmBaseFG], options: dict[str, str], domain: str | None
@@ -1179,9 +1198,10 @@ class TestConfigPathMissingRequiredKeyNearMiss:
             CpmSiblingFG: {RecorderFwOneOs005r},
         }
 
-        winner, _ = identify_winner(feature, accessible_plugins)
+        result = evaluate_or_raise(feature=feature, accessible_plugins=accessible_plugins, links=None)
 
-        assert winner is CpmSiblingFG
+        assert list(result.identified) == [CpmSiblingFG]
+        assert CpmRaisingDomainFG not in result.eliminations
 
     def test_a_winning_sibling_leaves_the_near_miss_in_the_eliminations(self) -> None:
         feature = Feature("cpm_col", Options(context={"op_cpm": "sum"}))

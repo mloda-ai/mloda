@@ -1040,7 +1040,7 @@ class Engine:
         self.filter_ties = list(dict.fromkeys(ties))
 
     def _whole_part_consumers_fit(self, host: Feature, survivor: Feature, live: Mapping[UUID, Feature]) -> bool:
-        """Whole/part folds need every live consumer fixed to the survivor's single framework; a flexible one may convert the whole frame."""
+        """Every live consumer must be fixed to the survivor's one framework; a flexible one may convert the frame."""
         if (host.parts_only and survivor.parts_only) or not (host.requested_parts or survivor.requested_parts):
             return True
         frameworks = survivor.compute_frameworks

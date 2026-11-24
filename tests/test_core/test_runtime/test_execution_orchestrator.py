@@ -13,6 +13,7 @@ import threading
 import time
 import uuid as uuid_mod
 from collections.abc import Callable
+from types import SimpleNamespace
 from typing import Any
 from unittest.mock import Mock, patch, MagicMock
 from uuid import UUID
@@ -765,8 +766,12 @@ class TestPlannedWorkerModules:
 
     mp = {ParallelizationMode.MULTIPROCESSING}
 
-    def test_chain_plan_yields_the_python_dict_module(self) -> None:
-        assert planned_worker_modules(_chain_plan(), self.mp) == (_PYDICT_MODULE,)
+    def test_chain_plan_yields_the_framework_and_feature_group_modules(self) -> None:
+        expected = tuple(sorted({_PYDICT_MODULE, _ChainRootFG.__module__, _ChainChildFG.__module__}))
+        assert planned_worker_modules(_chain_plan(), self.mp) == expected
+
+    def test_chain_plan_without_feature_groups_yields_only_framework_modules(self) -> None:
+        assert planned_worker_modules(_chain_plan(), self.mp, feature_groups=False) == (_PYDICT_MODULE,)
 
     def test_side_path_plan_yields_the_modules_of_both_transfer_sides(self) -> None:
         plan = _side_path_prepare(
@@ -779,10 +784,13 @@ class TestPlannedWorkerModules:
                 tfs_seen = True
                 expected.add(step.from_framework.__module__)
                 expected.add(step.to_framework.__module__)
+            if isinstance(step, FeatureGroupStep):
+                expected.add(step.feature_group.__module__)
         assert tfs_seen
 
         result = planned_worker_modules(plan, self.mp)
 
+        assert SidePathPandasP.__module__ in result
         assert result == tuple(
             sorted(expected | {s.compute_framework.__module__ for s in plan if isinstance(s, FeatureGroupStep)})
         )
@@ -799,18 +807,41 @@ class TestPlannedWorkerModules:
             return step
 
         mp = ParallelizationMode.MULTIPROCESSING
-        tfs = _step(TransformFrameworkStep, mp, from_framework=_fw("fw.tfs_from"), to_framework=_fw("fw.tfs_to"))
-        join = _step(JoinStep, mp, source_framework=_fw("fw.join_src"), destination_framework=_fw("fw.join_dst"))
+        tfs = _step(
+            TransformFrameworkStep,
+            mp,
+            from_framework=_fw("fw.tfs_from"),
+            to_framework=_fw("fw.tfs_to"),
+            from_feature_group=_fw("fg.tfs_from"),
+            to_feature_group=_fw("fg.tfs_to"),
+        )
+        join = _step(
+            JoinStep,
+            mp,
+            source_framework=_fw("fw.join_src"),
+            destination_framework=_fw("fw.join_dst"),
+            link=SimpleNamespace(left_feature_group=_fw("__main__"), right_feature_group=_fw("fg.join_right")),
+        )
         skipped = _step(
             TransformFrameworkStep,
             ParallelizationMode.THREADING,
             from_framework=_fw("fw.skipped_from"),
             to_framework=_fw("fw.skipped_to"),
+            from_feature_group=_fw("fg.skipped_from"),
+            to_feature_group=_fw("fg.skipped_to"),
         )
 
         result = planned_worker_modules(ReiterablePlan(tfs, join, skipped), self.mp)
 
-        assert result == ("fw.join_dst", "fw.join_src", "fw.tfs_from", "fw.tfs_to")
+        assert result == (
+            "fg.join_right",
+            "fg.tfs_from",
+            "fg.tfs_to",
+            "fw.join_dst",
+            "fw.join_src",
+            "fw.tfs_from",
+            "fw.tfs_to",
+        )
 
     @pytest.mark.parametrize(
         "modes", [{ParallelizationMode.SYNC}, {ParallelizationMode.THREADING}], ids=["sync", "thread"]
@@ -829,7 +860,11 @@ class TestPlannedWorkerModules:
 
         result = planned_worker_modules(session.engine.execution_planner, self.mp)
 
-        assert result == tuple(sorted({_PYDICT_MODULE, _PYARROW_MODULE}))
+        assert result == tuple(sorted({_PYDICT_MODULE, _PYARROW_MODULE, _MultiCandidateFG.__module__}))
+
+
+def _noop_bootstrap() -> None:
+    return None
 
 
 class TestEnterPrestartsStandbyWorkers:
@@ -861,7 +896,14 @@ class TestEnterPrestartsStandbyWorkers:
         orchestrator.flight_server = None
         return orchestrator
 
-    def test_multiprocessing_enter_prestarts_the_planned_count(self) -> None:
+    @pytest.mark.parametrize(
+        ("bootstrap", "warms_feature_groups"),
+        [(None, True), (_noop_bootstrap, False)],
+        ids=["no_bootstrap", "bootstrap"],
+    )
+    def test_multiprocessing_enter_prestarts_the_planned_count(
+        self, bootstrap: Callable[[], None] | None, warms_feature_groups: bool
+    ) -> None:
         from mloda.core.runtime.worker.multiprocessing_worker import standby_worker
 
         worker_manager = Mock()
@@ -873,10 +915,10 @@ class TestEnterPrestartsStandbyWorkers:
             patch("mloda.core.runtime.run.shared_manager"),
             patch("mloda.core.runtime.run.planned_worker_modules", return_value=("m",)) as mods,
         ):
-            orchestrator.__enter__(modes)
+            orchestrator.__enter__(modes, None, None, None, RunContext(child_bootstrap=bootstrap))
 
         count.assert_called_once_with(orchestrator.execution_planner, modes)
-        mods.assert_called_once_with(orchestrator.execution_planner, modes)
+        mods.assert_called_once_with(orchestrator.execution_planner, modes, feature_groups=warms_feature_groups)
         worker_manager.prestart_workers.assert_called_once_with(3, standby_worker, (("m",),))
 
     def test_prestart_happens_before_the_manager_starts(self) -> None:
@@ -908,7 +950,14 @@ class TestEnterPrestartsStandbyWorkers:
 
         worker_manager.prestart_workers.assert_not_called()
 
-    @pytest.mark.parametrize("preflight", ["raise_on_unpicklable_join_link", "raise_on_unpicklable_step_credentials"])
+    @pytest.mark.parametrize(
+        "preflight",
+        [
+            "raise_on_unpicklable_join_link",
+            "raise_on_unpicklable_step_credentials",
+            "raise_on_unpicklable_step_feature_group",
+        ],
+    )
     def test_failing_preflight_does_not_prestart(self, preflight: str) -> None:
         worker_manager = Mock()
         orchestrator = self._entering(worker_manager)

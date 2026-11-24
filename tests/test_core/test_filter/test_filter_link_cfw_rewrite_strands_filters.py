@@ -224,7 +224,7 @@ def _bare_engine() -> Engine:
     engine.resolved_input_feature_names = {}
     engine.input_feature_columns = {}
     engine._declared_options_by_uuid = {}
-    engine._configured_option_keys_by_uuid = defaultdict(set)
+    engine._configured_option_keys_by_pair = defaultdict(set)
     engine.feature_link_parents = defaultdict(set)
     return engine
 

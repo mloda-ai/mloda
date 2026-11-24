@@ -790,7 +790,7 @@ Planning logs a warning when a context key set on a requested feature does not r
 feature group that declares it as a group option. Pass the key in `Options(group=...)` or list it
 in `cascade_context_keys`; a `group_only` or credential handle key is refused in the context, so
 only the group option works. No warning is logged when the requested feature's own group declares
-the key, or when the input already holds an equal value or one a consumer set for it.
+the key, or when the input already holds an equal value or one the consumer on that path set for it.
 
 Group options remain the choice when the value should be part of feature identity and
 resolution at every level, and a feature group author can pull a key level by level

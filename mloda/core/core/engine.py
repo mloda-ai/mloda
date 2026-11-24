@@ -869,6 +869,11 @@ class Engine:
                 )
                 if survivor is None:
                     raise ValueError(f"Filter feature {match.filter_feature.name} is missing from its group.")
+                if features.child_uuid is not None:
+                    # The twin carries its host's options, so the keys delivered to the host reach it too.
+                    twin_pair = (features.child_uuid, survivor.uuid)
+                    host_keys = self._configured_option_keys_by_pair.get((features.child_uuid, feature.uuid), set())
+                    self._configured_option_keys_by_pair[twin_pair] |= host_keys
                 self.filter_ties.append((feature.uuid, survivor.uuid))
                 # The stored filter needs its own Feature: planner rewrites of the queue twin must not shift its hash.
                 # handle_filter_feature copies via Feature.__copy__, which owns the containers that decide the hash.

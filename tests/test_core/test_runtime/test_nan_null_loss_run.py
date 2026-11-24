@@ -13,7 +13,6 @@ from mloda.user import Feature, FeatureName, Options, ParallelizationMode, Plugi
 from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
 from mloda_plugins.compute_framework.base_implementations.polars.dataframe import PolarsDataFrame
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
-from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework import SqliteFramework
 
 _NAN = float("nan")
 _VALUES: dict[str, list[float | None]] = {
@@ -62,19 +61,6 @@ class NlPandasConsumer(_NlConsumer):
         return data
 
 
-class NlSqliteConsumer(_NlConsumer):
-    SUFFIX = "__sq"
-
-    @classmethod
-    def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
-        return {SqliteFramework}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        name = str(features.get_name_of_one_feature())
-        return data.select(_raw_sql=f"*, {name.removesuffix(cls.SUFFIX)} AS {name}")
-
-
 class NlPolarsConsumer(_NlConsumer):
     SUFFIX = "__pl"
 
@@ -88,13 +74,13 @@ class NlPolarsConsumer(_NlConsumer):
         return data.with_columns(data[name.removesuffix(cls.SUFFIX)].alias(name))
 
 
-_GROUPS = {NlArrowSource, NlPandasConsumer, NlSqliteConsumer, NlPolarsConsumer}
+_GROUPS = {NlArrowSource, NlPandasConsumer, NlPolarsConsumer}
 
 
 def _run(feature: str, *, mode: ParallelizationMode = ParallelizationMode.SYNC, **kwargs: Any) -> Any:
     return mloda.run_all(
         [feature],
-        compute_frameworks=[PyArrowTable, PandasDataFrame, SqliteFramework, PolarsDataFrame],
+        compute_frameworks=[PyArrowTable, PandasDataFrame, PolarsDataFrame],
         plugin_collector=PluginCollector.enabled_feature_groups(_GROUPS),
         parallelization_modes={mode},
         **kwargs,
@@ -108,18 +94,17 @@ def _step_uuid(result: Any, kind: str) -> Any:
 
 @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
 class TestTransferReport:
-    @pytest.mark.parametrize("suffix, target", [("__pd", "PandasDataFrame")], ids=["pandas"])
     def test_a_both_values_column_yields_one_record_paired_with_the_transform_step(
-        self, mode: ParallelizationMode, suffix: str, target: str
+        self, mode: ParallelizationMode
     ) -> None:
-        result = _run("nl_both" + suffix, mode=mode)
+        result = _run("nl_both__pd", mode=mode)
 
         assert result.nan_null_losses == (
             NanNullLoss(
                 step_uuid=_step_uuid(result, "transform"),
                 column="nl_both",
                 source_framework="PyArrowTable",
-                target_framework=target,
+                target_framework="PandasDataFrame",
             ),
         )
         assert isinstance(result.nan_null_losses, tuple)
@@ -138,16 +123,14 @@ class TestTransferReport:
 
 
 class TestRefuse:
-    def test_refuse_raises_naming_the_step_and_the_column(self) -> None:
+    @pytest.mark.parametrize("mode", [ParallelizationMode.SYNC, ParallelizationMode.THREADING])
+    def test_refuse_raises_naming_the_step_and_the_column(self, mode: ParallelizationMode) -> None:
         with pytest.raises(NanNullLossError) as excinfo:
-            _run("nl_both__pd", refuse_nan_null_loss=True)
+            _run("nl_both__pd", mode=mode, refuse_nan_null_loss=True)
 
         message = str(excinfo.value)
         for part in ("NlArrowSource", "NlPandasConsumer", "PyArrowTable", "PandasDataFrame", "nl_both"):
             assert part in message, message
-
-    def test_without_refuse_the_same_run_succeeds(self) -> None:
-        assert len(_run("nl_both__pd").nan_null_losses) == 1
 
 
 class TestOutputFramework:

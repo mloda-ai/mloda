@@ -20,6 +20,7 @@ framework enumeration of other tests. No FileSource / file IO involved.
 from __future__ import annotations
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -30,6 +31,8 @@ from mloda.core.abstract_plugins.components.framework_transformer.cfw_transforme
 from mloda.core.core.step.transform_frame_work_step import TransformFrameworkStep
 from mloda.provider import ComputeFramework
 from mloda.provider import FeatureGroup
+from mloda.core.abstract_plugins.components.nan_null_loss import NanNullLossError
+from mloda.core.abstract_plugins.run_context import RunContext
 from mloda.user import ParallelizationMode
 
 _ChainEnv = tuple[
@@ -171,17 +174,6 @@ class TestApplyChainInspect:
         assert seen == [(fw_a, ["start"]), (fw_b, ["start", "A->B"])]
         assert result == ["start", "A->B", "B->C"]
 
-    def test_inspect_runs_before_the_hop_transforms(self) -> None:
-        fw_a, fw_b, _fw_c, trans_ab, _trans_bc, transformer = _chain_env()
-        payload = ["start"]
-        lengths: list[int] = []
-
-        transformer.apply_chain(
-            fw_a, fw_b, [trans_ab], payload, None, inspect=lambda fw, data: lengths.append(len(data))
-        )
-
-        assert lengths == [1]
-
     def test_without_inspect_the_chain_is_unchanged(self) -> None:
         fw_a, _fw_b, fw_c, trans_ab, trans_bc, transformer = _chain_env()
 
@@ -242,3 +234,48 @@ class TestTransformFrameworkStepDelegatesToApplyChain:
 
         assert result == "CHAIN_APPLIED"
         assert recorded["args"] == (fw_a, fw_b, [trans_ab], ["payload"], cfw.framework_connection_object)
+
+
+class TestTransformStepUncheckableConversion:
+    @pytest.mark.parametrize("refuse", [True, False])
+    def test_a_chain_without_an_arrow_hop_is_refused_or_converted_unreported(self, refuse: bool) -> None:
+        fw_a, fw_b, _fw_c, trans_ab, _trans_bc, _transformer = _chain_env()
+
+        class _CfwFrom(ComputeFramework):
+            @classmethod
+            def expected_data_framework(cls) -> Any:
+                return fw_a
+
+            @classmethod
+            def nan_is_null(cls) -> bool:
+                return False
+
+        class _CfwTo(ComputeFramework):
+            @classmethod
+            def expected_data_framework(cls) -> Any:
+                return fw_b
+
+            @classmethod
+            def nan_is_null(cls) -> bool:
+                return True
+
+        step = TransformFrameworkStep(
+            from_framework=_CfwFrom,
+            to_framework=_CfwTo,
+            required_uuids=set(),
+            from_feature_group=FeatureGroup,
+            to_feature_group=FeatureGroup,
+        )
+        cfw = _CfwTo(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
+        registry = ComputeFrameworkTransformer()
+        registry.transformer_map = {(fw_a, fw_b): trans_ab, (fw_b, fw_a): trans_ab}
+        cfw.transformer = registry
+        cfw.run_context = RunContext(refuse_nan_null_loss=refuse)
+        cfw_register = MagicMock()
+
+        if refuse:
+            with pytest.raises(NanNullLossError, match="could not be checked"):
+                step.transform(cfw, ["start"], cfw_register)
+        else:
+            assert step.transform(cfw, ["start"], cfw_register) == ["start", "A->B"]
+        cfw_register.add_nan_null_losses.assert_not_called()

@@ -723,6 +723,16 @@ class TestAmbiguousSources:
         assert pair is not None
         assert pair[1] == SourceMatch(source="h2:toy", access=None)
 
+    def test_a_handle_request_and_a_plain_request_for_one_column_both_plan(self) -> None:
+        requests: list[Feature | str] = [Feature(COL, Options(context={"data_access_handle": "h1"})), COL]
+        result = mloda.run_all(
+            requests,
+            compute_frameworks=[PyArrowTable],
+            plugin_collector=PluginCollector.enabled_feature_groups({ToySourceFG}),
+            data_access_collection=toy_dac(h1={COL: [1]}),
+        )
+        assert [column_values([table], COL) for table in result] == [[1]] * len(result)
+
 
 class TestSubclassTakeover:
     def test_subclass_wins_and_records_its_own_pair(self) -> None:

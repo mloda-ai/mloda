@@ -207,30 +207,14 @@ def test_every_probe_is_recorded_including_the_empty_one(caplog: pytest.LogCaptu
     assert snapshot.probe_entries.get(FSP_ACCEPT) == (1,), f"the accepting probe must record its filter: {snapshot!r}"
 
 
-def test_two_features_of_one_name_with_differing_context_are_rejected(caplog: pytest.LogCaptureFixture) -> None:
-    """One name requested with two context modes is rejected at resolution."""
+@pytest.mark.parametrize("declare_mode_key", [False, True], ids=["undeclared", "declared"])
+def test_two_features_of_one_name_with_differing_context_are_rejected(
+    caplog: pytest.LogCaptureFixture, declare_mode_key: bool
+) -> None:
+    """One name requested with two context modes is rejected, declared key or not."""
     same_name: list[Feature | str] = [Feature(FSP_SAME, _options("a")), Feature(FSP_SAME, _options("b"))]
     with pytest.raises(ValueError, match=rf"{FSP_SAME}.*{FSP_MODE_KEY}"):
-        _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog)
-
-
-def test_two_twins_with_a_declared_exempt_key_share_one_set_and_report_the_decline(
-    caplog: pytest.LogCaptureFixture,
-) -> None:
-    """A group declaring the mode key keeps the twins legal; the declining twin is reported once."""
-    same_name: list[Feature | str] = [Feature(FSP_SAME, _options("a")), Feature(FSP_SAME, _options("b"))]
-    snapshot = _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog, declare_mode_key=True)
-
-    assert len(snapshot.set_shapes) == 1, f"the two twins must share one feature set: {snapshot.set_shapes}"
-    assert snapshot.set_shapes[0].count(FSP_SAME) == 2, (
-        f"both twins must be planned into that set: {snapshot.set_shapes}"
-    )
-    assert len(snapshot.warnings) == 1, (
-        f"the declining twin of one name must be reported exactly once: {snapshot.warnings}, probes {snapshot!r}"
-    )
-    message = snapshot.warnings[0]
-    assert FSP_SAME in message, f"the warning must name the diverging feature: {message}"
-    assert FSP_FILTER in message, f"the warning must name the filter feature: {message}"
+        _run(same_name, (FSP_SAME,), _filter_on_fsp(), caplog, declare_mode_key=declare_mode_key)
 
 
 def _cross_run_warnings(caplog: pytest.LogCaptureFixture) -> tuple[tuple[str, ...], tuple[str, ...]]:

@@ -1148,7 +1148,7 @@ def test_the_nan_key_is_true_on_a_marked_transform_and_absent_on_an_unmarked_one
     [
         pytest.param({}, False, id="plain"),
         pytest.param({"compute_framework": PyArrowTable, "result_framework": PandasDataFrame}, True, id="converted"),
-        pytest.param({"_neutral": True}, True, id="neutral"),
+        pytest.param({"_neutral": True}, False, id="neutral"),
     ],
 )
 def test_the_nan_key_is_true_on_a_marked_compute_record_and_absent_otherwise(

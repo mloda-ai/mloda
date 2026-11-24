@@ -44,11 +44,13 @@ When the group does not list the variant, the line ends `which MyOperationFG.VAR
 
 ## Frameworks that hold NaN as null
 
-`ComputeFramework.nan_is_null()` declares that a framework cannot tell NaN from null (Pandas and SQLite return `True`, every other shipped framework `False`). The plan marks `potential_nan_null_loss` on a step where data that can hold both moves onto such a framework: a transform, a requested result conversion, or a neutral source load. A join step is never marked; the transform into its destination carries it. The mark is advisory: nothing is rerouted and no `allow_variants` is needed.
+`ComputeFramework.nan_is_null()` declares that a framework cannot tell NaN from null (Pandas and SQLite return `True`, every other shipped framework `False`). The plan marks `potential_nan_null_loss` on a transfer or a requested result conversion onto such a framework. A join step is never marked; the transform into its destination carries it. A source load is not marked either: a load is where the data is born, and the plan cannot tell whether the source held both values. The mark is advisory: nothing is rerouted and no `allow_variants` is needed.
 
-It replaces the operation records whose only reason is that the framework cannot tell NaN from null (NaN and null merged as partition keys, tied in `order_by`, NaN skipped because it is null), registered as `nan_as_null` variants. Records for operation-level choices, such as Pandas `sum` skipping NaN, stay. Until the registry retires the old records, the fact is stated twice.
+The declaration replaces a `nan_as_null` operation record when the operation has no choice about it, because the framework itself cannot hold NaN apart from null: NaN and null merging as partition or group keys, tying in `order_by`, or being treated as the same missing value in fill, offset and smoothing operations, and SQLite aggregates skipping NaN because sqlite3 stores it as NULL. A record stays when it describes a choice the operation could change, such as Pandas aggregates skipping NaN through `skipna`. Until the registry retires the old records, the fact is stated twice.
 
-mloda's transfers into Pandas produce float64, which folds NaN and null. A Pandas frame built by the user with nullable `Float64` can still hold both, so a Pandas to SQLite transfer is not marked.
+Known gap: Pandas is declared as folding NaN into null because mloda's transfers into it produce float64. A user-built nullable `Float64` frame moving to SQLite loses the distinction without a mark.
+
+The service `lineage` field is a feature graph and carries no mark; OpenLineage consumers read the `PlanStep` property.
 
 ## Upgrading
 

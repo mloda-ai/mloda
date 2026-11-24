@@ -147,6 +147,14 @@ from mloda_plugins.feature_group.input_data.file_formats.parquet_fg import Parqu
 # ---------------------------------------------------------------------------
 
 
+class _TruthyNanFramework(PyArrowTable):
+    """A plugin whose nan_is_null returns a truthy non-bool."""
+
+    @classmethod
+    def nan_is_null(cls) -> bool:
+        return 1  # type: ignore[return-value]
+
+
 class PlanInfoPandasSource(DataCreatorFeatureGroup):
     """Pandas root source feeding the chained aggregation request."""
 
@@ -2565,18 +2573,20 @@ class TestTransformStepMapping:
         assert plan[-1].step_kind == "compute"
         assert plan[-1].implementation is PandasAggregation
 
-    def test_a_real_pyarrow_to_pandas_transform_is_marked(self) -> None:
-        session = mloda.prepare(
-            [Feature("plan_info_arrow_sales__mean_aggr", implementation=PandasAggregation)],
-            compute_frameworks=[PandasDataFrame, PyArrowTable],
-            plugin_collector=_TRANSFORM_PLUGINS,
-        )
+    def test_a_real_requested_result_conversion_is_marked_and_a_plain_pyarrow_compute_is_not(self) -> None:
+        def compute_step(**options: Any) -> PlanStep:
+            plan = mloda.explain(
+                ["plan_info_arrow_sales"],
+                compute_frameworks=[PandasDataFrame, PyArrowTable],
+                plugin_collector=_TRANSFORM_PLUGINS,
+                **options,
+            )
+            (step,) = [s for s in plan if s.step_kind == "compute"]
+            assert step.compute_framework is PyArrowTable
+            return step
 
-        plan = session.resolved_plan()
-
-        transform = next(step for step in plan if step.step_kind == "transform")
-        assert transform.potential_nan_null_loss is True
-        assert all(step.potential_nan_null_loss is False for step in plan if step.step_kind == "compute")
+        assert compute_step(output_framework=PandasDataFrame).potential_nan_null_loss is True
+        assert compute_step().potential_nan_null_loss is False
 
     @pytest.mark.parametrize(
         ("kind", "framework", "source", "result", "neutral", "expected"),
@@ -2587,6 +2597,7 @@ class TestTransformStepMapping:
             ("transform", SqliteFramework, PandasDataFrame, None, False, False),
             ("transform", PandasDataFrame, SqliteFramework, None, False, False),
             ("transform", PyArrowTable, PandasDataFrame, None, False, False),
+            ("transform", _TruthyNanFramework, PyArrowTable, None, False, True),
             ("transform", PandasDataFrame, PandasDataFrame, None, False, False),
             ("transform", PyArrowTable, PyArrowTable, None, False, False),
             ("compute", PyArrowTable, None, PandasDataFrame, False, True),
@@ -2595,8 +2606,8 @@ class TestTransformStepMapping:
             ("compute", PandasDataFrame, None, PandasDataFrame, False, False),
             ("compute", SqliteFramework, None, PandasDataFrame, False, False),
             ("compute", PandasDataFrame, None, None, False, False),
-            ("compute", PandasDataFrame, None, None, True, True),
-            ("compute", SqliteFramework, None, None, True, True),
+            ("compute", PandasDataFrame, None, None, True, False),
+            ("compute", SqliteFramework, None, None, True, False),
             ("compute", PyArrowTable, None, None, True, False),
             ("join", PandasDataFrame, PyArrowTable, None, False, False),
             ("join", PyArrowTable, PandasDataFrame, None, False, False),

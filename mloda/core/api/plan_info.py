@@ -45,9 +45,9 @@ if TYPE_CHECKING:
     from mloda.core.prepare.resolved_join import ResolvedJoin, ResolvedJoinPlan
 
 
-def nan_null_loss(source: "type[ComputeFramework] | None", target: "type[ComputeFramework] | None") -> bool:
+def _nan_null_loss(source: "type[ComputeFramework] | None", target: "type[ComputeFramework] | None") -> bool:
     """True when the target folds NaN into null and the source does not."""
-    return source is not None and target is not None and not source.nan_is_null() and target.nan_is_null()
+    return source is not None and target is not None and not bool(source.nan_is_null()) and bool(target.nan_is_null())
 
 
 @dataclass(frozen=True)
@@ -136,7 +136,7 @@ class PlanStep:
     ``feature_group_version``, ``feature_group_hash``: excluded from equality.
 
     ``potential_nan_null_loss`` is a derived property: True when data that can hold NaN and null moves onto a
-    framework that folds them (a transform, a result conversion or a neutral load); never for join steps.
+    framework that folds them (a transform or a requested result conversion); never for join steps or source loads.
     """
 
     step_kind: Literal["compute", "join", "transform"]
@@ -218,11 +218,9 @@ class PlanStep:
     @property
     def potential_nan_null_loss(self) -> bool:
         if self.step_kind == "transform":
-            return nan_null_loss(self.source_compute_framework, self.compute_framework)
+            return _nan_null_loss(self.source_compute_framework, self.compute_framework)
         if self.step_kind == "compute":
-            if self.result_framework is not None and nan_null_loss(self.compute_framework, self.result_framework):
-                return True
-            return self._neutral and self.compute_framework is not None and self.compute_framework.nan_is_null()
+            return _nan_null_loss(self.compute_framework, self.result_framework)
         return False
 
     @property

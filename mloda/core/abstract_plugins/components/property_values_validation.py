@@ -53,6 +53,9 @@ def _rejection(key: str, spec: PropertySpec, value: Any, options: Options) -> st
             return "is required but absent" if verdict else None
         return "is required but absent" if is_no_default(spec.default) else None
 
+    if spec.scalar and isinstance(value, (list, tuple, set, frozenset, Mapping)):
+        return "must be a scalar"
+
     if not spec.strict_validation:
         return None
 

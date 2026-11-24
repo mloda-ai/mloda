@@ -45,6 +45,7 @@ PROPERTY_MAPPING = {
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
 | `forward_to_inputs` | `bool` | `True` | `False`: input features do not inherit the key unless an explicit `forward_group` allowlist names it. Context is unaffected. |
 | `group_only` | `bool` | `False` | `True`: the key is a group option and a caller placing it in `Options(context=...)` is refused at plan time. Requires `context=False`. |
+| `scalar` | `bool` | `False` | `validate_property_values` rejects container values for this key, independently of `strict_validation`. Container defaults are refused at construction. |
 
 A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `group_only=True` key is refused in the context the same way. A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
 
@@ -147,9 +148,10 @@ matches by name and input data, so its `PROPERTY_MAPPING` is enforced on the raw
 credentials dict, against a `PropertySpec` mapping. It raises `PropertyValidationError` (a `ValueError` with `key`
 and `reason`) on the first failure.
 
-- It checks required presence, `required_when`, and strict values.
+- It checks required presence, `required_when`, scalar shape, and strict values.
 - `required_when` runs only when the key is absent.
-- Ignored: `match_guard`, `deferred_binding`, and `context`. A caller that must reject a collection checks the value's shape itself.
+- `scalar=True` rejects lists, tuples, sets, frozensets and any `Mapping`, including empty containers, before element validation even when `strict_validation=False`. Strings and bytes remain scalars. Required presence and `allow_explicit_none` still apply. The default `scalar=False` keeps element-wise validation.
+- Ignored: `match_guard`, `deferred_binding`, and `context`.
 - `closed_world=True` rejects undeclared keys; `False` ignores them.
 - Defaults are never applied: `required_when` receives an `Options` of the raw values, unlike on a feature group.
 - Errors and logs never contain a value.

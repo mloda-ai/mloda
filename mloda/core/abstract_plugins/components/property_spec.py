@@ -103,6 +103,7 @@ class PropertySpec:
     runtime: bool = False
     # A group option a caller may not move to the context; refused at plan time.
     group_only: bool = False
+    scalar: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -157,6 +158,9 @@ class PropertySpec:
         if self.group_only and self.context:
             raise ValueError(f"{prefix}: group_only=True requires context=False.")
 
+        if not isinstance(self.scalar, bool):
+            raise ValueError(f"{prefix}: scalar must be a bool, got {type(self.scalar).__name__}.")
+
         if self.runtime:
             if not self.context:
                 raise ValueError(f"{prefix}: runtime=True requires context=True.")
@@ -208,11 +212,10 @@ class PropertySpec:
             )
 
     def _check_declared_default(self, prefix: str) -> None:
-        """A strict spec's declared default must be within its own value space (issue #530 semantics).
+        """A declared default must satisfy scalar shape and, when strict, the key's value space."""
+        if self.scalar and isinstance(self.default, (list, tuple, set, frozenset, Mapping)):
+            raise ValueError(f"{prefix}: scalar=True requires a scalar default.")
 
-        ``NO_DEFAULT`` declares no default, and a declared ``None`` applies no value: neither has
-        anything to check.
-        """
         if is_no_default(self.default) or self.default is None or not self.strict_validation:
             return
 
@@ -283,6 +286,7 @@ def property_spec(
     forward_to_inputs: bool = True,
     runtime: bool = False,
     group_only: bool = False,
+    scalar: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -302,6 +306,7 @@ def property_spec(
         forward_to_inputs=forward_to_inputs,
         runtime=runtime,
         group_only=group_only,
+        scalar=scalar,
     )
 
 

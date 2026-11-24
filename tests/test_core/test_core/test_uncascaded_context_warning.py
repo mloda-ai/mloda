@@ -247,7 +247,37 @@ class UncascadedCtxTwoRoots(UncascadedCtxConsumer):
         return {Feature(GROUP_ROOT), Feature(UNUSED_ROOT)}
 
 
+DIAMOND = "uncascaded_ctx_diamond"
+TWIN_A = "uncascaded_ctx_twin_a"
+TWIN_B = "uncascaded_ctx_twin_b"
+TWIN_VALUE = "TWIN_GROUP_VALUE"
+
+
+class UncascadedCtxDiamond(UncascadedCtxConsumer):
+    INPUTS = {DIAMOND: DEFAULT_OVERRIDE}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any]:
+        return {Feature(DEFAULT_OVERRIDE), Feature(DEFAULT_CONSUMER)}
+
+
+class UncascadedCtxTwinA(UncascadedCtxConsumer):
+    INPUTS = {TWIN_A: FILTER_ROOT}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any]:
+        return {Feature(FILTER_ROOT, Options(group={KEY: TWIN_VALUE}))}
+
+
+class UncascadedCtxTwinB(UncascadedCtxConsumer):
+    INPUTS = {TWIN_B: FILTER_COL}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Any]:
+        return {Feature(FILTER_COL, Options(group={KEY: TWIN_VALUE}))}
+
+
 GROUPS: set[type[FeatureGroup]] = {
+    UncascadedCtxDiamond,
+    UncascadedCtxTwinA,
+    UncascadedCtxTwinB,
     UncascadedCtxTwoRoots,
     UncascadedCtxPlainRoot,
     UncascadedCtxGroupRoot,
@@ -550,6 +580,45 @@ def test_direct_request_with_an_explicit_key_does_not_silence_a_lost_key(
     _assert_warning(caplog, [DEFAULT_CONSUMER], [UncascadedCtxDefaultRoot])
 
 
+@pytest.mark.parametrize("override_first", [False, True], ids=["consumer-first", "override-first"])
+def test_one_consumer_delivering_does_not_hide_the_other_on_a_merged_input(
+    override_first: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    override = Feature(DEFAULT_OVERRIDE, Options(context={KEY: PRIVATE_VALUE}))
+    consumer = Feature(DEFAULT_CONSUMER, Options(context={KEY: PRIVATE_VALUE}))
+    with caplog.at_level(logging.WARNING):
+        engine = _prepare([override, consumer] if override_first else [consumer, override])
+    root = _feature(engine, DEFAULT_ROOT)
+    assert engine.feature_link_parents[_feature(engine, DEFAULT_OVERRIDE).uuid] == {root.uuid}
+    assert engine.feature_link_parents[_feature(engine, DEFAULT_CONSUMER).uuid] == {root.uuid}
+    _assert_warning(caplog, [DEFAULT_CONSUMER], [UncascadedCtxDefaultRoot])
+
+
+def test_diamond_consumer_over_a_merged_input_still_warns_once(caplog: pytest.LogCaptureFixture) -> None:
+    with caplog.at_level(logging.WARNING):
+        _prepare([Feature(DIAMOND, Options(context={KEY: PRIVATE_VALUE}))])
+    _assert_warning(caplog, [DIAMOND], [UncascadedCtxDefaultRoot])
+
+
+def test_consumer_side_merge_keeps_the_delivery_of_a_pinned_self_filter(caplog: pytest.LogCaptureFixture) -> None:
+    global_filter = GlobalFilter()
+    pinned = Feature(DEFAULT_OVERRIDE, compute_framework=PythonDictFramework.get_class_name())
+    global_filter.add_filter(pinned, FilterType.MIN, {"value": 1})
+    requests = [Feature(DEFAULT_OVERRIDE, Options(context={KEY: PRIVATE_VALUE}))]
+    with (
+        caplog.at_level(logging.WARNING),
+        patch.object(Engine, "_merge_host_into", autospec=True, side_effect=Engine._merge_host_into) as merge_host,
+    ):
+        _prepare(requests, broader_frameworks=True, global_filter=global_filter)
+    consumer_folds = [
+        call
+        for call in merge_host.call_args_list
+        if str(call.args[1].name) == str(call.args[2].name) == DEFAULT_OVERRIDE
+    ]
+    assert len(consumer_folds) == 1, "The consumer-side narrowing merge must run"
+    assert _context_warnings(caplog) == []
+
+
 @pytest.mark.parametrize("requested", [PARTIAL_DELIVERY, PARTIAL_DEFAULT])
 def test_delivery_to_one_branch_does_not_hide_the_other(requested: str, caplog: pytest.LogCaptureFixture) -> None:
     joined_source = UncascadedCtxUnusedRoot if requested == PARTIAL_DELIVERY else UncascadedCtxDefaultRoot
@@ -652,3 +721,16 @@ def test_global_filter_injected_feature_does_not_hide_the_input_walk(
         assert _warnings(caplog) == []
     else:
         _assert_warning(caplog, [FILTER_CONSUMER], [UncascadedCtxFilterRoot])
+
+
+@pytest.mark.parametrize("twin_first", [True, False], ids=["b-first", "a-first"])
+def test_global_filter_twin_deduped_into_another_consumers_input_is_quiet(
+    twin_first: bool, caplog: pytest.LogCaptureFixture
+) -> None:
+    global_filter = GlobalFilter()
+    global_filter.add_filter(FILTER_COL, FilterType.MIN, {"value": 1})
+    consumer_a = Feature(TWIN_A, Options(context={KEY: PRIVATE_VALUE}))
+    consumer_b = Feature(TWIN_B)
+    with caplog.at_level(logging.WARNING):
+        _prepare([consumer_b, consumer_a] if twin_first else [consumer_a, consumer_b], global_filter=global_filter)
+    assert _context_warnings(caplog) == []

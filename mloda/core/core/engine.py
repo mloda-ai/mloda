@@ -171,8 +171,8 @@ class Engine:
         self._intake_options_memo: dict[tuple[type[FeatureGroup], int, Any], tuple[Options, Options]] = {}
         # Declared (pre-default) options per uuid for the default-equivalent merge warning; injected twins record none.
         self._declared_options_by_uuid: dict[UUID, Options] = {}
-        # Pre-default key presence across merged declarations, for context delivery diagnostics only.
-        self._configured_option_keys_by_uuid: dict[UUID, set[str]] = defaultdict(set)
+        # Pre-default key presence per (consumer, input) pair, for context delivery diagnostics only.
+        self._configured_option_keys_by_pair: dict[tuple[UUID, UUID], set[str]] = defaultdict(set)
         # Per feature uuid, _handle_input_features_recursion's result (None: root; injected filter/index: no entry).
         self.resolved_input_feature_names: dict[UUID, frozenset[str] | None] = {}
         # Per feature uuid, the sorted columns its declared inputs bind to in the incoming data.
@@ -533,21 +533,20 @@ class Engine:
         input_groups: set[str] = set()
         refused: set[str] = set()
         for group, feature, keys in candidates:
-            pending = list(self.feature_link_parents.get(feature.uuid, ()))
-            seen = {feature.uuid}
+            pending = [(feature.uuid, parent) for parent in self.feature_link_parents.get(feature.uuid, ())]
+            seen: set[tuple[UUID, UUID]] = set()
             while pending:
-                uuid = pending.pop()
-                if uuid in seen:
+                pair = pending.pop()
+                if pair in seen:
                     continue
-                seen.add(uuid)
+                seen.add(pair)
+                uuid = pair[1]
                 input_group, input_feature = resolved[uuid]
                 candidate_keys = keys & group_scoped_keys(input_group).keys()
                 if candidate_keys:
-                    configured = self._configured_option_keys_by_uuid.get(uuid, ())
+                    configured = self._configured_option_keys_by_pair.get(pair, ())
                     restricted = group_only_keys(input_group).keys() | credential_handle_keys(input_group)
                 for key in candidate_keys:
-                    # Keys set through any consumer are unioned per merged feature, so one consumer's setting
-                    # silences every path to that input.
                     if key in configured:
                         continue
                     if key in input_feature.options and _deep_equal(
@@ -559,7 +558,7 @@ class Engine:
                     input_groups.add(input_group.get_class_name())
                     if key in restricted:
                         refused.add(key)
-                pending.extend(self.feature_link_parents.get(uuid, ()))
+                pending.extend((uuid, parent) for parent in self.feature_link_parents.get(uuid, ()))
         if not missing:
             return
         remedies = []
@@ -870,6 +869,11 @@ class Engine:
                 )
                 if survivor is None:
                     raise ValueError(f"Filter feature {match.filter_feature.name} is missing from its group.")
+                if features.child_uuid is not None:
+                    # The twin carries its host's options, so the keys delivered to the host reach it too.
+                    twin_pair = (features.child_uuid, survivor.uuid)
+                    host_keys = self._configured_option_keys_by_pair.get((features.child_uuid, feature.uuid), set())
+                    self._configured_option_keys_by_pair[twin_pair] |= host_keys
                 self.filter_ties.append((feature.uuid, survivor.uuid))
                 # The stored filter needs its own Feature: planner rewrites of the queue twin must not shift its hash.
                 # handle_filter_feature copies via Feature.__copy__, which owns the containers that decide the hash.
@@ -1295,9 +1299,13 @@ class Engine:
         declared = self._declared_options_by_uuid.pop(host.uuid, None)
         if declared is not None:
             self._declared_options_by_uuid.setdefault(existing.uuid, declared)
-        self._configured_option_keys_by_uuid[existing.uuid].update(
-            self._configured_option_keys_by_uuid.pop(host.uuid, ())
-        )
+        for pair in [p for p in self._configured_option_keys_by_pair if host.uuid in p]:
+            pair_keys = self._configured_option_keys_by_pair.pop(pair)
+            mapped = (
+                existing.uuid if pair[0] == host.uuid else pair[0],
+                existing.uuid if pair[1] == host.uuid else pair[1],
+            )
+            self._configured_option_keys_by_pair[mapped].update(pair_keys)
         host_parents = self.feature_link_parents.pop(host.uuid, set())
         self.feature_link_parents[existing.uuid] |= host_parents - {existing.uuid}
         for parents in self.feature_link_parents.values():
@@ -1394,7 +1402,7 @@ class Engine:
             if not (if_index_feature or engine_injected):
                 self._declared_options_by_uuid[feature.uuid] = declared_options
                 if child_uuid is not None:
-                    self._configured_option_keys_by_uuid[feature.uuid].update(declared_options)
+                    self._configured_option_keys_by_pair[(child_uuid, feature.uuid)].update(declared_options)
             if specialized_from:
                 self.specialized_from[feature.uuid] = specialized_from
             return True
@@ -1434,7 +1442,7 @@ class Engine:
                 # The first request to reach an engine-injected index or filter twin becomes its declaration.
                 self._declared_options_by_uuid.setdefault(existing_feature.uuid, declared_options)
                 if child_uuid is not None:
-                    self._configured_option_keys_by_uuid[existing_feature.uuid].update(declared_options)
+                    self._configured_option_keys_by_pair[(child_uuid, existing_feature.uuid)].update(declared_options)
                 self._warn_on_default_equivalent_merge(feature, declared_options, existing_feature)
             # Propagate the requested flag: filter twins must not displace requested output columns (issue #712).
             if feature.initial_requested_data and not existing_feature.initial_requested_data:

@@ -25,7 +25,12 @@ from mloda.core.core.cfw_manager import CfwManager
 from mloda.core.core.step.join_step import JoinStep
 from mloda.core.runtime.mp_context import mp_start_context
 from mloda.core.runtime.worker import multiprocessing_worker as worker_module
-from mloda.core.runtime.worker.multiprocessing_worker import _close_extenders, _execute_command, worker
+from mloda.core.runtime.worker.multiprocessing_worker import (
+    _close_extenders,
+    _execute_command,
+    standby_worker,
+    worker,
+)
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 
 
@@ -137,6 +142,16 @@ class _ChainedLeakRaisingCommand:
 _WORKER_LOGGER_NAME = "mloda.core.runtime.worker.multiprocessing_worker"
 
 _BASE_ERRORS = pytest.mark.parametrize("error", [RuntimeError, SystemExit, KeyboardInterrupt])
+
+
+class TestStandbyWorkerWarmModules:
+    def test_a_module_that_fails_to_import_is_skipped(self) -> None:
+        q: Any = queue.Queue()
+        q.put("STOP")
+
+        standby_worker(q, q, ("mloda_no_such_module_for_standby_warm", "json"))
+
+        assert q.empty()
 
 
 class TestWorkerSetsWorkerIndexBeforeTheCommandLoop:

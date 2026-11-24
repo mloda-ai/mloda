@@ -56,7 +56,10 @@ def standby_worker(
 ) -> None:
     """Pre-warm the given modules, then wait to be bound to a cfw and run `worker`."""
     for module in warm_modules:
-        importlib.import_module(module)
+        try:
+            importlib.import_module(module)
+        except ImportError:
+            logger.debug("Standby could not pre-warm module %s", module)
     ComputeFrameworkTransformer()  # loads the light transformer files and those of the warmed modules
     while True:
         try:

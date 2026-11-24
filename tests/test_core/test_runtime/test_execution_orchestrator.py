@@ -761,12 +761,14 @@ class _MultiCandidateFG(DataCreatorFeatureGroup):
 
 
 class TestPlannedWorkerModules:
-    """planned_worker_modules lists the cfw modules a MULTIPROCESSING worker may need."""
+    """planned_worker_modules lists the cfw and feature group modules a MULTIPROCESSING worker may need."""
 
     mp = {ParallelizationMode.MULTIPROCESSING}
 
     def test_chain_plan_yields_the_python_dict_module(self) -> None:
-        assert planned_worker_modules(_chain_plan(), self.mp) == (_PYDICT_MODULE,)
+        assert planned_worker_modules(_chain_plan(), self.mp) == tuple(
+            sorted({_PYDICT_MODULE, _ChainChildFG.__module__})
+        )
 
     def test_side_path_plan_yields_the_modules_of_both_transfer_sides(self) -> None:
         plan = _side_path_prepare(
@@ -783,9 +785,9 @@ class TestPlannedWorkerModules:
 
         result = planned_worker_modules(plan, self.mp)
 
-        assert result == tuple(
-            sorted(expected | {s.compute_framework.__module__ for s in plan if isinstance(s, FeatureGroupStep)})
-        )
+        fg_steps = [s for s in plan if isinstance(s, FeatureGroupStep)]
+        expected |= {s.compute_framework.__module__ for s in fg_steps} | {s.feature_group.__module__ for s in fg_steps}
+        assert result == tuple(sorted(expected))
 
     def test_transfer_and_join_steps_outside_any_feature_group_step_are_included(self) -> None:
         def _fw(module: str) -> type:
@@ -829,7 +831,25 @@ class TestPlannedWorkerModules:
 
         result = planned_worker_modules(session.engine.execution_planner, self.mp)
 
-        assert result == tuple(sorted({_PYDICT_MODULE, _PYARROW_MODULE}))
+        assert result == tuple(sorted({_PYDICT_MODULE, _PYARROW_MODULE, _MultiCandidateFG.__module__}))
+
+    def test_feature_group_modules_a_child_cannot_import_are_skipped(self) -> None:
+        class _LocalFG(DataCreatorFeatureGroup):
+            __module__ = "fake.module_of_a_local_fg"
+
+        main_fg = type("MainFG", (DataCreatorFeatureGroup,), {"__module__": "__main__"})
+        steps = []
+        for fg in (_MultiCandidateFG, _LocalFG, main_fg):
+            step = Mock(spec=FeatureGroupStep)
+            step.get_parallelization_mode.return_value = {ParallelizationMode.MULTIPROCESSING}
+            step.compute_framework = PythonDictFramework
+            step.feature_group = fg
+            step.features = Mock(features=[])
+            steps.append(step)
+
+        result = planned_worker_modules(ReiterablePlan(*steps), self.mp)
+
+        assert result == tuple(sorted({_PYDICT_MODULE, _MultiCandidateFG.__module__}))
 
 
 class TestEnterPrestartsStandbyWorkers:

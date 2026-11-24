@@ -127,20 +127,31 @@ def planned_worker_count(execution_plan: Any, register_modes: set[Parallelizatio
 
 
 def planned_worker_modules(execution_plan: Any, register_modes: set[ParallelizationMode]) -> tuple[str, ...]:
-    """Cfw modules a standby warms: every framework class the plan's multiprocessing steps ship to a worker."""
+    """Modules a standby warms: every framework and feature group class the plan's multiprocessing steps ship.
+
+    Classes a child cannot import by module name (``__main__``, locally defined) are skipped.
+    """
     classes: list[Any] = []
     for step in execution_plan:
         if not runs_in_worker(register_modes, step.get_parallelization_mode()):
             continue
         if isinstance(step, FeatureGroupStep):
-            classes.append(step.compute_framework)
+            classes.extend((step.compute_framework, step.feature_group))
             for feature in step.features.features:
                 classes.extend(feature.compute_frameworks or ())
         elif isinstance(step, TransformFrameworkStep):
             classes.extend((step.from_framework, step.to_framework))
         elif isinstance(step, JoinStep):
             classes.extend((step.source_framework, step.destination_framework))
-    return tuple(sorted({cls.__module__ for cls in classes if cls is not None}))
+    return tuple(
+        sorted(
+            {
+                cls.__module__
+                for cls in classes
+                if cls is not None and cls.__module__ != "__main__" and "<locals>" not in cls.__qualname__
+            }
+        )
+    )
 
 
 class ExecutionOrchestrator:

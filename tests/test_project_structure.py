@@ -40,9 +40,10 @@ class TestContributingFile:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")
         assert "uv" in content, "CONTRIBUTING.md must mention uv as the dependency manager"
 
-    def test_contributing_mentions_tox(self) -> None:
+    def test_contributing_explains_tox_and_its_uv(self) -> None:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")
-        assert "tox" in content, "CONTRIBUTING.md must mention tox as the test runner"
+        assert "tox --version" in content, "CONTRIBUTING.md must say how to check the uv bundled with tox"
+        assert "uv tool upgrade tox" in content, "CONTRIBUTING.md must say how to upgrade the uv bundled with tox"
 
     def test_contributing_mentions_python_version(self) -> None:
         content = _read_text(PROJECT_ROOT / "CONTRIBUTING.md")

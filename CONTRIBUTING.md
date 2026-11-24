@@ -14,7 +14,7 @@ The simplest way to support mloda is to star the repository on GitHub. It costs 
 
 - Python 3.11 or higher (tested on 3.11, 3.12, 3.13, 3.14)
 - [uv](https://docs.astral.sh/uv/) for dependency management (0.12.22 or newer, enforced by `[tool.uv] required-version`)
-- [tox](https://tox.wiki/) as the test runner (installed via uv)
+- [tox](https://tox.wiki/) as the test runner (installed via uv). Its `tox-uv` plugin brings its own uv, which must meet the same minimum (`uv self update` does not touch it): `tox --version` shows it as `with uv==<version>`, and `uv tool upgrade tox` updates it.
 
 ### Local Development Setup
 

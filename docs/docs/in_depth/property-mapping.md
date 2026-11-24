@@ -812,8 +812,9 @@ not split. This isolates per-value results that previously collapsed into one co
 where a single value silently won. Same-named copies that differ in undeclared context keys
 but read the same inputs on one framework are rejected; use the same values,
 `cascade_context_keys`, or a forwarded group option. This also covers root features requested directly more than once
-and declared option keys that the feature name does not bind. Context a consumer pushes
-onto a root input is not checked; declare it with `split_context_keys` to split it.
+and declared option keys that the feature name does not bind. A declared key that the
+name does not bind, pushed by a consumer onto a root input, is not checked; the
+`split_context_keys` marker is what splits it.
 
 ### Previewing the forwarded options
 

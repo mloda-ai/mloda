@@ -479,7 +479,8 @@ isolated = Feature("knowledge_graph", forward_group=False)
 - Merge directives (`forward_group`, `forward_group_exclude`, `inherit_context_keys`,
   `split_context_keys`) are not part of `Feature` identity, so declare at most one child
   per upstream feature name in a single `input_features` return; duplicates collapse like
-  link/index (duplicate `split_context_keys` are unioned).
+  link/index. Duplicate requests union their `split_context_keys`; within one return, put
+  the marker on the single child you return, as a set drops one of two equal Features.
 
 ### Pulling context with `inherit_context_keys`
 
@@ -506,7 +507,8 @@ does not).
 ### Splitting on hand-set context with `split_context_keys`
 
 A consumer can hand a renamed value to its input by setting it in the input's context.
-That forwards nothing, so the engine does not know the key should split. Declare it with
+That forwards nothing, so for a context key the root declares in `PROPERTY_MAPPING` that its
+name does not bind, the engine does not know the key should split. Declare it with
 `split_context_keys`: the keys must already be in the feature's `options.context`
 (otherwise `ValueError`), and the declaration only marks them. Within the feature group's
 scope every feature then splits on the key by value, so a direct request of the same input
@@ -525,8 +527,11 @@ candidates = Feature(
 
 The split applies to root inputs and `replaces_rows` groups. A marked input with inputs of
 its own, reached twice with differing values over the same parents, is still rejected;
-use `cascade_context_keys` there. Without the marker, a fixed-name root that is requested
-directly and also read by a consumer with a different context value shares one call.
+use `cascade_context_keys` there. For a `replaces_rows` input, mark every copy: a marker
+on only some copies does not split the others and planning fails. Without the marker, a
+fixed-name root requested directly and also read by a consumer with a different value for a
+declared, name-unbound key shares one call (a group without name patterns treats every
+declared key as name-bound). An undeclared key that differs is already split.
 
 ### Resolution errors from over-forwarding
 

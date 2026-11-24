@@ -210,10 +210,11 @@ class TestSparkPyArrowTransformer:
         assert pyarrow_table.num_rows == 0
         assert pyarrow_table.num_columns == 4
 
-        # Transform back to Spark should raise an error for empty data
-        # because Spark cannot infer schema from empty datasets
-        with pytest.raises(Exception):  # Could be PySparkValueError or similar
-            SparkPyArrowTransformer.transform_other_fw_to_fw(pyarrow_table, framework_connection_object=spark_session)
+        restored = SparkPyArrowTransformer.transform_other_fw_to_fw(
+            pyarrow_table, framework_connection_object=spark_session
+        )
+        assert len(restored.columns) == 4
+        assert SparkPyArrowTransformer.transform_fw_to_other_fw(restored).schema == pyarrow_table.schema
 
     def test_pyarrow_to_spark_without_connection_object(self, sample_pyarrow_table: Any, spark_session: Any) -> None:
         """Test PyArrow to Spark transformation without explicit connection object."""
@@ -338,6 +339,14 @@ class TestSparkPyArrowTransformer:
             result.column(name).cast(pa.timestamp("us", tz="UTC")).to_pylist()
             == source.column(name).cast(pa.timestamp("us", tz="UTC")).to_pylist()
         )
+
+    def test_zero_row_zoned_table_round_trip_keeps_schema_and_zone(self, spark_session: Any) -> None:
+        source = self._zoned_table("America/New_York").slice(0, 0)
+        frame = SparkPyArrowTransformer.transform_other_fw_to_fw(source, framework_connection_object=spark_session)
+        result = SparkPyArrowTransformer.transform_fw_to_other_fw(frame)
+
+        assert result.num_rows == 0
+        assert result.schema == source.schema
 
     def test_zoned_column_round_trip_in_a_non_utc_session(
         self, spark_session: Any, spark_non_utc_timezone: Any

@@ -58,6 +58,21 @@ class TestDuckdbZoneSemantics:
         assert sem.is_tz_aware is True
         assert sem.tz == "America/New_York"
 
+    @pytest.mark.parametrize("unit", ["s", "ms", "us", "ns"])
+    @pytest.mark.parametrize("tz", [None, "UTC"])
+    def test_unit_matches_stored_duckdb_type(self, connection: Any, unit: str, tz: str | None) -> None:
+        import pyarrow as pa
+
+        from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+
+        table = pa.table({"ts": pa.array([1, 2], type=pa.timestamp(unit, tz=tz))})
+        relation = DuckdbRelation.from_arrow(connection, table)
+        if tz is None:
+            expected = unit
+        else:
+            expected = "ns" if str(relation.types[0]).lower().endswith("_ns") else "us"
+        assert column_semantics(relation, "ts").unit == expected
+
     def test_native_timestamptz_without_zone_is_aware_with_unknown_zone(self, connection: Any) -> None:
         from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
 

@@ -1,3 +1,4 @@
+from collections.abc import Mapping
 from typing import Any
 
 from mloda.provider import BaseTransformer
@@ -15,12 +16,11 @@ except ImportError:
     pa = None  # type: ignore[assignment, unused-ignore]
 
 
-def with_time_zones(sdf: Any, schema: Any) -> Any:
-    """Record the zone of each zoned Arrow timestamp field in the Spark field metadata."""
+def with_zone_metadata(sdf: Any, zones: Mapping[str, str]) -> Any:
+    """Record the given zone of each named timestamp column in the Spark field metadata."""
     from pyspark.sql import functions as F
     from pyspark.sql.types import TimestampType
 
-    zones = {f.name: f.type.tz for f in schema if pa.types.is_timestamp(f.type) and f.type.tz}
     if not zones:
         return sdf
     columns = []
@@ -30,6 +30,12 @@ def with_time_zones(sdf: Any, schema: Any) -> Any:
             column = column.alias(field.name, metadata={**field.metadata, TIME_ZONE_METADATA_KEY: zones[field.name]})
         columns.append(column)
     return sdf.select(*columns)
+
+
+def with_time_zones(sdf: Any, schema: Any) -> Any:
+    """Record the zone of each zoned Arrow timestamp field in the Spark field metadata."""
+    zones = {f.name: f.type.tz for f in schema if pa.types.is_timestamp(f.type) and f.type.tz}
+    return with_zone_metadata(sdf, zones)
 
 
 class SparkPyArrowTransformer(BaseTransformer):
@@ -108,7 +114,9 @@ class SparkPyArrowTransformer(BaseTransformer):
         num_rows = data.num_rows
         if num_rows == 0:
             # Handle empty table
-            return spark.createDataFrame([], schema=None)
+            from pyspark.sql.pandas.types import from_arrow_schema
+
+            return with_time_zones(spark.createDataFrame([], schema=from_arrow_schema(data.schema)), data.schema)
 
         # Convert from columnar to row-based format
         rows = []

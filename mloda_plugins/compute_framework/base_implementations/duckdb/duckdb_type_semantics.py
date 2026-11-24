@@ -34,7 +34,7 @@ def column_semantics(data: Any, column: str) -> ColumnSemantics:
 
     unit: str | None = None
     if "timestamp" in type_id:
-        if "timestamp_ns" in type_id:
+        if "timestamp_ns" in type_id or "timestamptz_ns" in type_id:
             unit = "ns"
         elif "timestamp_ms" in type_id:
             unit = "ms"

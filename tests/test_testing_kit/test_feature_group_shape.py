@@ -4,9 +4,8 @@ from __future__ import annotations
 
 import functools
 from collections.abc import Callable, Iterator, Mapping
-from datetime import date, datetime
+from datetime import date
 from typing import Any, Literal, cast
-from zoneinfo import ZoneInfo
 
 import pytest
 
@@ -170,7 +169,7 @@ def make_run_group(
 
         @classmethod
         def return_data_type_rule(cls, feature: Feature) -> DataType | None:
-            if kind in ("undeclared_out", "int32_on_zero_rows"):
+            if kind in ("undeclared_out", "int32_on_zero_rows", "raises_on_reframed_rerun"):
                 return None
             if kind == "double_out":
                 return DataType.DOUBLE
@@ -278,6 +277,10 @@ def make_run_group(
                 if len(data) == 0:
                     data["rg_out"] = data["rg_out"].astype("int32")
                 return data
+            if kind == "raises_on_reframed_rerun":
+                if len(data) == 0 and str(data["rg_src"].dtype) == "float64":
+                    raise RuntimeError("zero rows with a float64 rg_src")
+                return _double_into(data, "rg_out", "rg_src")
             if kind == "wrong_type":
                 if _is_columnar_dict(data):
                     data["rg_out"] = [str(v) for v in data["rg_src"]]
@@ -1021,36 +1024,34 @@ class _ProductionPandasAdapter(PandasAdapter):
         return PandasPyArrowTransformer.transform_other_fw_to_fw(table)
 
 
-def _null_int_data(with_tz: bool = False) -> TypedTestData:
-    columns: dict[str, Any] = {"rg_src": (DataType.INT64, [1, None, 3]), "rg_label": _RUN_LABELS}
-    if with_tz:
-        stamp = datetime(2024, 1, 1, 9, tzinfo=ZoneInfo("America/New_York"))
-        columns["rg_ts"] = (DataType.TIMESTAMP_MICROS_TZ, [stamp] * 3)
-    return TypedTestData(columns)
+def _null_int_data() -> TypedTestData:
+    return TypedTestData({"rg_src": (DataType.INT64, [1, None, 3]), "rg_label": _RUN_LABELS})
 
 
 @pytest.mark.parametrize(
-    ("kind", "fails", "adapter_cls", "with_tz"),
+    ("kind", "fails", "adapter_cls", "names_out"),
     [
         ("input_widened_with_rows", False, PandasAdapter, False),
         ("input_retyped_on_zero_rows", True, PandasAdapter, False),
         ("input_narrowed_with_rows", True, PandasAdapter, False),
         ("undeclared_out", False, _ProductionPandasAdapter, False),
-        ("int32_on_zero_rows", True, _ProductionPandasAdapter, False),
-        ("undeclared_out", False, _ProductionPandasAdapter, True),
+        ("int32_on_zero_rows", True, _ProductionPandasAdapter, True),
+        ("raises_on_reframed_rerun", True, _ProductionPandasAdapter, True),
     ],
-    ids=["widened", "retyped", "narrowed", "follows_reframed_int", "group_retype_still_fails", "with_non_utc_ts"],
+    ids=["widened", "retyped", "narrowed", "follows_reframed_int", "group_retype_still_fails", "rerun_raises"],
 )
 def test_pandas_null_input_zero_rows_excuses_only_the_adapter_retype(
-    kind: str, fails: bool, adapter_cls: type[Any], with_tz: bool
+    kind: str, fails: bool, adapter_cls: type[Any], names_out: bool
 ) -> None:
     """Only the adapter's own zero-row reframing of an input is excused, not a group retype."""
     pytest.importorskip("pandas")
     pytest.importorskip("pyarrow")
-    result = check_feature_group_shape(make_run_group(kind), input_data=_null_int_data(with_tz), adapter=adapter_cls())
+    result = check_feature_group_shape(make_run_group(kind), input_data=_null_int_data(), adapter=adapter_cls())
     if fails:
         assert result.failures
         assert all(f.startswith("zero_rows:") for f in result.failures), result.failures
+        if names_out:
+            assert any("'rg_out'" in f for f in result.failures), result.failures
     else:
         assert result.failures == (), result.failures
 

@@ -1522,26 +1522,19 @@ class TestSuccess:
         assert step["divergences"] == []
         assert step["potential_nan_null_loss"] is False
 
-    @pytest.mark.parametrize(
-        ("destination", "source", "expected"),
-        [(PandasDataFrame, PyArrowTable, True), (PyArrowTable, PandasDataFrame, False)],
-        ids=["marked", "unmarked"],
-    )
-    def test_step_record_reports_the_potential_nan_null_loss_of_a_transform(
-        self, destination: type[ComputeFramework], source: type[ComputeFramework], expected: bool
-    ) -> None:
+    def test_step_record_reports_the_potential_nan_null_loss_of_a_transform(self) -> None:
         step = PlanStep(
             step_kind="transform",
             feature_names=(),
             feature_group=CsvFG,
-            compute_framework=destination,
+            compute_framework=PandasDataFrame,
             source_feature_group=JsonFG,
-            source_compute_framework=source,
+            source_compute_framework=PyArrowTable,
         )
 
         record = _step_record(1, step, None)
 
-        assert record["potential_nan_null_loss"] is expected
+        assert record["potential_nan_null_loss"] is True
 
     def test_join_step_record_names_both_sides_and_join_type(self) -> None:
         step = PlanStep(

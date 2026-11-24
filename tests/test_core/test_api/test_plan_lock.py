@@ -70,6 +70,10 @@ from mloda_plugins.feature_group.experimental.aggregated_feature_group.base impo
 class _MainLike:
     """Plain class posing as one defined in a script."""
 
+    @classmethod
+    def nan_is_null(cls) -> bool:
+        return False
+
 
 _MainLike.__module__ = "__main__"
 
@@ -1139,24 +1143,42 @@ def test_the_nan_key_is_true_on_a_marked_transform_and_absent_on_an_unmarked_one
     assert _NAN_KEY not in json.loads(_lock_text([unmarked]))["transforms"][0]
 
 
-def test_the_nan_key_is_true_on_a_marked_compute_record_and_absent_otherwise() -> None:
-    plain = _compute_step()
-    converted = _compute_step(compute_framework=PyArrowTable, result_framework=PandasDataFrame)
-    neutral = _compute_step(_neutral=True)
+@pytest.mark.parametrize(
+    ("overrides", "marked"),
+    [
+        pytest.param({}, False, id="plain"),
+        pytest.param({"compute_framework": PyArrowTable, "result_framework": PandasDataFrame}, True, id="converted"),
+        pytest.param({"_neutral": True}, True, id="neutral"),
+    ],
+)
+def test_the_nan_key_is_true_on_a_marked_compute_record_and_absent_otherwise(
+    overrides: dict[str, object], marked: bool
+) -> None:
+    record = json.loads(_lock_text([_compute_step(**overrides)]))["compute"][0]
 
-    assert _NAN_KEY not in json.loads(_lock_text([plain]))["compute"][0]
-    assert json.loads(_lock_text([converted]))["compute"][0][_NAN_KEY] is True
-    assert json.loads(_lock_text([neutral]))["compute"][0][_NAN_KEY] is True
+    if marked:
+        assert record[_NAN_KEY] is True
+    else:
+        assert _NAN_KEY not in record
 
 
 def test_the_nan_key_is_never_written_on_a_join_record() -> None:
     assert _NAN_KEY not in json.loads(_lock_text([_join_step()]))["joins"][0]
 
 
+@pytest.mark.parametrize(
+    "marked_plan",
+    [
+        pytest.param(lambda: [_transform_step()], id="transform"),
+        pytest.param(
+            lambda: [_compute_step(compute_framework=PyArrowTable, result_framework=PandasDataFrame)], id="compute"
+        ),
+    ],
+)
 def test_plan_content_hash_ignores_the_nan_key_and_the_structure_hash_includes_it(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, marked_plan: Callable[[], list[PlanStep]]
 ) -> None:
-    marked = [_transform_step()]
+    marked = marked_plan()
     with_key = (plan_content_hash(marked), plan_structure_hash(marked))
 
     monkeypatch.setattr(PandasDataFrame, "nan_is_null", classmethod(lambda cls: False))

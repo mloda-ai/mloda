@@ -1116,6 +1116,17 @@ class CpmAbstractFG(CpmPlainFG):
     def abstract_hook_cpm(self) -> None: ...
 
 
+class CpmOwnedNameFG(CpmBaseFG):
+    """Owns the feature name by its prefix pattern; the name-bound key's guard declines the bound value."""
+
+    RECOGNITION_ONLY_PATTERN = False
+    PREFIX_PATTERN = r".*__(?P<op_cpmo>\w+)_cpmo$"
+    PROPERTY_MAPPING = {
+        "op_cpmo": property_spec("Op.", match_guard=lambda v: v == "sum"),
+        "win_cpmo": property_spec("Required plain key."),
+    }
+
+
 class CpmSiblingFG(FeatureGroup):
     """Name-matching sibling that wins next to a near-miss group."""
 
@@ -1190,6 +1201,14 @@ class TestConfigPathMissingRequiredKeyNearMiss:
         result = _failed_result(feature, accessible_plugins)
 
         assert group not in result.eliminations
+
+    def test_a_key_bound_from_the_owned_name_is_not_reported_absent(self) -> None:
+        feature = Feature("src__max_cpmo", Options(context={"win_cpmo": "3"}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {CpmOwnedNameFG: {RecorderFwOneOs005r}}
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert CpmOwnedNameFG not in result.eliminations, result.eliminations.get(CpmOwnedNameFG)
 
     def test_a_raising_get_domain_is_not_listed_and_does_not_crash_planning(self) -> None:
         feature = Feature("cpm_col", Options(context={"op_cpm": "sum"}), domain="cpm_dom_a")

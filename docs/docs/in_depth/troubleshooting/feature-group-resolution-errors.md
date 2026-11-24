@@ -96,7 +96,9 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 
 A group with a viable input chain can win where an unavailable competitor previously caused an ambiguity. `mloda.diagnose(...)` exposes the same `inputs` eliminations.
 
-A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`. A config-path group the request selects by one of its own required keys is named with its missing required key(s).
+A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
+
+A config-path group the request selects by one of its own required keys declared in `PROPERTY_MAPPING` is named in the failure report with its missing required key(s).
 
 ### The Did you mean hint
 

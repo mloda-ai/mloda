@@ -1,5 +1,6 @@
 import inspect
 import os
+import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from copy import copy, deepcopy
@@ -928,18 +929,28 @@ class IdentifyFeatureGroupClass:
         """The near-miss reason for a config-path group the request selects but leaves a required key absent."""
         if not self._selects_by_required_own_key(feature_group, options):
             return None
+        if issubclass(feature_group, FeatureChainParserMixin) and safe_field(
+            lambda: feature_group.resolve_feature_name(feature.name).owned, True, catching=(ValueError, re.error)
+        ):
+            return None
         mapping = feature_group.PROPERTY_MAPPING or {}
         absent = FeatureChainParser._config_path_missing_required_keys(options, mapping)
         if not absent or not self._no_guard_declines(feature_group, options):
             return None
-        if self._domain_outcome(feature_group)[1] is not None:
+        if feature.domain and (
+            self._domain_outcome(feature_group)[1] is not None
+            or not self._filter_feature_group_by_domain(feature_group, feature)
+        ):
             return None
-        if not self._filter_feature_group_by_domain(feature_group, feature) or inspect.isabstract(feature_group):
+        if inspect.isabstract(feature_group):
             return None
         handles = credential_handle_keys(feature_group)
-        if all(key in handles for key in absent):
-            return " ".join(missing_handle_sentence(feature_group, key, options) for key in absent)
-        return FeatureChainParser._presence_rejection_reason(absent, mapping)
+        handle_absent = [key for key in absent if key in handles]
+        sentences = " ".join(missing_handle_sentence(feature_group, key, options) for key in handle_absent)
+        if len(handle_absent) == len(absent):
+            return sentences
+        plain = FeatureChainParser._presence_rejection_reason(absent, mapping)
+        return f"{plain} {sentences}" if sentences else plain
 
     @staticmethod
     def _no_guard_declines(feature_group: type[FeatureGroup], options: Options) -> bool:

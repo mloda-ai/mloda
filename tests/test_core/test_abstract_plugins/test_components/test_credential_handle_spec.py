@@ -1506,7 +1506,7 @@ class TestMissingHandleKeyAborts:
             (
                 ChsCfgExtraFG,
                 {"chs_cfgx_op": "sum", "chs_cfgx_handel": "vault-main"},
-                ["chs_cfgx_extra", "chs_cfgx_handle"],
+                ["chs_cfgx_extra", "chs_cfgx_handle", "did you mean 'chs_cfgx_handel'"],
             ),
         ],
         ids=["plain-key", "guard-accepts", "plain-key-also-missing", "typo-and-plain-key-missing"],

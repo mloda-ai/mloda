@@ -16,8 +16,7 @@ from mloda.core.abstract_plugins.components.handle_option_names import CONNECTIO
 from mloda.core.optional_dependency import require
 from mloda.provider import ComputeFramework, FeatureSet, Implementation, PropertySpec, SourceFeatureGroup
 from mloda.user import DataAccessCollection, Options
-from mloda.user.duckdb import DuckDBFramework
-from mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation import DuckdbRelation
+from mloda.user.duckdb import DuckDBFramework, DuckdbRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import quote_ident
 
 HANDLE_KEY = CONNECTION_HANDLE_OPTION

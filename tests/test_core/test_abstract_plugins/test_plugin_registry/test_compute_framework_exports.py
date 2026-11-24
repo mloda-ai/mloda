@@ -89,9 +89,19 @@ BACKEND_EXPORT_MATRIX: list[tuple[str, str, str]] = [
         "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_framework",
     ),
     (
+        "mloda.user.duckdb",
+        "DuckdbRelation",
+        "mloda_plugins.compute_framework.base_implementations.duckdb.duckdb_relation",
+    ),
+    (
         "mloda.user.sqlite",
         "SqliteFramework",
         "mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_framework",
+    ),
+    (
+        "mloda.user.sqlite",
+        "SqliteRelation",
+        "mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation",
     ),
     (
         "mloda.user.spark",

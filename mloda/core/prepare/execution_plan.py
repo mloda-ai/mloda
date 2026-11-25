@@ -3861,14 +3861,13 @@ Available join types:
             self.global_filter,
             None if nodes is None else no_variant_conflict,
         )
-        # Only a root feature group (no upstream ancestors) can be the actual cause of a
-        # missing-Links error: a split with ancestors of its own is never the source read directly.
         is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
         if is_root or feature_group.replaces_rows():
             split_keys = frozenset(key for feature in features for key in feature.options.split_context_keys)
             self._option_split_keys[feature_group] = self._option_split_keys.get(feature_group, frozenset()) | (
                 split_keys
             )
+        # Only a root can cause a missing-Links error; a split with ancestors is never the source read directly.
         if is_root:
             split_buckets = self._option_split_buckets.setdefault(feature_group, {})
             for f_hash, grouped_features in features_grouped_by_framework_and_options.items():

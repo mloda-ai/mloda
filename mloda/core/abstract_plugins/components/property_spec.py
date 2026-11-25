@@ -113,7 +113,7 @@ class PropertySpec:
     group_only: bool = False
     # One value only: a list, tuple, set, frozenset or mapping is refused.
     scalar: bool = False
-    # Read on source groups only: a key that only picks the source, so copies differing in it are not split or rejected.
+    # Source groups only: the key only picks the source, so copies differing in it are not split or rejected.
     routing: bool = False
 
     def __post_init__(self) -> None:

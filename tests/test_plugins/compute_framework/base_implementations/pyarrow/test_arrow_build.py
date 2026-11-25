@@ -14,6 +14,8 @@ from pathlib import Path
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -54,7 +56,7 @@ def ignore_timezone_env(monkeypatch: pytest.MonkeyPatch, ignore_timezone: str | 
 
 
 def _utc(values: list[Any]) -> list[datetime | None]:
-    return [None if v is None else v.astimezone(UTC) for v in values]
+    return [None if v is None or v is pd.NaT else v.astimezone(UTC) for v in values]
 
 
 def _builders() -> Any:
@@ -72,19 +74,22 @@ class TestArrowBuild:
             ([NOON_NY, None, LATER_NY], "America/New_York"),
             ((NOON_NY,), "America/New_York"),
             ([datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA)], "+05:30"),
+            ([NOON_NY, pd.NaT, LATER_NY], "America/New_York"),
+            ([pd.Timestamp("2023-03-11 12:00", tz="America/New_York"), pd.NaT], "America/New_York"),
         ],
-        ids=["named_zone_list", "tuple", "fixed_offset"],
+        ids=["named_zone_list", "tuple", "fixed_offset", "nat_gap", "pandas_timestamp_nat"],
     )
     def test_array_keeps_instants_and_zone(self, values: Any, zone: str) -> None:
         arr = _builders().arrow_array(values)
         assert arr.type == pa.timestamp("us", tz=zone)
         assert _utc(arr.to_pylist()) == _utc(list(values))
 
-    def test_explicit_type_wins(self) -> None:
+    @pytest.mark.parametrize("values", [[NOON_NY], [NOON_NY, pd.NaT]], ids=["no_gap", "nat_gap"])
+    def test_explicit_type_wins(self, values: list[Any]) -> None:
         target = pa.timestamp("us", tz="Asia/Tokyo")
-        arr = _builders().arrow_array([NOON_NY], type=target)
+        arr = _builders().arrow_array(values, type=target)
         assert arr.type == target
-        assert _utc(arr.to_pylist()) == _utc([NOON_NY])
+        assert _utc(arr.to_pylist()) == _utc(values)
 
     def test_explicit_type_rejects_naive_aware_mix(self) -> None:
         target = pa.timestamp("us", tz="UTC")
@@ -159,10 +164,31 @@ _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
         pytest.param([], None, id="empty"),
         pytest.param([1, 2], None, id="ints"),
         pytest.param([_NAIVE, _UTC_NOON, "x"], None, id="datetimes_and_non_datetime"),
+        pytest.param([NOON_NY, pd.NaT, LATER_NY], "America/New_York", id="nat_gap"),
+        pytest.param([pd.NaT, NOON_NY], "America/New_York", id="nat_first"),
+        pytest.param([pd.NaT, pd.NaT], None, id="all_nat"),
     ],
 )
 def test_aware_zone(values: list[Any], expected: str | None) -> None:
     assert _builders().aware_zone(values) == expected
+
+
+@pytest.mark.parametrize(
+    "value, expected",
+    [
+        pytest.param(None, True, id="none"),
+        pytest.param(pd.NaT, True, id="pd_nat"),
+        pytest.param(float("nan"), False, id="nan"),
+        pytest.param(np.datetime64("NaT"), False, id="np_nat"),
+        pytest.param(0, False, id="zero"),
+        pytest.param("", False, id="empty_string"),
+        pytest.param(_NAIVE, False, id="naive"),
+        pytest.param(NOON_NY, False, id="aware"),
+        pytest.param(pd.Timestamp("2023-03-11 12:00", tz="America/New_York"), False, id="pd_timestamp"),
+    ],
+)
+def test_is_gap(value: Any, expected: bool) -> None:
+    assert _builders().is_gap(value) is expected
 
 
 @pytest.mark.parametrize(
@@ -184,6 +210,12 @@ def test_aware_zone(values: list[Any], expected: str | None) -> None:
         ),
         pytest.param([_UTC_NOON, _NAIVE], ["naive", "aware"], id="aware_then_naive"),
         pytest.param([_NAIVE, None, _UTC_NOON], ["naive", "aware"], id="naive_then_aware"),
+        pytest.param([_NAIVE, pd.NaT, _UTC_NOON], ["naive", "aware"], id="naive_nat_aware"),
+        pytest.param(
+            [NOON_NY, pd.NaT, datetime(2023, 3, 11, tzinfo=KOLKATA)],
+            ["America/New_York", "+05:30"],
+            id="ny_nat_kolkata",
+        ),
     ],
 )
 def test_aware_zone_rejects_mixed_zones(values: list[Any], zones: list[str]) -> None:
@@ -352,6 +384,14 @@ class TestEntryPointsKeepNonUtcInstants:
         assert field_type.tz == "America/New_York"
         assert _utc(table.column("t").to_pylist()) == _utc([NOON_NY, LATER_NY])
 
+    @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_dict_build_keeps_nat_gap(self, build: Callable[[dict[str, list[Any]]], Any]) -> None:
+        table = _arrow_of(build({"t": [NOON_NY, pd.NaT]}))
+        field_type = table.schema.field("t").type
+        assert pa.types.is_timestamp(field_type)
+        assert field_type.tz == "America/New_York"
+        assert _utc(table.column("t").to_pylist()) == [NOON_NY.astimezone(UTC), None]
+
     @pytest.mark.parametrize("hours", [5, -3], ids=["plus_05", "minus_03"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
     def test_dict_build_keeps_whole_hour_offset(self, build: Callable[[dict[str, list[Any]]], Any], hours: int) -> None:
@@ -365,8 +405,13 @@ class TestEntryPointsKeepNonUtcInstants:
 
     @pytest.mark.parametrize(
         "values",
-        [[NOON_NY, LATER_NY], [NOON_NY.astimezone(KOLKATA), LATER_NY], [NOON_NY.astimezone(KOLKATA), None, LATER_NY]],
-        ids=["same_zone", "kolkata_and_ny", "kolkata_none_ny"],
+        [
+            [NOON_NY, LATER_NY],
+            [NOON_NY.astimezone(KOLKATA), LATER_NY],
+            [NOON_NY.astimezone(KOLKATA), None, LATER_NY],
+            [NOON_NY.astimezone(KOLKATA), pd.NaT, LATER_NY],
+        ],
+        ids=["same_zone", "kolkata_and_ny", "kolkata_none_ny", "kolkata_nat_ny"],
     )
     def test_value_set_keeps_instants_and_zone(self, values: list[Any]) -> None:
         column = pa.array([NOON_NY.astimezone(UTC)], type=pa.timestamp("us", tz="America/New_York"))

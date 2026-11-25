@@ -8,7 +8,7 @@ import uuid
 from collections.abc import Sequence
 from typing import Any
 
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone, is_gap
 from mloda_plugins.compute_framework.base_implementations.sql.sql_base_relation import SqlBaseRelation
 from mloda_plugins.compute_framework.base_implementations.sql.sql_utils import (
     ensure_distinct_identifiers,
@@ -787,7 +787,7 @@ class SqliteRelation(SqlBaseRelation):
             insert_sql = f"INSERT INTO {quote_ident(table_name)} VALUES ({placeholders})"  # nosec
             rows = []
             for i in range(num_rows):
-                row = tuple(data[c][i] for c in cols)
+                row = tuple(None if is_gap(data[c][i]) else data[c][i] for c in cols)
                 rows.append(row)
             connection.executemany(insert_sql, rows)
 

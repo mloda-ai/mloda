@@ -32,6 +32,7 @@ from mloda._testing.compute_framework.output_schema_suite import OutputSchemaSui
 from mloda.provider import Cause
 from mloda._testing.framework_adapter import FrameworkAdapter, SparkAdapter
 from mloda.user import JoinType
+import pandas as pd
 import pytest
 from tests.helpers.time_zones import bad_zone_values
 from mloda_plugins.compute_framework.base_implementations.spark.spark_framework import SparkFramework
@@ -151,6 +152,11 @@ class TestSparkFrameworkComputeFramework:
                 [None, _NY_START.astimezone(_NY), _NY_START.astimezone(_NY) + timedelta(hours=1)],
                 "America/New_York",
                 id="ny_leading_none",
+            ),
+            pytest.param(
+                [_NY_START.astimezone(_NY), pd.NaT, _NY_START.astimezone(_NY) + timedelta(hours=1)],
+                "America/New_York",
+                id="ny_middle_nat",
             ),
         ],
     )
@@ -277,7 +283,7 @@ class TestSparkFrameworkComputeFramework:
         instants = column.cast(pa.timestamp("us", tz="UTC")).to_pylist()
         if order is not None:
             instants = [instants[order.index(i)] for i in sorted(order)]
-        assert instants == [None if v is None else v.astimezone(UTC) for v in expected]
+        assert instants == [None if v is None or v is pd.NaT else v.astimezone(UTC) for v in expected]
 
     def test_transform_invalid_data(self, spark_session: Any) -> None:
         spark_framework = SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
@@ -796,6 +802,12 @@ def test_exact_column_data_type_jvm_free() -> None:
     [
         pytest.param([None, 1, 2], "IntegerType", None, id="int_leading_none"),
         pytest.param([None, datetime(2023, 3, 12, 6, 30)] * 2, "TimestampNTZType", None, id="naive_leading_none"),
+        pytest.param(
+            [_NY_START.astimezone(_NY), pd.NaT, _NY_START.astimezone(_NY) + timedelta(hours=1)],
+            "TimestampType",
+            "America/New_York",
+            id="aware_ny_nat_gap",
+        ),
     ],
 )
 def test_column_field_types_jvm_free(values: list[Any], type_name: str, zone: str | None) -> None:

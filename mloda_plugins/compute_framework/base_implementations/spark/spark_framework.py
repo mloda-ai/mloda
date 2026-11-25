@@ -12,7 +12,7 @@ from mloda.user import FeatureName, ParallelizationMode
 from mloda.provider import ComputeFramework, ConnectionRequirement
 from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda.provider import OutputSchema
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone, is_gap
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.spark.spark_filter_engine import SparkFilterEngine
 from mloda_plugins.compute_framework.base_implementations.spark.spark_mask_engine import SparkMaskEngine
@@ -58,7 +58,7 @@ _SPARK_ATTRIBUTE_CONDITION = "ATTRIBUTE_NOT_SUPPORTED"
 def _column_field(name: str, values: Sequence[Any], infer: Callable[[Any], Any]) -> tuple[Any, str | None]:
     """Return the StructField and the zone (if aware) for a column."""
     zone = aware_zone(values, name)
-    present = [v for v in values if v is not None]
+    present = [v for v in values if not is_gap(v)]
     if zone is not None:
         return StructField(name, TimestampType(), True), zone
     if present and all(isinstance(v, datetime) for v in present):
@@ -297,7 +297,7 @@ class SparkFramework(ComputeFramework):
                 num_rows = len(next(iter(data.values())))
                 rows = []
                 for i in range(num_rows):
-                    row = tuple(data[col][i] for col in data.keys())
+                    row = tuple(None if is_gap(data[col][i]) else data[col][i] for col in data.keys())
                     rows.append(row)
                 return with_zone_metadata(spark.createDataFrame(rows, schema), zones)  # type: ignore[union-attr]
             else:
@@ -343,7 +343,8 @@ class SparkFramework(ComputeFramework):
             if zone:
                 zones[name] = zone
         new_data_df = spark.createDataFrame(
-            [(i + 1, *(column[i] for column in values)) for i in range(len(values[0]))], StructType(fields)
+            [(i + 1, *(None if is_gap(column[i]) else column[i] for column in values)) for i in range(len(values[0]))],
+            StructType(fields),
         )
         return with_zone_metadata(existing_with_row_num.join(new_data_df, rn).orderBy(rn).drop(rn), zones)
 

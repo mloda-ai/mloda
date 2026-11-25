@@ -11,7 +11,7 @@ from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import PolarsMaskEngine
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone, is_gap
 from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
     reject_sub_hour_zone,
 )
@@ -118,7 +118,7 @@ class PolarsDataFrame(ComputeFramework):
                 zone = aware_zone(values, name)
                 if zone is not None:
                     reject_sub_hour_zone(name, zone)
-                    utc = [None if v is None else v.astimezone(UTC) for v in values]
+                    utc = [None if is_gap(v) else v.astimezone(UTC) for v in values]
                     series[name] = pl.Series(name, utc, dtype=pl.Datetime("us", _polars_zone(zone)))
         return series
 

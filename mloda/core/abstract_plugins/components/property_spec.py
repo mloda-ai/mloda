@@ -355,7 +355,7 @@ def group_only_keys(feature_group: Any) -> dict[str, PropertySpec]:
 def routing_keys(feature_group: Any) -> frozenset[str]:
     """The group's declared routing keys."""
     mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
-    return frozenset(key for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.routing)
+    return frozenset(str(key) for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.routing)
 
 
 def group_scoped_keys(feature_group: Any) -> dict[str, PropertySpec]:

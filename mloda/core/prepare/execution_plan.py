@@ -178,7 +178,7 @@ class ExecutionPlan:
         # since a split with no ancestors can never be the actual cause of a missing-Links error.
         # Feeds the missing-Links error's option-split hint.
         self._option_split_buckets: dict[type[FeatureGroup], dict[Any, tuple[Feature, set[UUID]]]] = {}
-        # Per root feature_group class, the union of split_context_keys used to hash its
+        # Per root or replaces_rows feature_group class, the union of split_context_keys used to hash its
         # buckets (the actual split_keys `group_features_by_compute_framework_and_options` used).
         self._option_split_keys: dict[type[FeatureGroup], frozenset[Any]] = {}
 
@@ -823,7 +823,7 @@ class ExecutionPlan:
             memoized = direct_parents_memo.get(feature.uuid)
             if memoized is None:
                 direct = ExecutionPlan.direct_ancestors(feature.uuid, parent_to_children_mapping)
-                # A root scope's split keys cover plain copies too, regardless of which copy declared them.
+                # A root or replaces_rows scope's split keys cover plain copies too, whichever copy declared them.
                 split_roots = {
                     uuid
                     for uuid in parent_to_children_mapping.get(feature.uuid, ())

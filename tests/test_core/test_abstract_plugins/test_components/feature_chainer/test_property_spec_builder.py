@@ -795,27 +795,26 @@ class TestPropertySpecScalar:
             property_spec("d", scalar=True, default=default, strict=strict, allowed_values=("valid",))
 
 
-@pytest.mark.parametrize(
-    "mapping,expected",
-    [
-        ("absent", set()),
-        (None, set()),
-        ({"a": "not a spec", "b": PropertySpec("b", routing=True)}, {"b"}),
-        (
-            {"a": PropertySpec("a", routing=True), "b": PropertySpec("b"), "c": PropertySpec("c", routing=True)},
-            {"a", "c"},
-        ),
-    ],
-    ids=["no_mapping", "none_mapping", "non_spec_value", "mixed"],
-)
-def test_routing_keys_of_plain_classes(mapping: Any, expected: set[str]) -> None:
-    attrs: dict[str, Any] = {} if mapping == "absent" else {"PROPERTY_MAPPING": mapping}
-
-    assert routing_keys(type("PlainGroup", (), attrs)) == expected
-
-
 class TestPropertySpecRouting:
     """The routing flag marks a source group key that only picks the source."""
+
+    @pytest.mark.parametrize(
+        "mapping,expected",
+        [
+            ("absent", set()),
+            (None, set()),
+            ({"a": "not a spec", "b": PropertySpec("b", routing=True)}, {"b"}),
+            (
+                {"a": PropertySpec("a", routing=True), "b": PropertySpec("b"), "c": PropertySpec("c", routing=True)},
+                {"a", "c"},
+            ),
+        ],
+        ids=["no_mapping", "none_mapping", "non_spec_value", "mixed"],
+    )
+    def test_routing_keys_of_plain_classes(self, mapping: Any, expected: set[str]) -> None:
+        attrs: dict[str, Any] = {} if mapping == "absent" else {"PROPERTY_MAPPING": mapping}
+
+        assert routing_keys(type("PlainGroup", (), attrs)) == expected
 
     def test_defaults_false_and_passes_through_builder(self) -> None:
         assert PropertySpec("d").routing is False

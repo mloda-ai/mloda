@@ -271,15 +271,17 @@ class TestTextLinesOption:
 
         assert _run_collection(path, [feature]) == {"TextFG": [self.TEXT]}
 
-    @pytest.mark.parametrize("case", ["unmarked", "marked", "explicit_false"])
+    @pytest.mark.parametrize("case", ["unmarked", "marked", "explicit_false", "explicit_handle"])
     def test_direct_copies_differing_in_text_lines_are_rejected_unless_marked_or_equal(
         self, tmp_path: Path, case: str
     ) -> None:
         path = _write(tmp_path, self.TEXT)
-        value = case != "explicit_false"
+        context: dict[str, Any] = (
+            {"data_access_handle": "doc"} if case == "explicit_handle" else {"text_lines": case != "explicit_false"}
+        )
         split = {"text_lines"} if case == "marked" else set()
         requests: list[Feature | str] = [
-            Feature("TextFG", Options(context={"text_lines": value}), split_context_keys=split),
+            Feature("TextFG", Options(context=context), split_context_keys=split),
             "TextFG",
         ]
 

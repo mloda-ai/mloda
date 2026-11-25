@@ -27,7 +27,7 @@ class Features:
         child_uuid: UUID | None = None,
         parent_domain: str | None = None,
         consumer_local_keys: frozenset[str] = frozenset(),
-        input_copies: dict[int, tuple[Feature, Feature]] | None = None,
+        requested: dict[int, Feature] | None = None,
     ) -> None:
         if isinstance(features, str):
             raise ValueError(
@@ -38,8 +38,8 @@ class Features:
         self.child_uuid: UUID | None = child_uuid
         self.parent_domain: str | None = parent_domain
         self.consumer_local_keys: frozenset[str] = consumer_local_keys
-        # Per plan: id(requested) -> (requested, requested), the Feature objects the engine seeded.
-        self.input_copies: dict[int, tuple[Feature, Feature]] = {} if input_copies is None else input_copies
+        # Requested Feature objects by id; a consumer returning one plans into it in place.
+        self.requested: dict[int, Feature] = {} if requested is None else requested
 
         self.parent_uuids: set[UUID] = set()
 
@@ -60,10 +60,7 @@ class Features:
                 feature = Feature(name=feature, options=Options({}), domain=self.parent_domain)
             else:
                 if child_uuid:
-                    entry = self.input_copies.get(id(feature))
-                    if entry is not None and entry[0] is entry[1]:
-                        feature = entry[1]
-                    else:
+                    if self.requested.get(id(feature)) is not feature:
                         # Each consumer plans its own copy of the returned object; equal copies merge at intake.
                         feature = feature.copy_for_plan()
                         feature.uuid = uuid4()

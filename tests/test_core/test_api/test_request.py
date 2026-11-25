@@ -93,7 +93,7 @@ class TestmlodaAPI:
         original = Features([Feature("bk_feature")])
         copied = mlodaAPI._shallow_copy_features(original)
         assert copied.parent_uuids is not original.parent_uuids
-        assert copied.input_copies is not original.input_copies
+        assert copied.requested is not original.requested
 
 
 class TestBareStringRejected:

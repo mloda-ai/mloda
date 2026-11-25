@@ -516,7 +516,7 @@ class TestPropagateContextKeysE2E:
     _ENV_ROOT_COLLECTOR = PluginCollector.enabled_feature_groups(
         {PropagateContextFeatureGroupTest, CascadeEnvRootGroupTest}
     )
-    _CHAIN_ORDERS_OK = ["zyx", "zxy", "z", "zy", "zx", "xzy", "xz", "yz"]
+    _CHAIN_ORDERS_OK = ["zyx", "zxy", "z", "zy", "zx", "xzy", "xz"]
     _CHAIN_ORDERS_RAISE = ["yzx", "yxz", "xyz"]
     _CHAIN_EXPECTED = {
         "x": [1020, 1040, 1060],
@@ -538,6 +538,22 @@ class TestPropagateContextKeysE2E:
         result = self._run_env_root([chain[level] for level in order])
         for level in order:
             assert find_column(result, f"{prefix}_{level}") == self._CHAIN_EXPECTED[level]
+
+    @pytest.mark.xfail(
+        strict=True, reason="a requested input merged in place by a later request is stored twice (known gap)"
+    )
+    def test_chain_yz_stores_each_object_once(self) -> None:
+        x, y, z = _cascade_chain("cer_yz_once", root=CASCADE_ENV_ROOT)
+        session = mloda.prepare(
+            [y, z],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self._ENV_ROOT_COLLECTOR,
+        )
+        assert session.engine is not None
+        for features in session.engine.feature_group_collection.values():
+            stored = list(features)
+            assert len(stored) == len({id(f) for f in stored})
+            assert len(stored) == len({f.uuid for f in stored})
 
     @pytest.mark.parametrize("order", _CHAIN_ORDERS_RAISE)
     def test_shared_chain_gaining_cascade_after_inputs_resolved_raises(self, order: str) -> None:

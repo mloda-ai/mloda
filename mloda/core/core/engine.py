@@ -181,7 +181,7 @@ class Engine:
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
         # Requested features are this plan's own objects; an input_features return of one is not copied.
-        self._input_copies: dict[int, tuple[Feature, Feature]] = {}
+        self._requested: dict[int, Feature] = {}
         with run_match_cache(), accessible_implementations(self.implementations), input_resolution_scope(self):
             self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
@@ -306,7 +306,7 @@ class Engine:
                 plan.principal if plan else None,
             )
         )
-        self._input_copies = {id(feature): (feature, feature) for feature in features.collection}
+        self._requested = {id(feature): feature for feature in features.collection}
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
@@ -1563,7 +1563,7 @@ class Engine:
             child_uuid=uuid,
             parent_domain=parent_domain,
             consumer_local_keys=unforwarded_keys(feature_group_class.PROPERTY_MAPPING),
-            input_copies=self._input_copies,
+            requested=self._requested,
         )
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)

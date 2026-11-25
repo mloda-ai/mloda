@@ -343,10 +343,12 @@ def _prepare(
     return session.engine
 
 
+def _all(engine: Engine, name: str) -> list[Feature]:
+    return [f for group in engine.feature_group_collection.values() for f in group if str(f.name) == name]
+
+
 def _feature(engine: Engine, name: str) -> Feature:
-    matches = [
-        feature for group in engine.feature_group_collection.values() for feature in group if str(feature.name) == name
-    ]
+    matches = _all(engine, name)
     assert len(matches) == 1
     return matches[0]
 
@@ -739,13 +741,11 @@ def test_global_filter_injected_feature_does_not_hide_the_input_walk(
         _assert_warning(caplog, [FILTER_CONSUMER], [UncascadedCtxFilterRoot])
 
 
-def _all(engine: Engine, name: str) -> list[Feature]:
-    return [f for group in engine.feature_group_collection.values() for f in group if str(f.name) == name]
-
-
 def _assert_stored_once(engine: Engine) -> None:
     for features in engine.feature_group_collection.values():
-        assert len(list(features)) == len({id(feature) for feature in features})
+        stored = list(features)
+        assert len(stored) == len({id(feature) for feature in stored})
+        assert len(stored) == len({feature.uuid for feature in stored})
 
 
 @pytest.mark.parametrize("a_first", [True, False], ids=["a-first", "b-first"])

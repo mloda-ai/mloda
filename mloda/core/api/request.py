@@ -495,7 +495,7 @@ class mlodaAPI:
             features_copy = copy(requested_features)
             features_copy.collection = [f.copy_for_plan() for f in requested_features.collection]
             features_copy.parent_uuids = set(requested_features.parent_uuids)
-            features_copy.input_copies = dict(requested_features.input_copies)
+            features_copy.requested = dict(requested_features.requested)
             return features_copy
         if isinstance(requested_features, str):
             return requested_features

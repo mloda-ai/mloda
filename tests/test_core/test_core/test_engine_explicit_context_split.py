@@ -391,8 +391,11 @@ def test_non_root_input_reached_with_differing_values_is_rejected_at_plan_time(
     marking: set[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(f"{__name__}.MARKING_TWINS", marking)
-    with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
+    with pytest.raises(
+        ValueError, match="(?s)is reached twice with differing values for context key.*cascade_context_keys"
+    ) as excinfo:
         _run(list(TWIN_CONSUMERS), {MarkedBaseRoot, MarkedMid, MarkedTwinConsumer}, [PythonDictFramework])
+    assert "split_context_keys" not in str(excinfo.value)
 
 
 RM_BASE = "rm_base"
@@ -486,7 +489,8 @@ def test_a_marker_on_one_copy_of_a_replaces_rows_input_splits_every_copy(
 
     if placement == "no-marker":
         with pytest.raises(
-            ValueError, match="(?s)is reached twice with differing values for context key.*split_context_keys"
+            ValueError,
+            match="(?s)is reached twice with differing values for context key.*split_context_keys.*cascade_context_keys",
         ):
             _run(requests, RM_GROUPS, [PythonDictFramework])
         return

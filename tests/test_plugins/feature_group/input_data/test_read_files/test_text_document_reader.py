@@ -271,32 +271,29 @@ class TestTextLinesOption:
 
         assert _run_collection(path, [feature]) == {"TextFG": [self.TEXT]}
 
-    @pytest.mark.parametrize("marked", [False, True], ids=["unmarked", "marked"])
-    def test_direct_copies_differing_in_text_lines_are_rejected_unless_marked(
-        self, tmp_path: Path, marked: bool
+    @pytest.mark.parametrize("case", ["unmarked", "marked", "explicit_false"])
+    def test_direct_copies_differing_in_text_lines_are_rejected_unless_marked_or_equal(
+        self, tmp_path: Path, case: str
     ) -> None:
         path = _write(tmp_path, self.TEXT)
-        split = {"text_lines"} if marked else set()
+        value = case != "explicit_false"
+        split = {"text_lines"} if case == "marked" else set()
         requests: list[Feature | str] = [
-            Feature("TextFG", Options(context={"text_lines": True}), split_context_keys=split),
+            Feature("TextFG", Options(context={"text_lines": value}), split_context_keys=split),
             "TextFG",
         ]
 
-        if not marked:
+        if case == "unmarked":
             with pytest.raises(ValueError, match="differing values for context key.*text_lines"):
                 _run_collection(path, requests)
             return
 
         columns = _run_collection(path, requests)
 
-        assert sorted(columns["TextFG"]) == sorted(["alpha", "beta", "gamma", self.TEXT])
-
-    def test_an_explicit_false_copy_still_shares_one_call_with_the_plain_copy(self, tmp_path: Path) -> None:
-        path = _write(tmp_path, self.TEXT)
-
-        columns = _run_collection(path, [Feature("TextFG", Options(context={"text_lines": False})), "TextFG"])
-
-        assert columns == {"TextFG": [self.TEXT]}
+        if case == "marked":
+            assert sorted(columns["TextFG"]) == sorted(["alpha", "beta", "gamma", self.TEXT])
+        else:
+            assert columns == {"TextFG": [self.TEXT]}
 
     def test_a_consumer_of_the_plain_source_next_to_a_direct_text_lines_copy(self, tmp_path: Path) -> None:
         path = _write(tmp_path, self.TEXT)

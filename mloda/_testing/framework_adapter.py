@@ -58,11 +58,13 @@ def to_arrow_table(data: TypedTestData, arrow_types: Mapping[str, pa.DataType] |
     """Build an Arrow table from typed data; arrow_types overrides a column's physical type."""
 
     pa = require("pyarrow", "building Arrow test tables")
+    from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import is_gap
+
     overrides = arrow_types or {}
     columns = data.to_python_dict()
     arrays = []
     for name, data_type in data.types.items():
-        values = columns[name]
+        values = [None if is_gap(v) else v for v in columns[name]]
         if name in overrides:
             override = overrides[name]
             if pa.types.is_timestamp(override) and override.tz is not None:

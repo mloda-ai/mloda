@@ -76,11 +76,18 @@ _RULES: dict[DataType, Callable[[Any], bool]] = {
 }
 
 
+_NAT_TYPES = frozenset({DataType.TIMESTAMP_MILLIS, DataType.TIMESTAMP_MICROS, DataType.TIMESTAMP_MICROS_TZ})
+
+
 def value_fits(data_type: DataType, value: Any) -> bool:
-    """Whether value fits data_type; None fits every member."""
+    """Whether value fits data_type; None fits every member; pd.NaT only the three timestamp members."""
     if data_type not in _RULES:
         raise ValueError(f"No value-fit rule for data type {data_type.name}")
-    return value is None or _RULES[data_type](value)
+    if value is None:
+        return True
+    if isinstance(value, datetime) and value != value:
+        return data_type in _NAT_TYPES
+    return _RULES[data_type](value)
 
 
 def check_values_fit(columns: Mapping[str, Sequence[Any]], types: Mapping[str, DataType]) -> CheckResult:

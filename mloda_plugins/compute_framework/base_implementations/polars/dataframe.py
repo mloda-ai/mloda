@@ -111,7 +111,7 @@ class PolarsDataFrame(ComputeFramework):
 
     @staticmethod
     def _aware_series(columns: Mapping[str, Any]) -> dict[str, Any]:
-        """Series for each aware list column in its single zone; raise for a mixed, unnameable or sub-hour zone."""
+        """Series for each aware list column in its zone (raise if mixed, unnameable or sub-hour) and each NaT list."""
         series = {}
         for name, values in columns.items():
             if isinstance(values, (list, tuple)):
@@ -120,6 +120,8 @@ class PolarsDataFrame(ComputeFramework):
                     reject_sub_hour_zone(name, zone)
                     utc = [None if is_gap(v) else v.astimezone(UTC) for v in values]
                     series[name] = pl.Series(name, utc, dtype=pl.Datetime("us", _polars_zone(zone)))
+                elif any(v is not None and is_gap(v) for v in values):
+                    series[name] = pl.Series(name, [None if is_gap(v) else v for v in values])
         return series
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:

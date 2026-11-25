@@ -67,6 +67,13 @@ def _infer_sqlite_type_from_values(values: list[Any]) -> str:
     return result
 
 
+def _bind_value(v: Any) -> Any:
+    """None for a gap; datetime subclasses (pd.Timestamp) bind as the isoformat text the sqlite adapter writes."""
+    if is_gap(v):
+        return None
+    return datetime.datetime.isoformat(v) if isinstance(v, datetime.datetime) else v
+
+
 def _assert_nulls_supported(order_by: Sequence[str | OrderBy]) -> None:
     if sqlite3.sqlite_version_info >= (3, 30, 0):
         return
@@ -755,7 +762,9 @@ class SqliteRelation(SqlBaseRelation):
         if arrow_table.num_rows > 0:
             placeholders = ", ".join("?" for _ in cols)
             insert_sql = f"INSERT INTO {quote_ident(table_name)} VALUES ({placeholders})"  # nosec
-            rows = list(zip(*(col.to_pylist() for col in arrow_table.columns)))
+            rows = [
+                tuple(_bind_value(v) for v in row) for row in zip(*(col.to_pylist() for col in arrow_table.columns))
+            ]
             connection.executemany(insert_sql, rows)
 
         return cls(connection, table_name, _types=list(arrow_table.schema.types))
@@ -787,7 +796,7 @@ class SqliteRelation(SqlBaseRelation):
             insert_sql = f"INSERT INTO {quote_ident(table_name)} VALUES ({placeholders})"  # nosec
             rows = []
             for i in range(num_rows):
-                row = tuple(None if is_gap(data[c][i]) else data[c][i] for c in cols)
+                row = tuple(_bind_value(data[c][i]) for c in cols)
                 rows.append(row)
             connection.executemany(insert_sql, rows)
 

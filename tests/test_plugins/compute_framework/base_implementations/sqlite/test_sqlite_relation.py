@@ -856,11 +856,13 @@ class TestSqliteDatetimeAdapter:
                     type=pa.timestamp("us"),
                 ),
                 "d": pa.array([datetime.date(2024, 1, 1), datetime.date(2024, 1, 2)], type=pa.date32()),
+                "ts_ns": pa.array([datetime.datetime(2024, 1, 1, 12, 0), None], type=pa.timestamp("ns")),
             }
         )
         with warnings.catch_warnings():
             warnings.simplefilter("error", DeprecationWarning)
-            SqliteRelation.from_arrow(connection, arrow_table)
+            rel = SqliteRelation.from_arrow(connection, arrow_table)
+        assert rel.to_arrow_table().column("ts_ns").to_pylist() == [datetime.datetime(2024, 1, 1, 12, 0), None]
 
     def test_direct_executemany_with_datetime_does_not_emit_default_adapter_warning(self) -> None:
         """Module-global adapter registration must cover any sqlite3 connection, not only SqliteRelation."""

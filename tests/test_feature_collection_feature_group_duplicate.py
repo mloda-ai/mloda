@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from uuid import uuid4
+
 import pytest
 
 from mloda.core.abstract_plugins.components.feature import Feature
@@ -21,6 +23,13 @@ def test_same_feature_name_in_same_feature_group_is_rejected() -> None:
 
     with pytest.raises(ValueError, match="Duplicate feature setup: my_feature"):
         Features([first, second])
+
+
+def test_one_object_returned_twice_by_one_consumer_is_rejected() -> None:
+    f = Feature(name="my_feature", options=Options({}))
+
+    with pytest.raises(ValueError, match="Duplicate feature setup: my_feature"):
+        Features([f, f], child_options=Options({}), child_uuid=uuid4())
 
 
 def test_distinct_feature_names_in_different_feature_groups_are_allowed() -> None:

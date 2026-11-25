@@ -8,6 +8,12 @@ _PLAIN_TYPES = frozenset({str, int, bool, bytes})
 _NAT_TYPES = frozenset({("pandas", "NaTType"), ("numpy", "datetime64"), ("numpy", "timedelta64")})
 
 
+def is_nat(v: Any) -> bool:
+    """True for pd.NaT and NumPy datetime64/timedelta64 NaT."""
+    t = type(v)
+    return (t.__module__.split(".")[0], t.__name__) in _NAT_TYPES and bool(v != v)
+
+
 def is_missing(v: Any) -> bool:
     """Type-based check that never calls a user-defined comparison."""
     t = type(v)
@@ -20,8 +26,8 @@ def is_missing(v: Any) -> bool:
     module = t.__module__.split(".")[0]
     if module == "pandas" and t.__name__ == "NAType":
         return True
-    if (module, t.__name__) in _NAT_TYPES:
-        return bool(v != v)
+    if is_nat(v):
+        return True
     if isinstance(v, Decimal):
         return v.is_nan()
     return module in ("builtins", "numpy") and isinstance(v, numbers.Complex) and bool(v != v)

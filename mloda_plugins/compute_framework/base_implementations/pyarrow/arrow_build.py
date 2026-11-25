@@ -11,6 +11,13 @@ from functools import cache
 from typing import Any
 from zoneinfo import ZoneInfo, available_timezones
 
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+    _PLAIN_TYPES,
+    is_nat,
+)
+
+_FAST_TYPES = _PLAIN_TYPES | {float}
+
 try:
     import pyarrow as pa
 except ImportError:
@@ -65,9 +72,18 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
 
 
 def is_gap(v: Any) -> bool:
-    """True for None and pd.NaT."""
-    # NaT is the only datetime unequal to itself (no pandas import).
-    return v is None or (isinstance(v, datetime) and v != v)
+    """True for None, pd.NaT and NumPy NaT."""
+    return v is None or (type(v) not in _FAST_TYPES and is_nat(v))
+
+
+def _has_gap(values: Any) -> bool:
+    """True if a non-None gap sits at any list or tuple depth."""
+    return any(_has_gap(v) if isinstance(v, (list, tuple)) else v is not None and is_gap(v) for v in values)
+
+
+def _null_gaps(values: Any) -> list[Any]:
+    """Copy of values with every gap at any depth as None."""
+    return [_null_gaps(v) if isinstance(v, (list, tuple)) else None if is_gap(v) else v for v in values]
 
 
 def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
@@ -121,8 +137,8 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         if aware:
             utc_values = [None if is_gap(v) else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
-        if any(v is not None and is_gap(v) for v in values):
-            values = [None if is_gap(v) else v for v in values]
+        if _has_gap(values):
+            values = _null_gaps(values)
     return pa.array(values, type=type)
 
 

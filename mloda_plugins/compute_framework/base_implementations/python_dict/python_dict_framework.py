@@ -21,6 +21,7 @@ from mloda_plugins.compute_framework.base_implementations.python_dict.python_dic
     PythonDictMaskEngine,
 )
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+    is_nat,
     row_count,
     rows_to_columnar,
     validate_columnar_dict,
@@ -119,8 +120,7 @@ class PythonDictFramework(ComputeFramework):
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         for val in self._column_values(data, column_name):
-            # pd.NaT is the only datetime unequal to itself; this avoids importing pandas.
-            if val is None or (isinstance(val, datetime.datetime) and val != val):
+            if val is None or is_nat(val):
                 continue
             if isinstance(val, bool):
                 return DataType.BOOLEAN

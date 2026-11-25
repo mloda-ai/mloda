@@ -15,6 +15,7 @@ row-wise contract; that module is superseded by this one under the columnar mode
 from datetime import UTC, datetime
 from typing import Any
 
+import numpy as np
 import pandas as pd
 import pytest
 
@@ -163,8 +164,20 @@ class TestExtractColumnTypes:
             ([pd.NaT, datetime(2023, 3, 11, 12, 0, tzinfo=UTC)], DataType.TIMESTAMP_MICROS_TZ),
             ([pd.NaT, None, datetime(2023, 3, 11, 12, 0)], DataType.TIMESTAMP_MICROS),
             ([pd.NaT], None),
+            ([np.datetime64("NaT"), datetime(2023, 3, 11, 12, 0, tzinfo=UTC)], DataType.TIMESTAMP_MICROS_TZ),
+            ([np.datetime64("NaT")], None),
+            ([float("nan"), "a"], DataType.DOUBLE),
+            ([np.timedelta64("NaT"), datetime(2023, 3, 11, 12, 0)], DataType.TIMESTAMP_MICROS),
         ],
-        ids=["nat_then_aware", "nat_none_then_naive", "only_nat"],
+        ids=[
+            "nat_then_aware",
+            "nat_none_then_naive",
+            "only_nat",
+            "np_nat_then_aware",
+            "only_np_nat",
+            "nan_is_not_skipped",
+            "np_timedelta_nat_then_naive",
+        ],
     )
     def test_data_type_skips_nat(self, values: list[Any], expected: DataType | None) -> None:
         assert _framework()._extract_column_data_type({"t": values}, "t") == expected

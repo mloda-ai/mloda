@@ -4,6 +4,8 @@ import warnings
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -19,6 +21,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     _PROBE_ROWS,
     SqliteRelation,
+    _infer_arrow_type_from_values,
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
 )
@@ -750,9 +753,10 @@ class TestInferSqliteType:
         result = _infer_sqlite_type_from_values([1, 1.5, 2])
         assert result == "REAL", f"Expected REAL but got {result}"
 
-    def test_none_then_float_returns_real(self) -> None:
-        """None values should be skipped; float after None must win."""
-        result = _infer_sqlite_type_from_values([None, 1, 2.5])
+    @pytest.mark.parametrize("gap", [None, pd.NaT, np.datetime64("NaT")], ids=["none", "pd_nat", "np_nat"])
+    def test_gap_then_float_returns_real(self, gap: Any) -> None:
+        """Missing values are skipped; a float after the gap must win."""
+        result = _infer_sqlite_type_from_values([gap, 1, 2.5])
         assert result == "REAL", f"Expected REAL but got {result}"
 
     def test_all_ints_returns_integer(self) -> None:
@@ -763,14 +767,35 @@ class TestInferSqliteType:
         result = _infer_sqlite_type_from_values([1, "hello"])
         assert result == "TEXT"
 
-    def test_all_none_returns_text(self) -> None:
-        result = _infer_sqlite_type_from_values([None, None])
+    @pytest.mark.parametrize(
+        "values",
+        [[None, None], [pd.NaT, None], [np.datetime64("NaT"), np.datetime64("NaT")]],
+        ids=["none", "pd_nat_none", "np_nat"],
+    )
+    def test_all_gaps_returns_text(self, values: list[Any]) -> None:
+        result = _infer_sqlite_type_from_values(values)
         assert result == "TEXT"
 
     def test_string_before_float_returns_text(self) -> None:
         """TEXT dominates: a string before a float must not be overridden by the float."""
         result = _infer_sqlite_type_from_values(["hello", 1.5])
         assert result == "TEXT", f"Expected TEXT but got {result}"
+
+
+class TestInferArrowType:
+    @pytest.mark.parametrize(
+        "values, expected",
+        [
+            ([None, None], pa.string()),
+            ([pd.NaT, None], pa.timestamp("us")),
+            ([np.datetime64("NaT"), np.datetime64("NaT")], pa.timestamp("us")),
+            ([np.timedelta64("NaT"), None], pa.string()),
+        ],
+    )
+    def test_all_gaps_infer_timestamp_only_for_datetime_like_gap(
+        self, values: list[Any], expected: pa.DataType
+    ) -> None:
+        assert _infer_arrow_type_from_values(values) == expected
 
 
 # Shared precedence coverage for both the arrow-type test and the sqlite_affinity_class test below:

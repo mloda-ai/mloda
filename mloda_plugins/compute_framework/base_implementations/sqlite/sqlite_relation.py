@@ -52,7 +52,7 @@ def _arrow_type_to_sqlite(arrow_type: pa.DataType) -> str:
 
 
 def _infer_sqlite_type_from_values(values: list[Any]) -> str:
-    non_null_values = [value for value in values if value is not None]
+    non_null_values = [value for value in values if not is_gap(value)]
     if not non_null_values:
         return "TEXT"
     if all(isinstance(value, (bytes, bytearray)) for value in non_null_values):
@@ -100,8 +100,10 @@ def _sqlite_affinity_to_arrow_type(affinity: str) -> pa.DataType:
 
 
 def _infer_arrow_type_from_values(values: list[Any], column: str | None = None) -> pa.DataType:
-    non_null_values = [value for value in values if value is not None]
+    non_null_values = [value for value in values if not is_gap(value)]
     if not non_null_values:
+        if any(isinstance(v, datetime.datetime) or type(v).__name__ == "datetime64" for v in values):
+            return pa.timestamp("us")
         return pa.string()
     if all(isinstance(value, bool) for value in non_null_values):
         return pa.bool_()

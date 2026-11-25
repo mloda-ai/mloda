@@ -121,6 +121,8 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         if aware:
             utc_values = [None if is_gap(v) else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
+        if any(v is not None and is_gap(v) for v in values):
+            values = [None if is_gap(v) else v for v in values]
     return pa.array(values, type=type)
 
 

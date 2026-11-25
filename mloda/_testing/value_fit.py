@@ -77,10 +77,10 @@ _RULES: dict[DataType, Callable[[Any], bool]] = {
 
 
 def value_fits(data_type: DataType, value: Any) -> bool:
-    """Whether value fits data_type; None fits every member."""
+    """Whether value fits data_type; None and pd.NaT fit every member."""
     if data_type not in _RULES:
         raise ValueError(f"No value-fit rule for data type {data_type.name}")
-    return value is None or _RULES[data_type](value)
+    return value is None or (isinstance(value, datetime) and value != value) or _RULES[data_type](value)
 
 
 def check_values_fit(columns: Mapping[str, Sequence[Any]], types: Mapping[str, DataType]) -> CheckResult:

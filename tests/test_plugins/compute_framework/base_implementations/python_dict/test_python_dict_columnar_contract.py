@@ -12,8 +12,10 @@ Not to be confused with the legacy ``test_python_dict_framework.py`` which still
 row-wise contract; that module is superseded by this one under the columnar model.
 """
 
+from datetime import UTC, datetime
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from mloda.core.abstract_plugins.components.data_types import DataType
@@ -154,6 +156,18 @@ class TestExtractColumnTypes:
     def test_data_type_first_non_none_wins(self) -> None:
         """The first non-None value in the column list determines the type."""
         assert _framework()._extract_column_data_type({"i": [None, 2, 3]}, "i") == DataType.INT64
+
+    @pytest.mark.parametrize(
+        "values, expected",
+        [
+            ([pd.NaT, datetime(2023, 3, 11, 12, 0, tzinfo=UTC)], DataType.TIMESTAMP_MICROS_TZ),
+            ([pd.NaT, None, datetime(2023, 3, 11, 12, 0)], DataType.TIMESTAMP_MICROS),
+            ([pd.NaT], None),
+        ],
+        ids=["nat_then_aware", "nat_none_then_naive", "only_nat"],
+    )
+    def test_data_type_skips_nat(self, values: list[Any], expected: DataType | None) -> None:
+        assert _framework()._extract_column_data_type({"t": values}, "t") == expected
 
     def test_data_type_all_none_is_unknown(self) -> None:
         """An all-None column yields an unknown (None) data type."""

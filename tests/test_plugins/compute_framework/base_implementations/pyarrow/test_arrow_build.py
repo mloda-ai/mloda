@@ -132,6 +132,24 @@ class TestArrowBuildUnchanged:
         assert got.type == want.type
         assert got.to_pylist() == want.to_pylist()
 
+    @pytest.mark.parametrize(
+        "values, types",
+        [
+            ([datetime(2023, 3, 11, 12, 0), pd.NaT], [None, pa.timestamp("us")]),
+            ([pd.Timestamp("2023-03-11 12:00"), pd.NaT], [None, pa.timestamp("us")]),
+            ([pd.NaT, pd.NaT], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
+            ([pd.NaT, None], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
+        ],
+        ids=["naive_nat", "pd_timestamp_nat", "all_nat", "nat_none"],
+    )
+    def test_nat_list_matches_none_substituted(self, values: list[Any], types: list[pa.DataType | None]) -> None:
+        substituted = [None if v is pd.NaT else v for v in values]
+        for type_ in types:
+            got = _builders().arrow_array(values, type=type_)
+            want = pa.array(substituted, type=type_)
+            assert got.type == want.type
+            assert got.to_pylist() == want.to_pylist()
+
 
 _NAIVE = datetime(2023, 3, 11, 12, 0)
 _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
@@ -384,9 +402,10 @@ class TestEntryPointsKeepNonUtcInstants:
         assert field_type.tz == "America/New_York"
         assert _utc(table.column("t").to_pylist()) == _utc([NOON_NY, LATER_NY])
 
+    @pytest.mark.parametrize("first", [NOON_NY, pd.Timestamp(NOON_NY)], ids=["datetime", "pd_timestamp"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
-    def test_dict_build_keeps_nat_gap(self, build: Callable[[dict[str, list[Any]]], Any]) -> None:
-        table = _arrow_of(build({"t": [NOON_NY, pd.NaT]}))
+    def test_dict_build_keeps_nat_gap(self, build: Callable[[dict[str, list[Any]]], Any], first: Any) -> None:
+        table = _arrow_of(build({"t": [first, pd.NaT]}))
         field_type = table.schema.field("t").type
         assert pa.types.is_timestamp(field_type)
         assert field_type.tz == "America/New_York"
@@ -429,6 +448,29 @@ class TestEntryPointsKeepNonUtcInstants:
     def test_value_set_naive_values_on_aware_column_stay_naive(self) -> None:
         column = pa.array([NOON_NY.astimezone(UTC)], type=pa.timestamp("us", tz="America/New_York"))
         assert value_set(column, [_NAIVE]).type == pa.timestamp("us")
+
+
+_NAIVE_NOON = datetime(2023, 3, 11, 12, 0)
+
+
+@pytest.mark.parametrize(
+    "values, want_type, want_values",
+    [
+        pytest.param([_NAIVE_NOON, pd.NaT], pa.timestamp("us"), [_NAIVE_NOON, None], id="naive_nat"),
+        pytest.param([pd.Timestamp(_NAIVE_NOON), pd.NaT], pa.timestamp("us"), [_NAIVE_NOON, None], id="pd_nat"),
+        pytest.param([pd.Timestamp(_NAIVE_NOON), None], pa.timestamp("us"), [_NAIVE_NOON, None], id="pd_none"),
+        pytest.param([pd.NaT, pd.NaT], pa.null(), [None, None], id="all_nat"),
+    ],
+)
+@pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+def test_dict_build_naive_nat_list(
+    build: Callable[[dict[str, list[Any]]], Any], values: list[Any], want_type: pa.DataType, want_values: list[Any]
+) -> None:
+    table = _arrow_of(build({"t": values}))
+    if build is _sqlite_from_dict and want_type == pa.null():
+        want_type = pa.timestamp("us")  # accepted exception: SQLite types an all-NaT column as timestamp
+    assert table.schema.field("t").type == want_type
+    assert table.column("t").to_pylist() == want_values
 
 
 class TestEntryPointsRejectUnnameableZones:

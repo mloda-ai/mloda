@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from decimal import Decimal
 from typing import Any
 
+import pandas as pd
 import pytest
 
 from mloda._testing import value_fit
@@ -110,6 +111,7 @@ _FIT_CASES: list[tuple[DataType, Any, bool]] = [
 ]
 _FIT_CASES += [(member, True, member is DataType.BOOLEAN) for member in _NUMERIC + [DataType.BOOLEAN]]
 _FIT_CASES += [(member, None, True) for member in DataType]
+_FIT_CASES += [(member, pd.NaT, True) for member in DataType]
 
 
 @pytest.mark.parametrize("data_type, value, fits", _FIT_CASES)

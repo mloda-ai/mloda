@@ -9,6 +9,7 @@ from datetime import UTC, datetime, timedelta, timezone
 from typing import Any
 from zoneinfo import ZoneInfo
 
+import pandas as pd
 import pytest
 
 from mloda._testing.source import reclaim
@@ -393,7 +394,7 @@ def test_to_arrow_table_keeps_instants_and_zone(
         monkeypatch.delenv("PYARROW_IGNORE_TIMEZONE", raising=False)
     else:
         monkeypatch.setenv("PYARROW_IGNORE_TIMEZONE", ignore_timezone)
-    values = [datetime(2023, 3, 11, 12, 0, tzinfo=tz), datetime(2023, 3, 12, 12, 0, tzinfo=tz), None]
+    values = [datetime(2023, 3, 11, 12, 0, tzinfo=tz), datetime(2023, 3, 12, 12, 0, tzinfo=tz), None, pd.NaT]
     arrow_types = {"t": pa.timestamp("ns", tz=zone)} if override else None
     table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS_TZ, values)}), arrow_types=arrow_types)
 
@@ -405,9 +406,20 @@ def test_to_arrow_table_keeps_instants_and_zone(
         assert field_type == arrow_types["t"]  # type: ignore[index]
     read = table.column("t").to_pylist()
     assert read[2] is None
+    assert read[3] is None
     for got, want in zip(read[:2], values[:2]):
         assert got == want
         assert got.utcoffset() == want.utcoffset()
+
+
+def test_to_arrow_table_reads_nat_as_null_in_naive_column() -> None:
+    pa = pytest.importorskip("pyarrow")
+    from mloda._testing.framework_adapter import to_arrow_table
+
+    naive = datetime(2023, 3, 11, 12, 0)
+    table = to_arrow_table(TypedTestData({"t": (DataType.TIMESTAMP_MICROS, [naive, pd.NaT, None])}))
+    assert table.schema.field("t").type == pa.timestamp("us")
+    assert table.column("t").to_pylist() == [naive, None, None]
 
 
 @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom"])

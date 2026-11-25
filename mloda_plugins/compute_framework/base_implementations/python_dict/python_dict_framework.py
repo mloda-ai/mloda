@@ -119,7 +119,8 @@ class PythonDictFramework(ComputeFramework):
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         for val in self._column_values(data, column_name):
-            if val is None:
+            # pd.NaT is the only datetime unequal to itself; no pandas or pyarrow import keeps this module backend-neutral.
+            if val is None or (isinstance(val, datetime.datetime) and val != val):
                 continue
             if isinstance(val, bool):
                 return DataType.BOOLEAN

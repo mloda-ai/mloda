@@ -21,6 +21,7 @@ from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_affinity
 from mloda_plugins.compute_framework.base_implementations.sqlite.sqlite_relation import (
     _PROBE_ROWS,
     SqliteRelation,
+    _infer_arrow_type_from_values,
     _infer_sqlite_type_from_values,
     _sqlite_affinity_to_arrow_type,
 )
@@ -779,6 +780,22 @@ class TestInferSqliteType:
         """TEXT dominates: a string before a float must not be overridden by the float."""
         result = _infer_sqlite_type_from_values(["hello", 1.5])
         assert result == "TEXT", f"Expected TEXT but got {result}"
+
+
+class TestInferArrowType:
+    @pytest.mark.parametrize(
+        "values, expected",
+        [
+            ([None, None], pa.string()),
+            ([pd.NaT, None], pa.timestamp("us")),
+            ([np.datetime64("NaT"), np.datetime64("NaT")], pa.timestamp("us")),
+            ([np.timedelta64("NaT"), None], pa.string()),
+        ],
+    )
+    def test_all_gaps_infer_timestamp_only_for_datetime_like_gap(
+        self, values: list[Any], expected: pa.DataType
+    ) -> None:
+        assert _infer_arrow_type_from_values(values) == expected
 
 
 # Shared precedence coverage for both the arrow-type test and the sqlite_affinity_class test below:

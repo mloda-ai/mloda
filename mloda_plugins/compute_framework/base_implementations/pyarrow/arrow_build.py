@@ -11,6 +11,13 @@ from functools import cache
 from typing import Any
 from zoneinfo import ZoneInfo, available_timezones
 
+from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_utils import (
+    _PLAIN_TYPES,
+    is_nat,
+)
+
+_FAST_TYPES = _PLAIN_TYPES | {float}
+
 try:
     import pyarrow as pa
 except ImportError:
@@ -66,13 +73,7 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
 
 def is_gap(v: Any) -> bool:
     """True for None, pd.NaT and NumPy NaT."""
-    # NaT is unequal to itself (no pandas or numpy import).
-    if v is None:
-        return True
-    if isinstance(v, datetime):
-        return bool(v != v)
-    kind = type(v)
-    return kind.__module__ == "numpy" and kind.__name__ in ("datetime64", "timedelta64") and bool(v != v)
+    return v is None or (type(v) not in _FAST_TYPES and is_nat(v))
 
 
 def _has_gap(values: Any) -> bool:

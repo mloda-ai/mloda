@@ -30,7 +30,7 @@ from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import (
     FeatureChainParserMixin,
 )
-from mloda.core.abstract_plugins.components.property_spec import _NoDefault, is_no_default
+from mloda.core.abstract_plugins.components.property_spec import _NoDefault, is_no_default, routing_keys
 from mloda.core.abstract_plugins.components.feature_set import FeatureSet
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
@@ -793,6 +793,41 @@ class TestPropertySpecScalar:
             PropertySpec("d", scalar=True, default=default, strict_validation=strict, allowed_values=("valid",))
         with pytest.raises(ValueError, match="scalar"):
             property_spec("d", scalar=True, default=default, strict=strict, allowed_values=("valid",))
+
+
+class TestPropertySpecRouting:
+    """The routing flag marks a source group key that only picks the source."""
+
+    @pytest.mark.parametrize(
+        "mapping,expected",
+        [
+            ("absent", set()),
+            (None, set()),
+            ({"a": "not a spec", "b": PropertySpec("b", routing=True)}, {"b"}),
+            (
+                {"a": PropertySpec("a", routing=True), "b": PropertySpec("b"), "c": PropertySpec("c", routing=True)},
+                {"a", "c"},
+            ),
+        ],
+        ids=["no_mapping", "none_mapping", "non_spec_value", "mixed"],
+    )
+    def test_routing_keys_of_plain_classes(self, mapping: Any, expected: set[str]) -> None:
+        attrs: dict[str, Any] = {} if mapping == "absent" else {"PROPERTY_MAPPING": mapping}
+
+        assert routing_keys(type("PlainGroup", (), attrs)) == expected
+
+    def test_defaults_false_and_passes_through_builder(self) -> None:
+        assert PropertySpec("d").routing is False
+        assert property_spec("d").routing is False
+        assert property_spec("d", routing=True).routing is True
+        assert property_spec("d", routing=True) == PropertySpec("d", routing=True)
+
+    @pytest.mark.parametrize("flag", [1, "yes", None])
+    def test_routing_requires_a_bool(self, flag: Any) -> None:
+        with pytest.raises(ValueError, match="routing must be a bool"):
+            PropertySpec("d", routing=flag)
+        with pytest.raises(ValueError, match="routing must be a bool"):
+            property_spec("d", routing=flag)
 
 
 class TestCredentialHandleSpecBuilder:

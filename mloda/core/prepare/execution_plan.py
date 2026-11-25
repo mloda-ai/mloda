@@ -178,7 +178,7 @@ class ExecutionPlan:
         # since a split with no ancestors can never be the actual cause of a missing-Links error.
         # Feeds the missing-Links error's option-split hint.
         self._option_split_buckets: dict[type[FeatureGroup], dict[Any, tuple[Feature, set[UUID]]]] = {}
-        # Per root feature_group class, the union of split_context_keys used to hash its
+        # Per root or replaces_rows feature_group class, the union of split_context_keys used to hash its
         # buckets (the actual split_keys `group_features_by_compute_framework_and_options` used).
         self._option_split_keys: dict[type[FeatureGroup], frozenset[Any]] = {}
 
@@ -823,13 +823,13 @@ class ExecutionPlan:
             memoized = direct_parents_memo.get(feature.uuid)
             if memoized is None:
                 direct = ExecutionPlan.direct_ancestors(feature.uuid, parent_to_children_mapping)
-                # A root scope's split keys cover plain copies too, regardless of which copy declared them.
+                # A root or replaces_rows scope's split keys cover plain copies too, whichever copy declared them.
                 split_roots = {
                     uuid
                     for uuid in parent_to_children_mapping.get(feature.uuid, ())
                     if nodes[uuid].feature.options.twin_split_keys
                     or (
-                        not parent_to_children_mapping.get(uuid)
+                        (not parent_to_children_mapping.get(uuid) or nodes[uuid].feature_group_class.replaces_rows())
                         and self._option_split_keys.get(nodes[uuid].feature_group_class)
                     )
                 }
@@ -3861,14 +3861,14 @@ Available join types:
             self.global_filter,
             None if nodes is None else no_variant_conflict,
         )
-        # Only a root feature group (no upstream ancestors) can be the actual cause of a
-        # missing-Links error: a split with ancestors of its own is never the source read directly.
         is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
-        if is_root:
+        if is_root or feature_group.replaces_rows():
             split_keys = frozenset(key for feature in features for key in feature.options.split_context_keys)
             self._option_split_keys[feature_group] = self._option_split_keys.get(feature_group, frozenset()) | (
                 split_keys
             )
+        # Only a root can cause a missing-Links error; a split with ancestors is never the source read directly.
+        if is_root:
             split_buckets = self._option_split_buckets.setdefault(feature_group, {})
             for f_hash, grouped_features in features_grouped_by_framework_and_options.items():
                 representative = next(iter(grouped_features))

@@ -62,6 +62,7 @@ class TestTheConstructorIsTheSchema:
             "runtime",
             "scalar",
             "group_only",
+            "routing",
             "name_converter",
             "expected",
         }

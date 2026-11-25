@@ -271,6 +271,40 @@ class TestTextLinesOption:
 
         assert _run_collection(path, [feature]) == {"TextFG": [self.TEXT]}
 
+    @pytest.mark.parametrize("case", ["unmarked", "marked", "explicit_false", "explicit_handle"])
+    def test_direct_copies_differing_in_text_lines_are_rejected_unless_marked_or_equal(
+        self, tmp_path: Path, case: str
+    ) -> None:
+        path = _write(tmp_path, self.TEXT)
+        context: dict[str, Any] = (
+            {"data_access_handle": "doc"} if case == "explicit_handle" else {"text_lines": case != "explicit_false"}
+        )
+        split = {"text_lines"} if case == "marked" else set()
+        requests: list[Feature | str] = [
+            Feature("TextFG", Options(context=context), split_context_keys=split),
+            "TextFG",
+        ]
+
+        if case == "unmarked":
+            with pytest.raises(ValueError, match="differing values for context key.*text_lines"):
+                _run_collection(path, requests)
+            return
+
+        columns = _run_collection(path, requests)
+
+        if case == "marked":
+            assert sorted(columns["TextFG"]) == sorted(["alpha", "beta", "gamma", self.TEXT])
+        else:
+            assert columns == {"TextFG": [self.TEXT]}
+
+    def test_a_consumer_of_the_plain_source_next_to_a_direct_text_lines_copy(self, tmp_path: Path) -> None:
+        path = _write(tmp_path, self.TEXT)
+
+        columns = _run_collection(path, [Feature("TextFG", Options(context={"text_lines": True})), "TextFG__upper"])
+
+        assert columns["TextFG"] == ["alpha", "beta", "gamma"]
+        assert columns["TextFG__upper"] == [self.TEXT.upper()]
+
     def test_the_option_reaches_the_source_through_a_chained_feature(self, tmp_path: Path) -> None:
         path = _write(tmp_path, self.TEXT)
         options = Options(group={"text_lines": True})

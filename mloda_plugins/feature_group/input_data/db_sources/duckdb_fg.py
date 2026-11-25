@@ -71,7 +71,9 @@ class DuckdbFG(SourceFeatureGroup):
         ClaimRoute("connection", NamePolicy.CHECKED, True, (HANDLE_KEY,)),
     )
     PROPERTY_MAPPING: ClassVar[dict[str, PropertySpec]] = {
-        HANDLE_KEY: PropertySpec("Name of the DuckDB connection in the DataAccessCollection to read.", default=None)
+        HANDLE_KEY: PropertySpec(
+            "Name of the DuckDB connection in the DataAccessCollection to read.", default=None, routing=True
+        )
     }
 
     @classmethod

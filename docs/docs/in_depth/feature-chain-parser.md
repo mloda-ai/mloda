@@ -528,8 +528,8 @@ candidates = Feature(
 
 The split applies to root inputs and `replaces_rows` groups. A marked input with inputs of
 its own, reached twice with differing values over the same parents, is still rejected;
-use `cascade_context_keys` there. For a `replaces_rows` input, mark every copy: a marker
-on only some copies does not split the others and planning fails.
+use `cascade_context_keys` there. For a `replaces_rows` input, a marker on any copy splits
+every copy in the group's scope, as for roots.
 
 ### Resolution errors from over-forwarding
 

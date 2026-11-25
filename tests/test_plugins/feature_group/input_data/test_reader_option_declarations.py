@@ -3,17 +3,19 @@ matchers read is declared. Matching is called directly or through evaluate with 
 
 from __future__ import annotations
 
+from collections.abc import Callable
 from pathlib import Path
 from typing import Any
 
 import pytest
 
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
-from mloda.core.abstract_plugins.components.property_spec import PropertySpec
+from mloda.core.abstract_plugins.components.property_spec import PropertySpec, routing_keys
 from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.provider import ReadDBFG, ReadDocumentFG, ReadFileFG
 from mloda.user import DataAccessCollection, Feature, Options
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
+from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 from mloda_plugins.feature_group.input_data.file_formats.json_fg import JsonFG
 from mloda_plugins.feature_group.input_data.db_sources.sqlite_fg import SqliteFG
 from tests.mixins.reader_feature_groups.lazy_source_group import load_document_group
@@ -118,6 +120,25 @@ class TestDuckdbFGDeclarations:
         from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
 
         assert DuckdbFG.declared_option_keys() == {"connection_handle"}
+
+
+class TestRoutingKeys:
+    """Only the keys that pick the source are routing; a content key such as text_lines is not."""
+
+    @pytest.mark.parametrize(
+        "load,expected",
+        [
+            (lambda: JsonFG, {"data_access_handle", "document_suffixes"}),
+            (lambda: load_document_group("markdown_fg", "MarkdownFG"), {"data_access_handle", "document_suffixes"}),
+            (lambda: load_document_group("text_fg", "TextFG"), {"data_access_handle", "document_suffixes"}),
+            (lambda: ReadDBFG, {"data_access_handle"}),
+            (lambda: SqliteFG, {"data_access_handle"}),
+            (lambda: DuckdbFG, {"connection_handle"}),
+        ],
+        ids=["json", "markdown", "text", "db", "sqlite", "duckdb"],
+    )
+    def test_stock_routing_keys(self, load: Callable[[], Any], expected: set[str]) -> None:
+        assert routing_keys(load()) == expected
 
 
 class TestEveryOptionKeyReadIsDeclared:

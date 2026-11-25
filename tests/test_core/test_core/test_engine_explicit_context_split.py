@@ -190,7 +190,9 @@ def test_direct_requests_differing_in_a_declared_key_are_rejected_unless_marked(
     ]
 
     if not marked:
-        with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
+        with pytest.raises(
+            ValueError, match="(?s)is reached twice with differing values for context key.*split_context_keys"
+        ):
             _run(requests, {root}, [framework])
         return
 
@@ -389,5 +391,124 @@ def test_non_root_input_reached_with_differing_values_is_rejected_at_plan_time(
     marking: set[str], monkeypatch: pytest.MonkeyPatch
 ) -> None:
     monkeypatch.setattr(f"{__name__}.MARKING_TWINS", marking)
-    with pytest.raises(ValueError, match="is reached twice with differing values for context key"):
+    with pytest.raises(
+        ValueError, match="(?s)is reached twice with differing values for context key.*cascade_context_keys"
+    ) as excinfo:
         _run(list(TWIN_CONSUMERS), {MarkedBaseRoot, MarkedMid, MarkedTwinConsumer}, [PythonDictFramework])
+    assert "split_context_keys" not in str(excinfo.value)
+
+
+RM_BASE = "rm_base"
+RM_MID = "rm_mid"
+RM_CONSUMERS = {"rm_one": 1, "rm_two": 2, "rm_three": 3}
+RM_OUTERS = {f"rm_outer_{name[3:]}": name for name in RM_CONSUMERS}
+RM_MARKED: set[str] = set()
+
+
+class ReplacingBaseRoot(DataCreatorFeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {RM_BASE}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {RM_BASE: [1, 2, 3]}
+
+
+class ReplacingMid(FeatureGroup):
+    PROPERTY_MAPPING = {"level": PropertySpec("The rows depend on it.", context=True)}
+
+    @classmethod
+    def replaces_rows(cls) -> bool:
+        return True
+
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return {RM_MID}
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        return {Feature(RM_BASE)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        level = int(next(iter(features.features)).options.get("level"))
+        return {RM_MID: [level] * level}
+
+
+class ReplacingConsumer(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(RM_CONSUMERS)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        keys = {"level"} if str(feature_name) in RM_MARKED else set()
+        return {Feature(RM_MID, Options(context={"level": RM_CONSUMERS[str(feature_name)]}), split_context_keys=keys)}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(feature.name): [sum(data[RM_MID])] * len(data[RM_MID]) for feature in features.features}
+
+
+class ReplacingOuter(FeatureGroup):
+    @classmethod
+    def feature_names_supported(cls) -> set[str]:
+        return set(RM_OUTERS)
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature]:
+        return {Feature(RM_OUTERS[str(feature_name)])}
+
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        return {str(feature.name): data[RM_OUTERS[str(feature.name)]] for feature in features.features}
+
+
+RM_GROUPS: set[type[FeatureGroup]] = {ReplacingBaseRoot, ReplacingMid, ReplacingConsumer, ReplacingOuter}
+
+
+def _rm_expected(levels: tuple[int, ...]) -> dict[str, list[list[int]]]:
+    return {name: [[level * level] * level] for name, level in RM_CONSUMERS.items() if level in levels}
+
+
+@pytest.mark.parametrize("placement", ["third-consumer", "third-direct", "every-copy", "no-marker"])
+def test_a_marker_on_one_copy_of_a_replaces_rows_input_splits_every_copy(
+    placement: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    marked = {
+        "third-consumer": {"rm_three"},
+        "third-direct": set(),
+        "every-copy": set(RM_CONSUMERS),
+        "no-marker": set(),
+    }[placement]
+    monkeypatch.setattr(f"{__name__}.RM_MARKED", marked)
+    requests: list[Feature | str] = ["rm_one", "rm_two"]
+    requests.append(
+        Feature(RM_MID, Options(context={"level": 3}), split_context_keys={"level"})
+        if placement == "third-direct"
+        else "rm_three"
+    )
+
+    if placement == "no-marker":
+        with pytest.raises(
+            ValueError,
+            match="(?s)is reached twice with differing values for context key.*split_context_keys.*cascade_context_keys",
+        ):
+            _run(requests, RM_GROUPS, [PythonDictFramework])
+        return
+
+    columns = _columns(_run(requests, RM_GROUPS, [PythonDictFramework]))
+
+    if placement == "third-direct":
+        assert columns == {**_rm_expected((1, 2)), RM_MID: [[3, 3, 3]]}
+    else:
+        assert columns == _rm_expected((1, 2, 3))
+
+
+@pytest.mark.parametrize("marked", [{"rm_three"}, set(RM_CONSUMERS)], ids=["one-copy", "all-copies"])
+def test_second_level_consumers_follow_split_replaces_rows_copies(
+    marked: set[str], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(f"{__name__}.RM_MARKED", marked)
+
+    columns = _columns(_run(list(RM_OUTERS), RM_GROUPS, [PythonDictFramework]))
+
+    assert columns == {outer: [[level * level] * level] for outer, level in zip(RM_OUTERS, RM_CONSUMERS.values())}

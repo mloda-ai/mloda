@@ -739,11 +739,20 @@ def test_global_filter_injected_feature_does_not_hide_the_input_walk(
         _assert_warning(caplog, [FILTER_CONSUMER], [UncascadedCtxFilterRoot])
 
 
+def _all(engine: Engine, name: str) -> list[Feature]:
+    return [f for group in engine.feature_group_collection.values() for f in group if str(f.name) == name]
+
+
+def _assert_stored_once(engine: Engine) -> None:
+    for features in engine.feature_group_collection.values():
+        assert len(list(features)) == len({id(feature) for feature in features})
+
+
+@pytest.mark.parametrize("a_first", [True, False], ids=["a-first", "b-first"])
 @pytest.mark.parametrize("a_propagates", [False, True], ids=["both-lost", "only-b-lost"])
 def test_shared_input_object_keeps_each_consumers_lost_key(
-    a_propagates: bool, caplog: pytest.LogCaptureFixture
+    a_propagates: bool, a_first: bool, caplog: pytest.LogCaptureFixture
 ) -> None:
-    # The propagating consumer goes first; reversed, planning raises on the already-defaulted group key.
     if a_propagates:
         options_a = Options(context={KEY: PRIVATE_VALUE}, propagate_context_keys=frozenset({KEY}))
         options_b = Options(context={KEY: OTHER_PRIVATE_VALUE})
@@ -752,13 +761,51 @@ def test_shared_input_object_keeps_each_consumers_lost_key(
         options_a = Options(context={KEY: PRIVATE_VALUE})
         options_b = Options(context={KEY: PRIVATE_VALUE})
         expected = [SHARED_A, SHARED_B]
+    requests = [Feature(SHARED_A, options_a), Feature(SHARED_B, options_b)]
     with caplog.at_level(logging.WARNING):
-        engine = _prepare([Feature(SHARED_A, options_a), Feature(SHARED_B, options_b)])
+        engine = _prepare(requests if a_first else requests[::-1])
     assert [r for r in _warnings(caplog, DEFAULT_ROOT) if "default-equivalent options" in r.getMessage()] == []
     _assert_warning(caplog, expected, [UncascadedCtxDefaultRoot])
-    root = _feature(engine, DEFAULT_ROOT)
-    assert engine.feature_link_parents[_feature(engine, SHARED_A).uuid] == {root.uuid}
-    assert engine.feature_link_parents[_feature(engine, SHARED_B).uuid] == {root.uuid}
+    roots = _all(engine, DEFAULT_ROOT)
+    parent_a = engine.feature_link_parents[_feature(engine, SHARED_A).uuid]
+    parent_b = engine.feature_link_parents[_feature(engine, SHARED_B).uuid]
+    if a_propagates:
+        assert len(roots) == 2
+        by_uuid = {root.uuid: root for root in roots}
+        assert {root.options.get(KEY) for root in roots} == {PRIVATE_VALUE, DECLARED_DEFAULT}
+        assert len(parent_a) == len(parent_b) == 1
+        assert by_uuid[next(iter(parent_a))].options.get(KEY) == PRIVATE_VALUE
+        assert by_uuid[next(iter(parent_b))].options.get(KEY) == DECLARED_DEFAULT
+    else:
+        assert len(roots) == 1
+        assert parent_a == parent_b == {roots[0].uuid}
+
+
+@pytest.mark.parametrize("a_first", [True, False], ids=["a-first", "b-first"])
+def test_shared_input_object_does_not_leak_a_forwarded_group_key(a_first: bool) -> None:
+    forwarded = "uncascaded_ctx_forwarded_key"
+    options_a = Options(context={KEY: PRIVATE_VALUE})
+    options_b = Options(group={forwarded: "forwarded"}, context={KEY: PRIVATE_VALUE})
+    requests = [Feature(SHARED_A, options_a), Feature(SHARED_B, options_b)]
+    engine = _prepare(requests if a_first else requests[::-1])
+    roots = _all(engine, DEFAULT_ROOT)
+    assert len(roots) == 2
+    assert len({root.uuid for root in roots}) == 2
+    assert sorted(forwarded in root.options.group for root in roots) == [False, True]
+    _assert_stored_once(engine)
+    by_uuid = {root.uuid: root for root in roots}
+    root_a = by_uuid[next(iter(engine.feature_link_parents[_feature(engine, SHARED_A).uuid]))]
+    root_b = by_uuid[next(iter(engine.feature_link_parents[_feature(engine, SHARED_B).uuid]))]
+    assert forwarded not in root_a.options.group
+    assert root_b.options.group.get(forwarded) == "forwarded"
+
+
+@pytest.mark.parametrize("a_first", [True, False], ids=["a-first", "b-first"])
+def test_propagating_into_a_key_the_shared_input_sets_itself_raises(a_first: bool) -> None:
+    propagating = Options(context={KEY: PRIVATE_VALUE}, propagate_context_keys=frozenset({KEY}))
+    requests = [Feature(SHARED_SET_A, Options(context={KEY: PRIVATE_VALUE})), Feature(SHARED_SET_B, propagating)]
+    with pytest.raises(ValueError, match="keys already exist in group"):
+        _prepare(requests if a_first else requests[::-1])
 
 
 def test_shared_input_object_setting_the_key_itself_is_quiet(caplog: pytest.LogCaptureFixture) -> None:

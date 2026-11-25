@@ -785,7 +785,9 @@ Options(
   consumer cascades a key and another delivers it with a one-hop push or a pull, or when
   a shared `Feature` object gains the cascade after an earlier request resolved it. Its
   inputs are resolved once. Declare the same `cascade_context_keys` on every request
-  reaching it, and list the cascading request first when `Feature` objects are shared.
+  reaching it, and list the cascading request first when a requested `Feature` object is
+  named as an input by another request. A `Feature` object returned by several consumers'
+  `input_features` is planned once per consumer, so that order does not matter for it.
   A shared root feature is exempt.
 - Two requests of one input that differ in compute framework resolve their inputs separately.
   When only one of them cascades a key, the plan fails with an error that the input is read

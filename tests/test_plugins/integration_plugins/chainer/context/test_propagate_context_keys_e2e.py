@@ -225,6 +225,31 @@ class TestPropagateContextKeysE2E:
         assert find_column(result, "feat_b") == [1200, 1400, 1600, 1800, 2000]
         assert find_column(result, "feat_c") == [4600, 5200, 5800, 6400, 7000]
 
+    @pytest.mark.xfail(
+        strict=True,
+        reason="A requested Feature named as a later request's input is merged in place and stored twice in its set.",
+    )
+    def test_requested_input_named_by_a_later_request_is_stored_once(self) -> None:
+        feat_b = Feature(
+            name="dup_feat_b",
+            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1"}),
+        )
+        feat_c = Feature(
+            name="dup_feat_c",
+            options=Options(
+                context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2", "env": "prod"},
+                propagate_context_keys=frozenset({"env"}),
+            ),
+        )
+        session = mloda.prepare(
+            [feat_b, feat_c, "Sales"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+        )
+        assert session.engine is not None
+        stored = [f for group in session.engine.feature_group_collection.values() for f in group]
+        assert len([f for f in stored if str(f.name) == "dup_feat_b"]) == 1
+
     def test_no_propagation_without_propagate_context_keys(self) -> None:
         feat_b = Feature(
             name="feat_b_noprop",
@@ -491,8 +516,8 @@ class TestPropagateContextKeysE2E:
     _ENV_ROOT_COLLECTOR = PluginCollector.enabled_feature_groups(
         {PropagateContextFeatureGroupTest, CascadeEnvRootGroupTest}
     )
-    _CHAIN_ORDERS_OK = ["zyx", "zxy", "z", "zy", "zx", "xzy", "xz"]
-    _CHAIN_ORDERS_RAISE = ["yzx", "yxz", "xyz", "yz"]
+    _CHAIN_ORDERS_OK = ["zyx", "zxy", "z", "zy", "zx", "xzy", "xz", "yz"]
+    _CHAIN_ORDERS_RAISE = ["yzx", "yxz", "xyz"]
     _CHAIN_EXPECTED = {
         "x": [1020, 1040, 1060],
         "y": [4060, 4120, 4180],
@@ -542,13 +567,6 @@ class TestPropagateContextKeysE2E:
                 ),
             ),
         }
-        requests = [consumers[name] for name in order]
-        if order == "ab":
-            with pytest.raises(ValueError) as excinfo:
-                self._run_env_root(requests)
-            assert f"cer_mid_{order}" in str(excinfo.value)
-            assert "cascade_context_keys" in str(excinfo.value)
-        else:
-            result = self._run_env_root(requests)
-            assert find_column(result, f"cer_a_{order}") == [2040, 2080, 2120]
-            assert find_column(result, f"cer_b_{order}") == [3040, 3080, 3120]
+        result = self._run_env_root([consumers[name] for name in order])
+        assert find_column(result, f"cer_a_{order}") == [4, 8, 12]
+        assert find_column(result, f"cer_b_{order}") == [3040, 3080, 3120]

@@ -223,6 +223,11 @@ def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     return failures
 
 
+def _names_option(reason: str, key: str) -> bool:
+    """True when `key` appears in `reason` as a whole option name."""
+    return re.search(rf"(?<!\w){re.escape(key)}(?!\w)", reason) is not None
+
+
 def _check_required(
     cls: type[FeatureGroup],
     names: list[str],
@@ -230,7 +235,7 @@ def _check_required(
     bound_keys: Mapping[str, frozenset[str]],
     dac: DataAccessCollection | None = None,
 ) -> tuple[list[str], list[str]]:
-    """Dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
+    """Dropping a required key must record a rejection naming it; on the config path resolution may name it."""
     failures = []
     notes: list[str] = []
     config_path = _on_config_path(cls, base)
@@ -257,7 +262,7 @@ def _check_required(
                 if config_path
                 else None
             )
-            if reason is None or key not in reason:
+            if reason is None or not _names_option(reason, key):
                 failures.append(f"required: no rejection recorded without required option '{key}'")
         elif rejection.code != CoreDeclineCode.REQUIRED_OPTION_ABSENT:
             failures.append(

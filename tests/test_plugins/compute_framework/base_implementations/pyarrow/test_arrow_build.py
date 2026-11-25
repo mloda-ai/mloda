@@ -526,7 +526,7 @@ class TestEntryPointsKeepNonUtcInstants:
         self, build: Callable[[dict[str, list[Any]]], Any], hours: int
     ) -> None:
         offset = timezone(timedelta(hours=hours))
-        values = [[NOON_NY.astimezone(offset), None], [LATER_NY.astimezone(offset)]]
+        values: list[list[datetime | None]] = [[NOON_NY.astimezone(offset), None], [LATER_NY.astimezone(offset)]]
         got = _arrow_of(build({"t": values})).column("t").to_pylist()
         assert _utc_nested(got) == _utc_nested(values)
         if "duckdb" not in build.__name__:

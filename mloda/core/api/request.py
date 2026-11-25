@@ -281,6 +281,8 @@ class mlodaAPI:
             # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
             # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
             # Feature objects are then shallow-copied, so the plan never writes into the caller's Features.
+            if not copy_features and not isinstance(requested_features, (Features, str, list, tuple)):
+                requested_features = list(requested_features)
             _requested_features = (
                 deepcopy(requested_features) if copy_features else self._shallow_copy_features(requested_features)
             )
@@ -288,6 +290,7 @@ class mlodaAPI:
             data_access_collection, self._connection_handles = self._bind_feature_connections(
                 _requested_features, data_access_collection
             )
+            seeds = self._seed_map(requested_features, _requested_features, copy_features)
 
             self._api_data_columns = self._api_data_spec(api_data)
             self._api_data_types = self._api_data_type_spec(api_data)
@@ -298,6 +301,7 @@ class mlodaAPI:
 
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features)
+            self.features.requested = seeds
             setup_compute_framework = SetupComputeFramework(
                 compute_frameworks,
                 self.features,
@@ -501,6 +505,24 @@ class mlodaAPI:
             return requested_features
         copies = [f.copy_for_plan() if isinstance(f, Feature) else f for f in requested_features]
         return tuple(copies) if isinstance(requested_features, tuple) else copies
+
+    @staticmethod
+    def _seed_map(original: Any, copied: Any, copy_features: bool) -> dict[int, tuple[Feature, Feature]]:
+        """Map the id of each object a consumer may hold to (clean source, plan request object)."""
+        if isinstance(original, str):
+            return {}
+        originals = original.collection if isinstance(original, Features) else original
+        planned = copied.collection if isinstance(copied, Features) else copied
+        seeds: dict[int, tuple[Feature, Feature]] = {}
+        for o, p in zip(originals, planned, strict=True):
+            if not isinstance(p, Feature):
+                continue
+            if copy_features:
+                seeds[id(p)] = (p.copy_for_plan(), p)
+            else:
+                seeds[id(o)] = (o, p)
+                seeds[id(p)] = (o, p)
+        return seeds
 
     @staticmethod
     def _bind_feature_connections(

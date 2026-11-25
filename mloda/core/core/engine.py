@@ -69,7 +69,7 @@ from mloda.core.prepare.resolution_types import (
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_collection import Features
+from mloda.core.abstract_plugins.components.feature_collection import Features, consume_seed
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION, HANDLE_OPTION_NAMES
@@ -180,8 +180,8 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        # Requested features are this plan's own objects; an input_features return of one is not copied.
-        self._requested: dict[int, Feature] = {}
+        # Unconsumed seeds by id: (clean source, plan request object); an input_features return of one plans into it.
+        self._requested: dict[int, tuple[Feature, Feature]] = {}
         with run_match_cache(), accessible_implementations(self.implementations), input_resolution_scope(self):
             self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
@@ -306,7 +306,7 @@ class Engine:
                 plan.principal if plan else None,
             )
         )
-        self._requested = {id(feature): feature for feature in features.collection}
+        self._requested = features.requested or {id(f): (f, f) for f in features.collection}
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
@@ -394,11 +394,35 @@ class Engine:
         # _filter_feature_group_by_links gate runs during resolution itself, before recursion completes.
         for feature in features:
             self.add_feature_link_to_links(feature)
-        for feature in features:
+        for feature in self._consumers_first(features) if depth == 0 else features:
+            if depth == 0:
+                consume_seed(self._requested, feature)
             # Stamped right before resolution: a reused instance must name this consumer, not an earlier one.
             feature.resolving_consumer = consumer
             feature.resolving_path = path
             self._process_feature(feature, features, requested, depth)
+
+    def _consumers_first(self, features: Features) -> list[Feature]:
+        """Requests no other request names in its options first, then the named ones, each in request order."""
+        named: set[int] = set()
+        for request in features:
+            seen: set[int] = set()
+            stack: list[Any] = [request.options.group, request.options.context]
+            while stack:
+                value = stack.pop()
+                if id(value) in seen:
+                    continue
+                seen.add(id(value))
+                if isinstance(value, Feature):
+                    seed = self._requested.get(id(value))
+                    if seed is not None and seed[1] is not request:
+                        named.add(id(seed[1]))
+                    stack.extend((value.options.group, value.options.context))
+                elif isinstance(value, dict):
+                    stack.extend(value.values())
+                elif isinstance(value, (list, tuple, set, frozenset)):
+                    stack.extend(value)
+        return [f for f in features if id(f) not in named] + [f for f in features if id(f) in named]
 
     def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
@@ -1418,8 +1442,7 @@ class Engine:
                         f"Feature '{feature.name}' is requested with different cascade_context_keys: "
                         f"{sorted(resolved_keys)} and {sorted(feature.options.cascade_context_keys)}. "
                         f"Its inputs were already resolved, so the cascade would depend on request order. "
-                        f"Declare the same cascade_context_keys on every request that reaches the feature, "
-                        f"and list the cascading request first when a Feature object is shared between requests."
+                        f"Declare the same cascade_context_keys on every request that reaches the feature."
                     )
             if existing_feature.data_type is None and feature.data_type is not None:
                 # Other Features may hold the old object in their identity. Copy it without changing the graph UUID.

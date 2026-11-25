@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -39,3 +40,54 @@ def test_distinct_feature_names_in_different_feature_groups_are_allowed() -> Non
     collection = Features([first, second])
 
     assert [feature.name for feature in collection] == ["feature_a", "feature_b"]
+
+
+def _seeded_pair() -> tuple[Feature, Feature]:
+    """A clean source and the plan object it was copied from."""
+    plan_object = Feature(name="seed_once_feature", options=Options(group={"g": 1}, context={"k": "v"}))
+    return plan_object.copy_for_plan(), plan_object
+
+
+def test_first_build_with_a_seed_plans_into_the_plan_object() -> None:
+    source, plan_object = _seeded_pair()
+    requested: Any = {id(plan_object): (source, plan_object)}
+
+    collection = Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+
+    assert collection.collection[0] is plan_object
+    assert id(plan_object) not in requested
+
+
+def test_second_build_reaching_a_consumed_seed_gets_a_copy_of_the_clean_source() -> None:
+    source, plan_object = _seeded_pair()
+    requested: Any = {id(plan_object): (source, plan_object)}
+    Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+    plan_object.initial_requested_data = True
+    plan_object.options.add_to_context("later", "x")
+
+    second = Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+
+    copy_made = second.collection[0]
+    assert copy_made is not plan_object
+    assert copy_made.uuid != plan_object.uuid
+    assert copy_made.options.get("k") == "v"
+    assert copy_made.options.get("later") is None
+    assert copy_made.initial_requested_data is False
+
+
+def test_consuming_a_seed_removes_every_key_pointing_at_the_plan_object() -> None:
+    source, plan_object = _seeded_pair()
+    requested: Any = {id(source): (source, plan_object), id(plan_object): (source, plan_object)}
+
+    Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+
+    assert requested == {}
+
+
+def test_a_seed_keyed_by_the_callers_original_substitutes_the_plan_object() -> None:
+    source, plan_object = _seeded_pair()
+    requested: Any = {id(source): (source, plan_object)}
+
+    collection = Features([source], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+
+    assert collection.collection[0] is plan_object

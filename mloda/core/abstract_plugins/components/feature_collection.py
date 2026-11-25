@@ -7,6 +7,19 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 
 
+def consume_seed(requested: dict[int, tuple[Feature, Feature]], feature: Feature) -> Feature | None:
+    """Return the plan object for an unconsumed seed and drop every key pointing at it."""
+    seed = requested.get(id(feature))
+    if seed is None:
+        return None
+    source, plan_object = seed
+    for key in [k for k, (_, p) in requested.items() if p is plan_object]:
+        del requested[key]
+    if source is not plan_object:
+        plan_object.plan_source = source
+    return plan_object
+
+
 class Features:
     """A class to create the features collection and do basic validation.
 
@@ -27,7 +40,7 @@ class Features:
         child_uuid: UUID | None = None,
         parent_domain: str | None = None,
         consumer_local_keys: frozenset[str] = frozenset(),
-        requested: dict[int, Feature] | None = None,
+        requested: dict[int, tuple[Feature, Feature]] | None = None,
     ) -> None:
         if isinstance(features, str):
             raise ValueError(
@@ -38,8 +51,8 @@ class Features:
         self.child_uuid: UUID | None = child_uuid
         self.parent_domain: str | None = parent_domain
         self.consumer_local_keys: frozenset[str] = consumer_local_keys
-        # Requested Feature objects by id; a consumer returning one plans into it in place.
-        self.requested: dict[int, Feature] = {} if requested is None else requested
+        # Unconsumed seeds by id: (clean source, plan request object). The first consumer plans into the plan object.
+        self.requested: dict[int, tuple[Feature, Feature]] = {} if requested is None else requested
 
         self.parent_uuids: set[UUID] = set()
 
@@ -60,10 +73,18 @@ class Features:
                 feature = Feature(name=feature, options=Options({}), domain=self.parent_domain)
             else:
                 if child_uuid:
-                    if self.requested.get(id(feature)) is not feature:
-                        # Each consumer plans its own copy of the returned object; equal copies merge at intake.
-                        feature = feature.copy_for_plan()
+                    seeded = consume_seed(self.requested, feature)
+                    if seeded is not None:
+                        feature = seeded
+                    else:
+                        # Each later consumer plans its own copy, from the clean source when known.
+                        held = feature
+                        feature = (held.plan_source or held).copy_for_plan()
                         feature.uuid = uuid4()
+                        # A group may set merge directives on the object it returns; the clean source lacks them.
+                        feature.forward_group = held.forward_group
+                        feature.forward_group_exclude = held.forward_group_exclude
+                        feature.inherit_context_keys = held.inherit_context_keys
                 if feature.domain is None and self.parent_domain is not None:
                     feature.domain = Domain(self.parent_domain)
             if child_uuid:

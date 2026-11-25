@@ -95,6 +95,32 @@ class TestmlodaAPI:
         assert copied.parent_uuids is not original.parent_uuids
         assert copied.requested is not original.requested
 
+    @pytest.mark.parametrize("shape", ["list", "features"])
+    @pytest.mark.parametrize("copy_features", [True, False])
+    def test_seed_map_keys_the_held_object_to_clean_source_and_plan_object(
+        self, copy_features: bool, shape: str
+    ) -> None:
+        """Seam: the processed `api.features.requested` (what reaches the engine)."""
+        original = Feature("seed_map_feature", options={"k": "v"})
+        stale: Any = {-1: (Feature("stale"), Feature("stale"))}
+        request: Any = [original] if shape == "list" else Features([original], requested=stale)
+        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
+            api_request = mlodaAPI(request, copy_features=copy_features)
+
+        (plan_object,) = list(api_request.features)
+        seeds: Any = api_request.features.requested
+        assert -1 not in seeds
+        assert plan_object is not original
+        source, seeded_plan_object = seeds[id(plan_object)]
+        assert seeded_plan_object is plan_object
+        assert source is not plan_object
+        assert source.name == plan_object.name
+        if copy_features:
+            assert id(original) not in seeds
+        else:
+            assert source is original
+            assert seeds[id(original)] == (original, plan_object)
+
 
 class TestBareStringRejected:
     def test_api_rejects_bare_string(self) -> None:

@@ -17,6 +17,7 @@ from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build im
     is_gap,
     nested_leaves,
     null_gaps,
+    utc_copy,
 )
 from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
     reject_sub_hour_zone,
@@ -34,6 +35,13 @@ def _polars_zone(zone: str) -> str:
         hours = int(zone[1:3])
         return "UTC" if hours == 0 else f"Etc/GMT{'-' if zone[0] == '+' else '+'}{hours}"
     return zone
+
+
+def _with_polars_zone(dtype: Any, zone: str) -> Any:
+    """The nested dtype with its Datetime leaf in the zone."""
+    if isinstance(dtype, pl.List):
+        return pl.List(_with_polars_zone(dtype.inner, zone))
+    return pl.Datetime(dtype.time_unit, zone) if isinstance(dtype, pl.Datetime) else dtype
 
 
 _POLARS_EXACT: dict[Any, DataType] = (
@@ -122,10 +130,12 @@ class PolarsDataFrame(ComputeFramework):
         for name, values in columns.items():
             if isinstance(values, (list, tuple)):
                 leaves = nested_leaves(values)
-                if leaves is not None:
-                    nested_zone = aware_zone(leaves, name)
-                    if nested_zone is not None:
-                        reject_sub_hour_zone(name, nested_zone)
+                nested_zone = None if leaves is None else aware_zone(leaves, name)
+                if nested_zone is not None:
+                    reject_sub_hour_zone(name, nested_zone)
+                    nested = pl.Series(name, utc_copy(values))
+                    series[name] = nested.cast(_with_polars_zone(nested.dtype, _polars_zone(nested_zone)))
+                    continue
                 zone = aware_zone(values, name)
                 if zone is not None:
                     reject_sub_hour_zone(name, zone)

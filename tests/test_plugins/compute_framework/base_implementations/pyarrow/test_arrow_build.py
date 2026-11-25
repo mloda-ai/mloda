@@ -479,6 +479,7 @@ _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
     _duckdb_append_columns,
 ]
 
+# SQLite has no list or struct cells.
 _NESTED_ENTRY_POINTS = [build for build in _ENTRY_POINTS if build is not _sqlite_from_dict]
 
 
@@ -501,9 +502,16 @@ class TestEntryPointsKeepNonUtcInstants:
         assert field_type.tz == "America/New_York"
         assert _utc(table.column("t").to_pylist()) == _utc([NOON_NY, LATER_NY])
 
+    @pytest.mark.parametrize("zone_source", ["zoneinfo", "dateutil"])
     @pytest.mark.parametrize("build", _NESTED_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
-    def test_dict_build_nested_keeps_instants_and_zone(self, build: Callable[[dict[str, list[Any]]], Any]) -> None:
-        values = [[NOON_NY, None], [LATER_NY]]
+    def test_dict_build_nested_keeps_instants_and_zone(
+        self, build: Callable[[dict[str, list[Any]]], Any], zone_source: str
+    ) -> None:
+        if zone_source == "dateutil":
+            tz: Any = pytest.importorskip("dateutil.tz").gettz("America/New_York")
+        else:
+            tz = NY
+        values = [[NOON_NY.replace(tzinfo=tz), None], [LATER_NY.replace(tzinfo=tz)]]
         table = _arrow_of(build({"t": values}))
         field_type = table.schema.field("t").type
         assert pa.types.is_list(field_type) or pa.types.is_large_list(field_type)
@@ -511,6 +519,19 @@ class TestEntryPointsKeepNonUtcInstants:
         if "duckdb" not in build.__name__:
             assert field_type.value_type.tz == "America/New_York"
         assert _utc_nested(table.column("t").to_pylist()) == _utc_nested(values)
+
+    @pytest.mark.parametrize("hours", [5, -3], ids=["plus_05", "minus_03"])
+    @pytest.mark.parametrize("build", _NESTED_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_dict_build_nested_keeps_whole_hour_offset(
+        self, build: Callable[[dict[str, list[Any]]], Any], hours: int
+    ) -> None:
+        offset = timezone(timedelta(hours=hours))
+        values = [[NOON_NY.astimezone(offset), None], [LATER_NY.astimezone(offset)]]
+        got = _arrow_of(build({"t": values})).column("t").to_pylist()
+        assert _utc_nested(got) == _utc_nested(values)
+        if "duckdb" not in build.__name__:
+            offsets = [[None if v is None else v.utcoffset() for v in row] for row in got]
+            assert offsets == [[None if v is None else v.utcoffset() for v in row] for row in values]
 
     @pytest.mark.parametrize("first", [NOON_NY, pd.Timestamp(NOON_NY)], ids=["datetime", "pd_timestamp"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))

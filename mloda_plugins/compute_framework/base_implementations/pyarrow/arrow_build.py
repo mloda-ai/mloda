@@ -5,7 +5,7 @@ With PYARROW_IGNORE_TIMEZONE=1 plain pyarrow reads the wall time of an aware dat
 
 from __future__ import annotations
 
-from collections.abc import Mapping
+from collections.abc import Iterator, Mapping
 from datetime import UTC, datetime, timedelta, timezone, tzinfo
 from functools import cache
 from typing import Any
@@ -93,21 +93,23 @@ def null_gaps(values: Any) -> Any:
     return [null_gaps(v) if isinstance(v, (list, tuple, dict)) else None if is_gap(v) else v for v in values]
 
 
-def nested_leaves(values: Any) -> list[Any] | None:
-    """Non-gap leaves at any list depth if every non-gap value is a list or tuple, else None."""
-    present = [v for v in values if not is_gap(v)]
-    if not present or not all(isinstance(v, (list, tuple)) for v in present):
-        return None
-    return [leaf for v in present for leaf in _flatten(v)]
+def nested_leaves(values: Any) -> Iterator[Any] | None:
+    """Lazy non-gap leaves at any list depth if the first non-gap value is a list or tuple, else None."""
+    first = next((v for v in values if not is_gap(v)), None)
+    return _leaves(values) if isinstance(first, (list, tuple)) else None
 
 
-def _flatten(values: Any) -> list[Any]:
-    return [leaf for v in values for leaf in (_flatten(v) if isinstance(v, (list, tuple)) else [v]) if not is_gap(leaf)]
+def _leaves(values: Any) -> Iterator[Any]:
+    for v in values:
+        if isinstance(v, (list, tuple)):
+            yield from _leaves(v)
+        elif not is_gap(v):
+            yield v
 
 
-def _utc_copy(values: Any) -> Any:
+def utc_copy(values: Any) -> Any:
     if isinstance(values, (list, tuple)):
-        return [_utc_copy(v) for v in values]
+        return [utc_copy(v) for v in values]
     if is_gap(values):
         return None
     return values.astimezone(UTC) if isinstance(values, datetime) else values
@@ -174,10 +176,10 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
             return pa.array(utc_values, type=type)
         leaves = nested_leaves(values)
         if leaves is not None and type is not None and _aware_values(leaves, column) is not None:
-            return pa.array(_utc_copy(values), type=type)
+            return pa.array(utc_copy(values), type=type)
         zone = None if leaves is None or type is not None else aware_zone(leaves, column)
         if zone is not None:
-            arr = pa.array(_utc_copy(values))
+            arr = pa.array(utc_copy(values))
             return arr.cast(_with_zone(arr.type, zone))
         if has_gap(values):
             values = null_gaps(values)

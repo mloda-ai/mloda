@@ -648,9 +648,56 @@ def test_undeclared_option_failure_is_named() -> None:
 def test_option_based_request_on_a_mixin_group_drops_in_features_from_the_foreign_probe() -> None:
     base = Options(context={"aggregation_type": "sum", DefaultOptionKeys.in_features: frozenset(["x"])})
     result = check_feature_group_shape(AggregatedFeatureGroup, requests=["my_sum"], base_options=base)
-    # `required:` still fails on this path (out of scope), so `passed` is not asserted.
     assert not any(f.startswith("foreign:") for f in result.failures), result.failures
     assert any(n.startswith("foreign:") and "in_features" in n for n in result.notes), result.notes
+    assert result.passed, result.failures
+
+
+def _make_toy_config_group() -> type[FeatureGroup]:
+    namespace: dict[str, Any] = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": r".*__toyop$",
+        "MIN_IN_FEATURES": 1,
+        "MAX_IN_FEATURES": 1,
+        "NAME_ONLY_MATCH": False,
+        "PROPERTY_MAPPING": {
+            "op": PropertySpec("Operation.", context=True, allowed_values={"up": "Up", "down": "Down"}),
+            "n": PropertySpec("Count.", context=True),
+            DefaultOptionKeys.in_features: PropertySpec("Input feature.", context=True),
+        },
+        "feature_names_supported": classmethod(lambda cls: {"my_toy"}),
+    }
+    return type("ToyConfigGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
+
+
+def _toy_config_base() -> Options:
+    return Options(context={"op": "up", "n": "1", DefaultOptionKeys.in_features: frozenset(["x"])})
+
+
+@pytest.mark.parametrize("case", ["aggregated", "toy"])
+def test_option_based_request_checks_required_as_resolution_names_it(case: str) -> None:
+    if case == "aggregated":
+        base = Options(context={"aggregation_type": "sum", DefaultOptionKeys.in_features: frozenset(["x"])})
+        result = check_feature_group_shape(AggregatedFeatureGroup, requests=["my_sum", "my_mean"], base_options=base)
+        assert not any(f.startswith("required:") for f in result.failures), result.failures
+        notes = [n for n in result.notes if n.startswith("required:")]
+        assert len(notes) == 1 and "aggregation_type" in notes[0], result.notes
+    else:
+        result = check_feature_group_shape(
+            _make_toy_config_group(), requests=["my_toy"], base_options=_toy_config_base()
+        )
+        assert not any(f.startswith("required:") for f in result.failures), result.failures
+        assert not any(n.startswith("required:") for n in result.notes), result.notes
+        assert result.passed, result.failures
+
+
+def test_required_failure_stays_when_resolution_names_no_absent_key(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        IdentifyFeatureGroupClass, "config_path_absent_required_reason", staticmethod(lambda *args: None), raising=False
+    )
+    result = check_feature_group_shape(_make_toy_config_group(), requests=["my_toy"], base_options=_toy_config_base())
+    msgs = [f for f in result.failures if f.startswith("required: no rejection recorded without required option")]
+    assert any("'op'" in m for m in msgs) and any("'n'" in m for m in msgs), result.failures
 
 
 def _make_config_gated_mixin_group(*, name_only: bool, needs: tuple[str, ...]) -> type[FeatureGroup]:

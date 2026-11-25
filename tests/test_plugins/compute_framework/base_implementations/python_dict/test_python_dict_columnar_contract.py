@@ -167,6 +167,7 @@ class TestExtractColumnTypes:
             ([np.datetime64("NaT"), datetime(2023, 3, 11, 12, 0, tzinfo=UTC)], DataType.TIMESTAMP_MICROS_TZ),
             ([np.datetime64("NaT")], None),
             ([float("nan"), "a"], DataType.DOUBLE),
+            ([np.timedelta64("NaT"), datetime(2023, 3, 11, 12, 0)], DataType.TIMESTAMP_MICROS),
         ],
         ids=[
             "nat_then_aware",
@@ -175,6 +176,7 @@ class TestExtractColumnTypes:
             "np_nat_then_aware",
             "only_np_nat",
             "nan_is_not_skipped",
+            "np_timedelta_nat_then_naive",
         ],
     )
     def test_data_type_skips_nat(self, values: list[Any], expected: DataType | None) -> None:

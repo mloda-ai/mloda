@@ -4,6 +4,8 @@ import warnings
 from collections.abc import Callable
 from typing import Any
 
+import numpy as np
+import pandas as pd
 import pyarrow as pa
 import pytest
 
@@ -750,9 +752,10 @@ class TestInferSqliteType:
         result = _infer_sqlite_type_from_values([1, 1.5, 2])
         assert result == "REAL", f"Expected REAL but got {result}"
 
-    def test_none_then_float_returns_real(self) -> None:
-        """None values should be skipped; float after None must win."""
-        result = _infer_sqlite_type_from_values([None, 1, 2.5])
+    @pytest.mark.parametrize("gap", [None, pd.NaT, np.datetime64("NaT")], ids=["none", "pd_nat", "np_nat"])
+    def test_gap_then_float_returns_real(self, gap: Any) -> None:
+        """Missing values are skipped; a float after the gap must win."""
+        result = _infer_sqlite_type_from_values([gap, 1, 2.5])
         assert result == "REAL", f"Expected REAL but got {result}"
 
     def test_all_ints_returns_integer(self) -> None:
@@ -763,8 +766,13 @@ class TestInferSqliteType:
         result = _infer_sqlite_type_from_values([1, "hello"])
         assert result == "TEXT"
 
-    def test_all_none_returns_text(self) -> None:
-        result = _infer_sqlite_type_from_values([None, None])
+    @pytest.mark.parametrize(
+        "values",
+        [[None, None], [pd.NaT, None], [np.datetime64("NaT"), np.datetime64("NaT")]],
+        ids=["none", "pd_nat_none", "np_nat"],
+    )
+    def test_all_gaps_returns_text(self, values: list[Any]) -> None:
+        result = _infer_sqlite_type_from_values(values)
         assert result == "TEXT"
 
     def test_string_before_float_returns_text(self) -> None:

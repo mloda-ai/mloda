@@ -783,11 +783,11 @@ Options(
 - An input with inputs of its own raises a `ValueError` when it is reached with different
   `cascade_context_keys` than it had when its inputs were resolved, for example when one
   consumer cascades a key and another delivers it with a one-hop push or a pull. Its inputs
-  are resolved once. Declare the same `cascade_context_keys` on every request reaching it. A
-  request named in another request's options is planned after it, so request order and
-  `copy_features` do not change the result. A `Feature`
-  object returned by several consumers' `input_features` gives each consumer its own copy
-  (equal copies merge), so that order does not matter for it. A shared root feature is exempt.
+  are resolved once. Declare the same `cascade_context_keys` on every request reaching it.
+  A request named in another request's options is planned after it, so request order and
+  `copy_features` do not change the result. A `Feature` object returned by several
+  consumers' `input_features` gives each consumer its own copy (equal copies merge). A
+  shared root feature is exempt.
 - Two requests of one input that differ in compute framework resolve their inputs separately.
   When only one of them cascades a key, the plan fails with an error that the input is read
   from two steps whose options differ. Declare the same `cascade_context_keys` on both.

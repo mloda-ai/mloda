@@ -77,7 +77,6 @@ class Features:
                     if seeded is not None:
                         feature = seeded
                     else:
-                        # Each later consumer plans its own copy, from the clean source when known.
                         held = feature
                         feature = (held.plan_source or held).copy_for_plan()
                         feature.uuid = uuid4()

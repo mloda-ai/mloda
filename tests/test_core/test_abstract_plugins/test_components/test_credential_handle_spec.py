@@ -1498,15 +1498,21 @@ class TestMissingHandleKeyAborts:
         assert _steps(session, ChsCfgFallbackFG)
 
     @pytest.mark.parametrize(
-        "group, options, handle_key",
+        "group, options, absent_keys",
         [
-            (ChsCfgFG, {"chs_cfg_op": "sum", "chs_unrelated": "vault-main"}, "chs_cfg_handle"),
-            (ChsCfgGuardFG, {"chs_cfgd_kind": "mine"}, "chs_cfgd_handle"),
+            (ChsCfgFG, {"chs_cfg_op": "sum", "chs_unrelated": "vault-main"}, ["chs_cfg_handle"]),
+            (ChsCfgGuardFG, {"chs_cfgd_kind": "mine"}, ["chs_cfgd_handle"]),
+            (ChsCfgExtraFG, {"chs_cfgx_op": "sum"}, ["chs_cfgx_extra", "chs_cfgx_handle"]),
+            (
+                ChsCfgExtraFG,
+                {"chs_cfgx_op": "sum", "chs_cfgx_handel": "vault-main"},
+                ["chs_cfgx_extra", "chs_cfgx_handle", "did you mean 'chs_cfgx_handel'"],
+            ),
         ],
-        ids=["plain-key", "guard-accepts"],
+        ids=["plain-key", "guard-accepts", "plain-key-also-missing", "typo-and-plain-key-missing"],
     )
     def test_a_config_path_missing_handle_key_records_a_near_miss(
-        self, group: type[FeatureGroup], options: dict[str, str], handle_key: str
+        self, group: type[FeatureGroup], options: dict[str, str], absent_keys: list[str]
     ) -> None:
         feature = Feature("chs_cfg_col", options=options)
 
@@ -1514,7 +1520,8 @@ class TestMissingHandleKeyAborts:
             _prepare([feature], _dac(**{"vault-main": {"key": SECRET}}), _plugins(group))
 
         assert group.__name__ in str(exc.value)
-        assert handle_key in str(exc.value)
+        for key in absent_keys:
+            assert key in str(exc.value)
         assert exc.value.result.eliminations[group].code == CoreDeclineCode.REQUIRED_OPTION_ABSENT
 
     @pytest.mark.parametrize(
@@ -1525,7 +1532,6 @@ class TestMissingHandleKeyAborts:
             (ChsCfgGuardFG, {"chs_cfgd_kind": "other"}),
             (ChsCfgOptFG, {"chs_cfgo_opt": "y"}),
             (ChsCfgInFeaturesFG, {"in_features": "chs_src"}),
-            (ChsCfgExtraFG, {"chs_cfgx_op": "sum"}),
             (ChsCfgGuardFG, {"chs_cfgd_kind": "other", "chs_cfgd_handel": "vault-main"}),
         ],
         ids=[
@@ -1534,7 +1540,6 @@ class TestMissingHandleKeyAborts:
             "guard-would-decline",
             "optional-own-key",
             "in-features-only",
-            "plain-key-also-missing",
             "typo-guard-would-decline",
         ],
     )

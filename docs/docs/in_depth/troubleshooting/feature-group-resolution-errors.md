@@ -98,6 +98,8 @@ A group with a viable input chain can win where an unavailable competitor previo
 
 A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
 
+A config-path group the request selects by one of its own required keys declared in `PROPERTY_MAPPING` is named in the failure report with its missing required key(s).
+
 ### The Did you mean hint
 
 Suggestions are close matches drawn from the catalog of accessible groups: declared feature names, class names, and class-name prefixes. The hint drops what would only repeat or mislead: the requested name itself, names the eliminated-candidates block already covers, and names only unreachable groups declare (abstract, no enabled framework, or outside the requested domain, scope, or links). The hint is also dropped for an input feature whose reader declined at the input-data gate, because the reason line, not a name, is the fix. Otherwise a missing hint means no reachable group declares anything close. In the example above, 'sales_revenue' survives because a third, still-reachable group declares it; the two eliminated candidates could not have contributed it.

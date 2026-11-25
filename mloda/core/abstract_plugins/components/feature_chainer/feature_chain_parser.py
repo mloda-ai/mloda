@@ -499,6 +499,19 @@ class FeatureChainParser:
                 missing.append(key)
         return missing
 
+    @classmethod
+    def _config_path_missing_required_keys(
+        cls, options: Options, property_mapping: Mapping[str, PropertySpec]
+    ) -> list[str]:
+        """The required keys the config path finds absent, in_features and deferred_binding keys included."""
+        return [
+            key
+            for key, spec in property_mapping.items()
+            if isinstance(spec, PropertySpec)
+            and not cls._can_skip_required_check(spec)
+            and not option_key_is_present(spec, key, options)
+        ]
+
     @staticmethod
     def _presence_rejection_reason(missing: list[str], property_mapping: Mapping[str, PropertySpec]) -> str:
         """The one formatting of the missing-required-keys reason, shared by the matcher and the diagnostic."""

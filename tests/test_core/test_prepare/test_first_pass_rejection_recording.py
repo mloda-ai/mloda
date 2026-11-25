@@ -13,6 +13,7 @@ fixture is needed.
 
 from __future__ import annotations
 
+import abc
 import contextvars
 from collections.abc import Iterator
 from typing import Any, cast
@@ -29,6 +30,8 @@ from mloda.core.abstract_plugins.components.match_rejection import (
     MatchRejection,
     record_match_rejection,
 )
+from mloda.core.abstract_plugins.components.domain import Domain
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import FeatureChainParser
 from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser_mixin import FeatureChainParserMixin
 from mloda.core.abstract_plugins.components.plugin_option.plugin_collector import PluginCollector
 from mloda.core.abstract_plugins.components.property_spec import property_spec
@@ -1028,3 +1031,209 @@ class TestNameOnlyRejectionRecording:
 
         assert recorded is not None
         assert "NameOnlyRecordingNomRec" in recorded
+
+
+class CpmBaseFG(FeatureChainParserMixin, FeatureGroup):
+    """Config-path base (matches on options only, never by name); inert without its own keys."""
+
+    RECOGNITION_ONLY_PATTERN = True
+    PREFIX_PATTERN = r".*__cpmnever$"
+    MIN_IN_FEATURES = 0
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class CpmPlainFG(CpmBaseFG):
+    """Two plain required keys."""
+
+    PROPERTY_MAPPING = {
+        "op_cpm": property_spec("Op.", allowed_values={"sum"}),
+        "extra_cpm": property_spec("Required plain key."),
+    }
+
+
+class CpmInFeaturesFG(CpmBaseFG):
+    """A plain required key plus a required in_features."""
+
+    MIN_IN_FEATURES = 1
+    PROPERTY_MAPPING = {
+        "op_cpmi": property_spec("Op.", allowed_values={"sum"}),
+        "extra_cpmi": property_spec("Required plain key."),
+        DefaultOptionKeys.in_features: property_spec("Inputs."),
+    }
+
+
+class CpmGuardFG(CpmBaseFG):
+    """The set key carries a match_guard that declines the request."""
+
+    PROPERTY_MAPPING = {
+        "kind_cpmg": property_spec("Ownership key.", match_guard=lambda v: v == "mine"),
+        "extra_cpmg": property_spec("Required plain key."),
+    }
+
+
+class CpmDomainFG(CpmPlainFG):
+    """Same as CpmPlainFG, in a domain of its own."""
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        return Domain("cpm_dom_a")
+
+
+class CpmRaisingDomainFG(CpmPlainFG):
+    """Selected and missing a key, but its get_domain raises."""
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        raise RuntimeError("broken get_domain")
+
+
+class CpmTooManyFG(CpmBaseFG):
+    """All required keys set; fails on the in_features count."""
+
+    MIN_IN_FEATURES = 1
+    MAX_IN_FEATURES = 1
+    PROPERTY_MAPPING = {
+        "op_cpmt": property_spec("Op.", allowed_values={"sum"}),
+        DefaultOptionKeys.in_features: property_spec("Inputs."),
+    }
+
+
+class CpmDeferredFG(CpmBaseFG):
+    """A set plain key plus an absent required key declared deferred_binding."""
+
+    PROPERTY_MAPPING = {
+        "op_cpmd": property_spec("Op.", allowed_values={"sum"}),
+        "extra_cpmd": property_spec("Required deferred key.", deferred_binding=True),
+    }
+
+
+class CpmAbstractFG(CpmPlainFG):
+    """Abstract subclass of CpmPlainFG."""
+
+    @abc.abstractmethod
+    def abstract_hook_cpm(self) -> None: ...
+
+
+class CpmOwnedNameFG(CpmBaseFG):
+    """Owns the feature name by its prefix pattern; the name-bound key's guard declines the bound value."""
+
+    RECOGNITION_ONLY_PATTERN = False
+    PREFIX_PATTERN = r".*__(?P<op_cpmo>\w+)_cpmo$"
+    PROPERTY_MAPPING = {
+        "op_cpmo": property_spec("Op.", match_guard=lambda v: v == "sum"),
+        "win_cpmo": property_spec("Required plain key."),
+    }
+
+
+class CpmSiblingFG(FeatureGroup):
+    """Name-matching sibling that wins next to a near-miss group."""
+
+    @classmethod
+    def match_feature_group_criteria(
+        cls,
+        feature_name: FeatureName | str,
+        options: Options,
+        data_access_collection: DataAccessCollection | None = None,
+    ) -> bool:
+        return str(feature_name) == "cpm_col"
+
+    @classmethod
+    def get_domain(cls) -> Domain:
+        return Domain("cpm_dom_a")
+
+    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
+        return None
+
+
+class TestConfigPathMissingRequiredKeyNearMiss:
+    """A config-path group selected by its own required key but missing another required key is named."""
+
+    @pytest.mark.parametrize(
+        "group, options, absent",
+        [
+            (CpmPlainFG, {"op_cpm": "sum"}, ["extra_cpm"]),
+            (CpmInFeaturesFG, {"op_cpmi": "sum"}, ["extra_cpmi", DefaultOptionKeys.in_features]),
+            (CpmDeferredFG, {"op_cpmd": "sum"}, ["extra_cpmd"]),
+        ],
+        ids=["plain-key", "plain-key-and-in-features", "deferred-binding-key"],
+    )
+    def test_the_absent_required_keys_are_named(
+        self, group: type[CpmBaseFG], options: dict[str, str], absent: list[str]
+    ) -> None:
+        feature = Feature("cpm_col", Options(context=options))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {group: {RecorderFwOneOs005r}}
+        mapping = group.PROPERTY_MAPPING
+        assert mapping is not None
+
+        with pytest.raises(FeatureResolutionError) as exc_info:
+            evaluate_or_raise(feature=feature, accessible_plugins=accessible_plugins, links=None)
+
+        assert exc_info.value.result.eliminations == {
+            group: Elimination(
+                stage="value_rejection",
+                reason=FeatureChainParser._presence_rejection_reason(absent, mapping),
+                code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+            )
+        }
+        assert group.__name__ in str(exc_info.value)
+        for key in absent:
+            assert str(key.value if isinstance(key, DefaultOptionKeys) else key) in str(exc_info.value)
+
+    @pytest.mark.parametrize(
+        "group, options, domain",
+        [
+            (CpmPlainFG, {"unrelated_cpm": "x"}, None),
+            (CpmGuardFG, {"kind_cpmg": "other"}, None),
+            (CpmDomainFG, {"op_cpm": "sum"}, "cpm_dom_b"),
+            (CpmTooManyFG, {"op_cpmt": "sum", DefaultOptionKeys.in_features: "a,b"}, None),
+            (CpmAbstractFG, {"op_cpm": "sum"}, None),
+        ],
+        ids=["unrelated-key", "guard-declines", "other-domain", "nothing-absent", "abstract-group"],
+    )
+    def test_a_group_that_is_not_a_near_miss_is_not_listed(
+        self, group: type[CpmBaseFG], options: dict[str, str], domain: str | None
+    ) -> None:
+        feature = Feature("cpm_col", Options(context=options), domain=domain)
+        accessible_plugins: FeatureGroupEnvironmentMapping = {group: {RecorderFwOneOs005r}}
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert group not in result.eliminations
+
+    def test_a_key_bound_from_the_owned_name_is_not_reported_absent(self) -> None:
+        feature = Feature("src__max_cpmo", Options(context={"win_cpmo": "3"}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {CpmOwnedNameFG: {RecorderFwOneOs005r}}
+
+        result = _failed_result(feature, accessible_plugins)
+
+        assert CpmOwnedNameFG not in result.eliminations, result.eliminations.get(CpmOwnedNameFG)
+
+    def test_a_raising_get_domain_is_not_listed_and_does_not_crash_planning(self) -> None:
+        feature = Feature("cpm_col", Options(context={"op_cpm": "sum"}), domain="cpm_dom_a")
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            CpmRaisingDomainFG: {RecorderFwOneOs005r},
+            CpmSiblingFG: {RecorderFwOneOs005r},
+        }
+
+        result = evaluate_or_raise(feature=feature, accessible_plugins=accessible_plugins, links=None)
+
+        assert list(result.identified) == [CpmSiblingFG]
+        assert CpmRaisingDomainFG not in result.eliminations
+
+    def test_a_winning_sibling_leaves_the_near_miss_in_the_eliminations(self) -> None:
+        feature = Feature("cpm_col", Options(context={"op_cpm": "sum"}))
+        accessible_plugins: FeatureGroupEnvironmentMapping = {
+            CpmPlainFG: {RecorderFwOneOs005r},
+            CpmSiblingFG: {RecorderFwOneOs005r},
+        }
+
+        result = evaluate_or_raise(feature=feature, accessible_plugins=accessible_plugins, links=None)
+
+        assert list(result.identified) == [CpmSiblingFG]
+        assert result.eliminations[CpmPlainFG] == Elimination(
+            stage="value_rejection",
+            reason=FeatureChainParser._presence_rejection_reason(["extra_cpm"], CpmPlainFG.PROPERTY_MAPPING),
+            code=CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+        )

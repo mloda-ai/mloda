@@ -1,5 +1,6 @@
 import inspect
 import os
+import re
 from collections.abc import Callable, Mapping, Sequence
 from contextlib import nullcontext
 from copy import copy, deepcopy
@@ -33,7 +34,6 @@ from mloda.core.abstract_plugins.components.credential_handle import (
     close_handle_option_keys,
     misspelled_handle_key_abort_keys,
     missing_handle_sentence,
-    only_missing_handle_keys,
     missing_credential_handle_keys,
     refuse_credential_option_values,
     validate_credential_handles,
@@ -909,11 +909,11 @@ class IdentifyFeatureGroupClass:
 
     @staticmethod
     def _selects_by_required_own_key(feature_group: type[FeatureGroup], options: Options) -> bool:
-        """True when a required own non-handle key is set and no match_guard declines the options."""
+        """True when the request sets one of the group's own required non-handle keys."""
         mapping = feature_group.PROPERTY_MAPPING or {}
         handles = credential_handle_keys(feature_group)
         reserved = {k.value for k in DefaultOptionKeys}
-        supplied = any(
+        return any(
             k in mapping
             and k not in handles
             and k not in reserved
@@ -922,9 +922,35 @@ class IdentifyFeatureGroupClass:
             and options.is_own(k)
             for k in [*options.group, *options.context]
         )
-        if not supplied:
-            return False
-        return IdentifyFeatureGroupClass._no_guard_declines(feature_group, options)
+
+    def _absent_required_reason(
+        self, feature_group: type[FeatureGroup], feature: Feature, options: Options
+    ) -> str | None:
+        """The near-miss reason for a config-path group the request selects but leaves a required key absent."""
+        if not self._selects_by_required_own_key(feature_group, options):
+            return None
+        if is_nominal_subclass(feature_group, FeatureChainParserMixin) and safe_field(
+            lambda: feature_group.resolve_feature_name(feature.name).owned, True, catching=(ValueError, re.error)
+        ):
+            return None
+        mapping = feature_group.PROPERTY_MAPPING or {}
+        absent = FeatureChainParser._config_path_missing_required_keys(options, mapping)
+        if not absent or not self._no_guard_declines(feature_group, options):
+            return None
+        if feature.domain and (
+            self._domain_outcome(feature_group)[1] is not None
+            or not self._filter_feature_group_by_domain(feature_group, feature)
+        ):
+            return None
+        if inspect.isabstract(feature_group):
+            return None
+        handles = credential_handle_keys(feature_group)
+        handle_absent = [key for key in absent if key in handles]
+        sentences = " ".join(missing_handle_sentence(feature_group, key, options) for key in handle_absent)
+        if len(handle_absent) == len(absent):
+            return sentences
+        plain = FeatureChainParser._presence_rejection_reason(absent, mapping)
+        return f"{plain} {sentences}" if sentences else plain
 
     @staticmethod
     def _no_guard_declines(feature_group: type[FeatureGroup], options: Options) -> bool:
@@ -995,26 +1021,22 @@ class IdentifyFeatureGroupClass:
                 elif rejection is None and self._is_config_path_group(feature_group):
                     typo_options = self._matched_options.get(feature_group, feature.options)
                     typo_absent = misspelled_handle_key_abort_keys(feature_group, typo_options)
-                    near_miss = () if typo_absent else only_missing_handle_keys(feature_group, typo_options)
-                    if (typo_absent or near_miss) and (
-                        self._filter_feature_group_by_domain(feature_group, feature)
-                        and not inspect.isabstract(feature_group)
-                    ):
-                        if typo_absent:
-                            if self._no_guard_declines(feature_group, typo_options):
-                                self._missing_handle_aborts[feature_group] = (
-                                    typo_absent,
-                                    missing_credential_handle_abort(feature_group, typo_options, typo_absent),
-                                    close_handle_option_keys(feature_group, typo_absent, typo_options),
-                                )
-                        elif self._selects_by_required_own_key(feature_group, typo_options):
+                    if typo_absent:
+                        if (
+                            self._filter_feature_group_by_domain(feature_group, feature)
+                            and not inspect.isabstract(feature_group)
+                            and self._no_guard_declines(feature_group, typo_options)
+                        ):
+                            self._missing_handle_aborts[feature_group] = (
+                                typo_absent,
+                                missing_credential_handle_abort(feature_group, typo_options, typo_absent),
+                                close_handle_option_keys(feature_group, typo_absent, typo_options),
+                            )
+                    else:
+                        absent_reason = self._absent_required_reason(feature_group, feature, typo_options)
+                        if absent_reason is not None:
                             self._record_elimination(
-                                feature_group,
-                                "value_rejection",
-                                " ".join(
-                                    missing_handle_sentence(feature_group, key, typo_options) for key in near_miss
-                                ),
-                                CoreDeclineCode.REQUIRED_OPTION_ABSENT,
+                                feature_group, "value_rejection", absent_reason, CoreDeclineCode.REQUIRED_OPTION_ABSENT
                             )
                 if rejection is not None:
                     # The shared mapper owns the projection, so both seams spell the taxonomy the same way.

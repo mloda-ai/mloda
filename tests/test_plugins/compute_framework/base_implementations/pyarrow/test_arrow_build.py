@@ -46,6 +46,8 @@ KOLKATA = timezone(timedelta(hours=5, minutes=30))
 _NAIVE = datetime(2023, 3, 11, 12, 0)
 _UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
 _NP_NAT = np.datetime64("NaT")
+_NY_TYPE = pa.timestamp("us", tz="America/New_York")
+_STRUCT_TS = pa.struct([("a", pa.timestamp("us"))])
 
 ENV_VALUES = pytest.mark.parametrize("ignore_timezone", [None, "1"], ids=["unset", "pyarrow_ignore_timezone"])
 
@@ -60,6 +62,12 @@ def ignore_timezone_env(monkeypatch: pytest.MonkeyPatch, ignore_timezone: str | 
 
 def _utc(values: list[Any]) -> list[datetime | None]:
     return [None if v is None or v is pd.NaT or isinstance(v, np.generic) else v.astimezone(UTC) for v in values]
+
+
+def _utc_nested(value: Any) -> Any:
+    if isinstance(value, (list, tuple)):
+        return [_utc_nested(v) for v in value]
+    return _utc([value])[0]
 
 
 def _builders() -> Any:
@@ -87,6 +95,44 @@ class TestArrowBuild:
         arr = _builders().arrow_array(values)
         assert arr.type == pa.timestamp("us", tz=zone)
         assert _utc(arr.to_pylist()) == _utc(list(values))
+
+    @pytest.mark.parametrize(
+        "values, want_type, explicit",
+        [
+            ([[NOON_NY, None, LATER_NY]], pa.list_(_NY_TYPE), False),
+            ([[NOON_NY, pd.NaT, LATER_NY]], pa.list_(_NY_TYPE), False),
+            ([[NOON_NY, _NP_NAT, LATER_NY]], pa.list_(_NY_TYPE), False),
+            ([[NOON_NY], None], pa.list_(_NY_TYPE), False),
+            ([[NOON_NY], [], None], pa.list_(_NY_TYPE), False),
+            ([[[NOON_NY], None]], pa.list_(pa.list_(_NY_TYPE)), False),
+            ([(NOON_NY, None)], pa.list_(_NY_TYPE), False),
+            (
+                [[datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA), None]],
+                pa.list_(pa.timestamp("us", tz="+05:30")),
+                False,
+            ),
+            ([[NOON_NY, None]], pa.list_(pa.timestamp("us", tz="Asia/Tokyo")), True),
+        ],
+        ids=[
+            "none_gap",
+            "nat_gap",
+            "np_nat_gap",
+            "none_row",
+            "empty_inner",
+            "deep_null_sublist",
+            "tuple",
+            "offset",
+            "typed",
+        ],
+    )
+    def test_nested_array_keeps_instants_and_zone(self, values: Any, want_type: pa.DataType, explicit: bool) -> None:
+        arr = _builders().arrow_array(values, type=want_type) if explicit else _builders().arrow_array(values)
+        assert arr.type == want_type
+        assert _utc_nested(arr.to_pylist()) == _utc_nested(values)
+
+    def test_nested_ragged_aware_input_raises_arrow_invalid(self) -> None:
+        with pytest.raises(pa.ArrowInvalid):
+            _builders().arrow_array([[NOON_NY], [[NOON_NY]]])
 
     @pytest.mark.parametrize("values", [[NOON_NY], [NOON_NY, pd.NaT]], ids=["no_gap", "nat_gap"])
     def test_explicit_type_wins(self, values: list[Any]) -> None:
@@ -152,12 +198,16 @@ class TestArrowBuildUnchanged:
             ([_NAIVE, _NP_NAT], [_NAIVE, None], [None, pa.timestamp("us")]),
             ([_NP_NAT, _NP_NAT], [None, None], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
             ([[_NAIVE, pd.NaT]], [[_NAIVE, None]], [None, pa.list_(pa.timestamp("us"))]),
-            # UTC only: non-UTC nested aware zones are a separate gap
             ([[_UTC_NOON, pd.NaT]], [[_UTC_NOON, None]], [None, pa.list_(pa.timestamp("us", tz="UTC"))]),
             ([None, [_NAIVE, pd.NaT]], [None, [_NAIVE, None]], [None, pa.list_(pa.timestamp("us"))]),
             ([[_NAIVE, _NP_NAT]], [[_NAIVE, None]], [None, pa.list_(pa.timestamp("us"))]),
             ([[[_NAIVE, pd.NaT]]], [[[_NAIVE, None]]], [None, pa.list_(pa.list_(pa.timestamp("us")))]),
             ([(_NAIVE, pd.NaT)], [(_NAIVE, None)], [None, pa.list_(pa.timestamp("us"))]),
+            ([[None], [pd.NaT]], [[None], [None]], [None]),
+            ([{"a": _NAIVE}, {"a": pd.NaT}], [{"a": _NAIVE}, {"a": None}], [_STRUCT_TS]),
+            ([{"a": _NAIVE}, {"a": _NP_NAT}], [{"a": _NAIVE}, {"a": None}], [_STRUCT_TS]),
+            ([{"a": [_NAIVE, pd.NaT]}], [{"a": [_NAIVE, None]}], [pa.struct([("a", pa.list_(pa.timestamp("us")))])]),
+            ([[{"a": _NAIVE}, {"a": pd.NaT}]], [[{"a": _NAIVE}, {"a": None}]], [pa.list_(_STRUCT_TS)]),
         ],
         ids=[
             "naive_nat",
@@ -172,6 +222,11 @@ class TestArrowBuildUnchanged:
             "nested_np_nat",
             "deep_nested_nat",
             "tuple_nested_nat",
+            "nested_all_gap",
+            "struct_nat",
+            "struct_np_nat",
+            "list_in_struct_nat",
+            "struct_in_list_nat",
         ],
     )
     def test_nat_list_matches_none_substituted(
@@ -414,6 +469,8 @@ _ENTRY_POINTS: list[Callable[[dict[str, list[Any]]], Any]] = [
     _duckdb_append_columns,
 ]
 
+_NESTED_ENTRY_POINTS = [build for build in _ENTRY_POINTS if build is not _sqlite_from_dict]
+
 
 @ENV_VALUES
 @pytest.mark.usefixtures("ignore_timezone_env")
@@ -433,6 +490,17 @@ class TestEntryPointsKeepNonUtcInstants:
         assert pa.types.is_timestamp(field_type)
         assert field_type.tz == "America/New_York"
         assert _utc(table.column("t").to_pylist()) == _utc([NOON_NY, LATER_NY])
+
+    @pytest.mark.parametrize("build", _NESTED_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_dict_build_nested_keeps_instants_and_zone(self, build: Callable[[dict[str, list[Any]]], Any]) -> None:
+        values = [[NOON_NY, None], [LATER_NY]]
+        table = _arrow_of(build({"t": values}))
+        field_type = table.schema.field("t").type
+        assert pa.types.is_list(field_type) or pa.types.is_large_list(field_type)
+        assert pa.types.is_timestamp(field_type.value_type)
+        if "duckdb" not in build.__name__:
+            assert field_type.value_type.tz == "America/New_York"
+        assert _utc_nested(table.column("t").to_pylist()) == _utc_nested(values)
 
     @pytest.mark.parametrize("first", [NOON_NY, pd.Timestamp(NOON_NY)], ids=["datetime", "pd_timestamp"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
@@ -511,7 +579,39 @@ def test_dict_build_naive_nat_list(
     assert table.column("t").to_pylist() == want_values
 
 
+@pytest.mark.parametrize("gap", [pd.NaT, _NP_NAT], ids=["pd_nat", "np_nat"])
+@pytest.mark.parametrize(
+    "shape",
+    [
+        lambda g: [[_NAIVE, g], [_NAIVE]],
+        lambda g: [{"a": _NAIVE, "b": 1}, {"a": g, "b": 2}],
+    ],
+    ids=["nested_list", "struct"],
+)
+@pytest.mark.parametrize("build", _NESTED_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+def test_dict_build_nested_nat_matches_none(
+    build: Callable[[dict[str, list[Any]]], Any], shape: Callable[[Any], list[Any]], gap: Any
+) -> None:
+    got = _arrow_of(build({"t": shape(gap)}))
+    want = _arrow_of(build({"t": shape(None)}))
+    assert got.schema.field("t").type == want.schema.field("t").type
+    assert got.column("t").to_pylist() == want.column("t").to_pylist()
+
+
 class TestEntryPointsRejectUnnameableZones:
+    @pytest.mark.parametrize("shape", ["cell", "rows"])
+    @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom", "aware_naive", "naive_aware"])
+    @pytest.mark.parametrize("build", _NESTED_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    def test_nested_dict_build_raises_naming_column_and_zone(
+        self, build: Callable[[dict[str, list[Any]]], Any], kind: str, shape: str
+    ) -> None:
+        values, texts = bad_zone_values(kind)
+        nested = [values, None] if shape == "cell" else [[v] for v in values]
+        with pytest.raises(ValueError) as error:
+            build({"zoned": nested})
+        for text in ["zoned", *texts]:
+            assert text in str(error.value)
+
     @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom", "aware_naive", "naive_aware"])
     @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
     def test_dict_build_raises_naming_column_and_zone(
@@ -524,17 +624,15 @@ class TestEntryPointsRejectUnnameableZones:
             assert text in str(error.value)
 
     @pytest.mark.parametrize("build", _POLARS_ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
+    @pytest.mark.parametrize("nested", [False, True], ids=["flat", "nested"])
     def test_polars_rejects_sub_hour_offset_naming_column_and_zone(
-        self, build: Callable[[dict[str, list[Any]]], Any]
+        self, build: Callable[[dict[str, list[Any]]], Any], nested: bool
     ) -> None:
-        values = [NOON_NY.astimezone(KOLKATA), LATER_NY.astimezone(KOLKATA)]
+        values: list[Any] = [NOON_NY.astimezone(KOLKATA), LATER_NY.astimezone(KOLKATA)]
         with pytest.raises(ValueError) as error:
-            build({"zoned": values})
+            build({"zoned": [values, None] if nested else values})
         for text in ["zoned", "+05:30"]:
             assert text in str(error.value)
-
-
-_NY_TYPE = pa.timestamp("us", tz="America/New_York")
 
 
 def _ny_column(values: list[datetime | None]) -> pa.Array:

@@ -76,14 +76,49 @@ def is_gap(v: Any) -> bool:
     return v is None or (type(v) not in _FAST_TYPES and is_nat(v))
 
 
-def _has_gap(values: Any) -> bool:
-    """True if a non-None gap sits at any list or tuple depth."""
-    return any(_has_gap(v) if isinstance(v, (list, tuple)) else v is not None and is_gap(v) for v in values)
+def has_gap(values: Any) -> bool:
+    """True if a non-None gap sits at any list or tuple depth or in a dict value."""
+    if isinstance(values, dict):
+        values = values.values()
+    return any(has_gap(v) if isinstance(v, (list, tuple, dict)) else v is not None and is_gap(v) for v in values)
 
 
-def _null_gaps(values: Any) -> list[Any]:
-    """Copy of values with every gap at any depth as None."""
-    return [_null_gaps(v) if isinstance(v, (list, tuple)) else None if is_gap(v) else v for v in values]
+def null_gaps(values: Any) -> Any:
+    """Copy with every gap at any list depth and in dict values as None."""
+    if isinstance(values, dict):
+        return {
+            k: null_gaps(v) if isinstance(v, (list, tuple, dict)) else None if is_gap(v) else v
+            for k, v in values.items()
+        }
+    return [null_gaps(v) if isinstance(v, (list, tuple, dict)) else None if is_gap(v) else v for v in values]
+
+
+def nested_leaves(values: Any) -> list[Any] | None:
+    """Non-gap leaves at any list depth if every non-gap value is a list or tuple, else None."""
+    present = [v for v in values if not is_gap(v)]
+    if not present or not all(isinstance(v, (list, tuple)) for v in present):
+        return None
+    return [leaf for v in present for leaf in _flatten(v)]
+
+
+def _flatten(values: Any) -> list[Any]:
+    return [leaf for v in values for leaf in (_flatten(v) if isinstance(v, (list, tuple)) else [v]) if not is_gap(leaf)]
+
+
+def _utc_copy(values: Any) -> Any:
+    if isinstance(values, (list, tuple)):
+        return [_utc_copy(v) for v in values]
+    if is_gap(values):
+        return None
+    return values.astimezone(UTC) if isinstance(values, datetime) else values
+
+
+def _with_zone(dtype: pa.DataType, zone: str) -> pa.DataType:
+    if pa.types.is_timestamp(dtype):
+        return pa.timestamp(dtype.unit, tz=zone)
+    if pa.types.is_list(dtype):
+        return pa.list_(_with_zone(dtype.value_type, zone))
+    return dtype
 
 
 def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
@@ -137,8 +172,15 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         if aware:
             utc_values = [None if is_gap(v) else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
-        if _has_gap(values):
-            values = _null_gaps(values)
+        leaves = nested_leaves(values)
+        if leaves is not None and type is not None and _aware_values(leaves, column) is not None:
+            return pa.array(_utc_copy(values), type=type)
+        zone = None if leaves is None or type is not None else aware_zone(leaves, column)
+        if zone is not None:
+            arr = pa.array(_utc_copy(values))
+            return arr.cast(_with_zone(arr.type, zone))
+        if has_gap(values):
+            values = null_gaps(values)
     return pa.array(values, type=type)
 
 

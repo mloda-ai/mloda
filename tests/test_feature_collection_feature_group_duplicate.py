@@ -53,7 +53,7 @@ def test_first_build_with_a_seed_plans_into_the_plan_object(key: str) -> None:
     key_object = plan_object if key == "plan_object" else source
     requested: Any = {id(key_object): (source, plan_object)}
 
-    collection = Features([key_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+    collection = Features([key_object], child_options=Options({}), child_uuid=uuid4(), requested=requested, sources={})
 
     assert collection.collection[0] is plan_object
 
@@ -61,11 +61,14 @@ def test_first_build_with_a_seed_plans_into_the_plan_object(key: str) -> None:
 def test_second_build_reaching_a_consumed_seed_gets_a_copy_of_the_clean_source() -> None:
     source, plan_object = _seeded_pair()
     requested: Any = {id(plan_object): (source, plan_object)}
-    Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+    sources: dict[int, Feature] = {}
+    Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested, sources=sources)
     plan_object.initial_requested_data = True
     plan_object.options.add_to_context("later", "x")
 
-    second = Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+    second = Features(
+        [plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested, sources=sources
+    )
 
     copy_made = second.collection[0]
     assert copy_made is not plan_object
@@ -75,10 +78,13 @@ def test_second_build_reaching_a_consumed_seed_gets_a_copy_of_the_clean_source()
     assert copy_made.initial_requested_data is False
 
 
-def test_consuming_a_seed_removes_every_key_pointing_at_the_plan_object() -> None:
+def test_consuming_a_seed_moves_every_key_pointing_at_the_plan_object_into_sources() -> None:
     source, plan_object = _seeded_pair()
     requested: Any = {id(source): (source, plan_object), id(plan_object): (source, plan_object)}
+    sources: dict[int, Feature] = {}
 
-    Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested)
+    Features([plan_object], child_options=Options({}), child_uuid=uuid4(), requested=requested, sources=sources)
 
     assert requested == {}
+    assert sources == {id(source): source, id(plan_object): source}
+    assert not hasattr(plan_object, "plan_source")

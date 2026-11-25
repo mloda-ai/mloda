@@ -89,22 +89,18 @@ class TestmlodaAPI:
             originals = [Feature(f"gen_{i}") for i in range(2)]
             api_request = mlodaAPI((o for o in originals), copy_features=False)  # type: ignore[arg-type]
             assert [str(f.name) for f in api_request.features] == ["gen_0", "gen_1"]
-            seeds: Any = api_request.features.requested
-            for o, p in zip(originals, api_request.features):
-                assert seeds[id(o)] == (o, p)
-                assert seeds[id(p)] == (o, p)
+            aliases: Any = api_request.features.requested
+            plan_objects = list(api_request.features)
+            assert aliases == {id(o): (o, p) for o, p in zip(originals, plan_objects)}
 
     def test_copy_features_false_features_object_does_not_share_bookkeeping(self) -> None:
         original = Features([Feature("bk_feature")])
         copied = mlodaAPI._shallow_copy_features(original)
         assert copied.parent_uuids is not original.parent_uuids
-        assert copied.requested is not original.requested
 
     @pytest.mark.parametrize("shape", ["list", "features"])
     @pytest.mark.parametrize("copy_features", [True, False])
-    def test_seed_map_keys_the_held_object_to_clean_source_and_plan_object(
-        self, copy_features: bool, shape: str
-    ) -> None:
+    def test_api_seeds_only_aliases_for_the_callers_objects(self, copy_features: bool, shape: str) -> None:
         original = Feature("seed_map_feature", options={"k": "v"})
         stale: Any = {-1: (Feature("stale"), Feature("stale"))}
         request: Any = [original] if shape == "list" else Features([original], requested=stale)
@@ -112,18 +108,37 @@ class TestmlodaAPI:
             api_request = mlodaAPI(request, copy_features=copy_features)
 
         (plan_object,) = list(api_request.features)
-        seeds: Any = api_request.features.requested
-        assert -1 not in seeds
+        aliases: Any = api_request.features.requested
         assert plan_object is not original
-        source, seeded_plan_object = seeds[id(plan_object)]
-        assert seeded_plan_object is plan_object
-        assert source is not plan_object
-        assert source.name == plan_object.name
         if copy_features:
-            assert id(original) not in seeds
+            assert aliases == {}
         else:
-            assert source is original
-            assert seeds[id(original)] == (original, plan_object)
+            assert aliases == {id(original): (original, plan_object)}
+        if shape == "features":
+            assert list(stale) == [-1]
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    def test_engine_seeds_key_the_plan_object_to_a_clean_snapshot(self, copy_features: bool) -> None:
+        original = Feature("engine_seed_feature", options={"k": "v"})
+        seen: list[dict[int, tuple[Feature, Feature]]] = []
+        recursion = Engine.setup_features_recursion
+
+        def spy(engine: Engine, features: Features, *args: Any, **kwargs: Any) -> None:
+            seen.append(dict(engine._requested))
+            recursion(engine, features, *args, **kwargs)
+
+        with patch.object(Engine, "setup_features_recursion", spy):
+            with pytest.raises(Exception):
+                mlodaAPI([original], copy_features=copy_features)
+
+        seeds = seen[0]
+        (plan_object,) = {id(p): p for _, p in seeds.values()}.values()
+        snapshot, _ = seeds[id(plan_object)]
+        assert snapshot is not plan_object
+        assert snapshot.name == plan_object.name
+        assert snapshot.initial_requested_data is False
+        assert plan_object.initial_requested_data is True
+        assert (id(original) in seeds) is (not copy_features)
 
 
 class TestBareStringRejected:

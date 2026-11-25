@@ -2,6 +2,7 @@ from collections import defaultdict
 from collections.abc import Iterable, Mapping
 from copy import copy
 from dataclasses import replace
+import heapq
 import logging
 from typing import Any, cast
 from uuid import UUID
@@ -182,6 +183,7 @@ class Engine:
         self.resolution_records: list[ResolutionRecord] = []
         # Unconsumed seeds by id: (clean source, plan request object); an input_features return of one plans into it.
         self._requested: dict[int, tuple[Feature, Feature]] = {}
+        self._sources: dict[int, Feature] = {}
         with run_match_cache(), accessible_implementations(self.implementations), input_resolution_scope(self):
             self.execution_planner = self.create_setup_execution_plan(features)
         if self.function_extender:
@@ -306,7 +308,15 @@ class Engine:
                 plan.principal if plan else None,
             )
         )
-        self._requested = features.requested or {id(f): (f, f) for f in features.collection}
+        snapshots: dict[int, Feature] = {}
+        for f in features.collection:
+            snapshot = f.copy_for_plan()
+            snapshot.initial_requested_data = False
+            snapshots[id(f)] = snapshot
+        self._requested = {id(f): (snapshots[id(f)], f) for f in features.collection}
+        for alias, (_, plan_object) in features.requested.items():
+            self._requested[alias] = (snapshots[id(plan_object)], plan_object)
+        self._sources = {}
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
@@ -396,16 +406,18 @@ class Engine:
             self.add_feature_link_to_links(feature)
         for feature in self._consumers_first(features) if depth == 0 else features:
             if depth == 0:
-                consume_seed(self._requested, feature)
+                consume_seed(self._requested, self._sources, feature)
             # Stamped right before resolution: a reused instance must name this consumer, not an earlier one.
             feature.resolving_consumer = consumer
             feature.resolving_path = path
             self._process_feature(feature, features, requested, depth)
 
     def _consumers_first(self, features: Features) -> list[Feature]:
-        """Requests no other request names in its options first, then the named ones, each in request order."""
-        named: set[int] = set()
-        for request in features:
+        """Stable topological order: each request precedes every seeded request its options name."""
+        requests = list(features)
+        index = {id(r): i for i, r in reversed(list(enumerate(requests)))}
+        edges: list[set[int]] = [set() for _ in requests]
+        for i, request in enumerate(requests):
             seen: set[int] = set()
             stack: list[Any] = [request.options.group, request.options.context]
             while stack:
@@ -415,14 +427,33 @@ class Engine:
                 seen.add(id(value))
                 if isinstance(value, Feature):
                     seed = self._requested.get(id(value))
-                    if seed is not None and seed[1] is not request:
-                        named.add(id(seed[1]))
-                    stack.extend((value.options.group, value.options.context))
+                    if seed is not None:
+                        target = index.get(id(seed[1]))
+                        if target is not None and target != i:
+                            edges[i].add(target)
+                    else:
+                        stack.extend((value.options.group, value.options.context))
                 elif isinstance(value, dict):
                     stack.extend(value.values())
                 elif isinstance(value, (list, tuple, set, frozenset)):
                     stack.extend(value)
-        return [f for f in features if id(f) not in named] + [f for f in features if id(f) in named]
+        indegree = [0] * len(requests)
+        for targets in edges:
+            for t in targets:
+                indegree[t] += 1
+        ready = [i for i, d in enumerate(indegree) if d == 0]
+        heapq.heapify(ready)
+        order: list[int] = []
+        while ready:
+            i = heapq.heappop(ready)
+            order.append(i)
+            for t in edges[i]:
+                indegree[t] -= 1
+                if indegree[t] == 0:
+                    heapq.heappush(ready, t)
+        placed = set(order)
+        order.extend(i for i in range(len(requests)) if i not in placed)
+        return [requests[i] for i in order]
 
     def _process_feature(self, feature: Feature, features: Features, requested: bool, depth: int = 0) -> None:
         """Processes a single feature by delegating tasks to helper methods."""
@@ -1587,6 +1618,7 @@ class Engine:
             parent_domain=parent_domain,
             consumer_local_keys=unforwarded_keys(feature_group_class.PROPERTY_MAPPING),
             requested=self._requested,
+            sources=self._sources,
         )
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)

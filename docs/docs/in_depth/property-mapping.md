@@ -784,10 +784,11 @@ Options(
   `cascade_context_keys` than it had when its inputs were resolved, for example when one
   consumer cascades a key and another delivers it with a one-hop push or a pull. Its inputs
   are resolved once. Declare the same `cascade_context_keys` on every request reaching it.
-  A request named in another request's options is planned after it, so request order and
-  `copy_features` do not change the result. A `Feature` object returned by several
-  consumers' `input_features` gives each consumer its own copy (equal copies merge). A
-  shared root feature is exempt.
+  A requested `Feature` object named by another request is planned after that request and
+  takes its pushed or pulled context and forwarded options; when several requests name it,
+  the first of them in request order does and the others plan their own copies. A
+  `Feature` object returned by several consumers' `input_features` gives each consumer its
+  own copy (equal copies merge). A shared root feature is exempt.
 - Two requests of one input that differ in compute framework resolve their inputs separately.
   When only one of them cascades a key, the plan fails with an error that the input is read
   from two steps whose options differ. Declare the same `cascade_context_keys` on both.

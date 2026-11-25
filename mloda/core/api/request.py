@@ -499,7 +499,6 @@ class mlodaAPI:
             features_copy = copy(requested_features)
             features_copy.collection = [f.copy_for_plan() for f in requested_features.collection]
             features_copy.parent_uuids = set(requested_features.parent_uuids)
-            features_copy.requested = dict(requested_features.requested)
             return features_copy
         if isinstance(requested_features, str):
             return requested_features
@@ -508,21 +507,12 @@ class mlodaAPI:
 
     @staticmethod
     def _seed_map(original: Any, copied: Any, copy_features: bool) -> dict[int, tuple[Feature, Feature]]:
-        """Map the id of each object a consumer may hold to (clean source, plan request object)."""
-        if isinstance(original, str):
+        """Alias each caller object to its plan copy; the engine keys the plan objects itself."""
+        if copy_features or isinstance(original, str):
             return {}
         originals = original.collection if isinstance(original, Features) else original
         planned = copied.collection if isinstance(copied, Features) else copied
-        seeds: dict[int, tuple[Feature, Feature]] = {}
-        for o, p in zip(originals, planned, strict=True):
-            if not isinstance(p, Feature):
-                continue
-            if copy_features:
-                seeds[id(p)] = (p.copy_for_plan(), p)
-            else:
-                seeds[id(o)] = (o, p)
-                seeds[id(p)] = (o, p)
-        return seeds
+        return {id(o): (o, p) for o, p in zip(originals, planned, strict=True) if isinstance(p, Feature)}
 
     @staticmethod
     def _bind_feature_connections(

@@ -229,9 +229,6 @@ class Feature:
         # (empty for a request); excluded from equality and hash.
         self.resolving_path: tuple[str, ...] = ()
 
-        # Clean snapshot a consumed requested object is re-copied from; excluded from equality and hash.
-        self.plan_source: Feature | None = None
-
         # (reader class, data access) the engine matched for this feature; credential-free key in equality/hash.
         self.input_data_match: tuple[DataAccessReader, Any] | None = None
 

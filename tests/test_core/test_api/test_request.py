@@ -86,8 +86,13 @@ class TestmlodaAPI:
 
     def test_copy_features_false_accepts_a_generator_of_features(self) -> None:
         with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
-            api_request = mlodaAPI((Feature(f"gen_{i}") for i in range(2)), copy_features=False)  # type: ignore[arg-type]
+            originals = [Feature(f"gen_{i}") for i in range(2)]
+            api_request = mlodaAPI((o for o in originals), copy_features=False)  # type: ignore[arg-type]
             assert [str(f.name) for f in api_request.features] == ["gen_0", "gen_1"]
+            seeds: Any = api_request.features.requested
+            for o, p in zip(originals, api_request.features):
+                assert seeds[id(o)] == (o, p)
+                assert seeds[id(p)] == (o, p)
 
     def test_copy_features_false_features_object_does_not_share_bookkeeping(self) -> None:
         original = Features([Feature("bk_feature")])
@@ -100,7 +105,6 @@ class TestmlodaAPI:
     def test_seed_map_keys_the_held_object_to_clean_source_and_plan_object(
         self, copy_features: bool, shape: str
     ) -> None:
-        """Seam: the processed `api.features.requested` (what reaches the engine)."""
         original = Feature("seed_map_feature", options={"k": "v"})
         stale: Any = {-1: (Feature("stale"), Feature("stale"))}
         request: Any = [original] if shape == "list" else Features([original], requested=stale)

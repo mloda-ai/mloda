@@ -19,6 +19,15 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.engine import Engine
+from mloda.provider import DefaultOptionKeys
+from mloda.user import PluginCollector, mloda
+from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
+from tests.test_plugins.integration_plugins.chainer.context.test_chained_optional_features import (
+    ChainerContextParserTestDataCreator,
+)
+from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import (
+    PropagateContextFeatureGroupTest,
+)
 
 
 def _self_referential_list() -> list[Any]:
@@ -279,17 +288,7 @@ class _CyclicDict(dict[str, Any]):
 class TestCyclicOptionsInRequestOrderWalk:
     @pytest.mark.parametrize("container", ["list", "dict"])
     def test_request_with_a_cyclic_option_value_plans_without_recursion(self, container: str) -> None:
-        from mloda.provider import DefaultOptionKeys
-        from mloda.user import PluginCollector, mloda
-        from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-        from tests.test_plugins.integration_plugins.chainer.context.test_chained_optional_features import (
-            ChainerContextParserTestDataCreator,
-        )
-        from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import (
-            PropagateContextFeatureGroupTest,
-        )
-
-        # Subclasses keep stable_text (exact-type checks) off the cycle; the order walk must still survive it.
+        # Subclasses keep stable_text (exact-type checks) off the cycle, so only the order walk meets it.
         cyclic: Any = _CyclicList() if container == "list" else _CyclicDict()
         if container == "list":
             cyclic.append(cyclic)

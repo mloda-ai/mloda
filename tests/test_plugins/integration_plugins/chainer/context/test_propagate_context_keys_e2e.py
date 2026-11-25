@@ -239,7 +239,7 @@ class TestPropagateContextKeysE2E:
             name=f"{prefix}_b",
             options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1"}),
         )
-        in_value: Any = feat_b if in_form == "plain" else [feat_b]
+        in_value: Any = {"plain": feat_b, "list": [feat_b], "tuple": (feat_b,)}[in_form]
         by_letter = {
             "b": feat_b,
             "c": Feature(
@@ -259,7 +259,7 @@ class TestPropagateContextKeysE2E:
         }
         return [*[by_letter[letter] for letter in order], "Sales"]
 
-    @pytest.mark.parametrize("in_form", ["plain", "list"])
+    @pytest.mark.parametrize("in_form", ["plain", "list", "tuple"])
     @pytest.mark.parametrize("consumers", ["c", "cd"])
     @pytest.mark.parametrize("copy_features", [True, False])
     @pytest.mark.parametrize("order", ["bc", "cb"])
@@ -275,6 +275,7 @@ class TestPropagateContextKeysE2E:
             copy_features=copy_features,
         )
         assert session.engine is not None
+        assert session.engine._requested == {}
         stored = [f for group in session.engine.feature_group_collection.values() for f in group]
         for letter in letters:
             assert len([f for f in stored if str(f.name) == f"{prefix}_{letter}"]) == 1

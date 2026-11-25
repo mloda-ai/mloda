@@ -456,16 +456,23 @@ class TestEntryPointsKeepNonUtcInstants:
         pytest.param([_NAIVE, pd.NaT], pa.timestamp("us"), [_NAIVE, None], id="naive_nat"),
         pytest.param([pd.Timestamp(_NAIVE), pd.NaT], pa.timestamp("us"), [_NAIVE, None], id="pd_nat"),
         pytest.param([pd.Timestamp(_NAIVE), None], pa.timestamp("us"), [_NAIVE, None], id="pd_none"),
-        pytest.param([pd.NaT, pd.NaT], pa.null(), [None, None], id="all_nat"),
+        pytest.param([pd.NaT, pd.NaT], None, [None, None], id="all_nat"),
     ],
 )
 @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))
 def test_dict_build_naive_nat_list(
-    build: Callable[[dict[str, list[Any]]], Any], values: list[Any], want_type: pa.DataType, want_values: list[Any]
+    build: Callable[[dict[str, list[Any]]], Any],
+    values: list[Any],
+    want_type: pa.DataType | None,
+    want_values: list[Any],
 ) -> None:
     table = _arrow_of(build({"t": values}))
-    if build is _sqlite_from_dict and want_type == pa.null():
-        want_type = pa.timestamp("us")  # accepted exception: SQLite types an all-NaT column as timestamp
+    if want_type is None:  # all-NaT builds like all-None, except SQLite from_dict (timestamp)
+        want_type = (
+            pa.timestamp("us")
+            if build is _sqlite_from_dict
+            else _arrow_of(build({"t": [None, None]})).schema.field("t").type
+        )
     assert table.schema.field("t").type == want_type
     assert table.column("t").to_pylist() == want_values
 

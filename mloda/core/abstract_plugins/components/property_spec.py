@@ -113,6 +113,8 @@ class PropertySpec:
     group_only: bool = False
     # One value only: a list, tuple, set, frozenset or mapping is refused.
     scalar: bool = False
+    # Read on source groups only: a key that only picks the source, so copies differing in it are not split or rejected.
+    routing: bool = False
 
     def __post_init__(self) -> None:
         prefix = f"PropertySpec({self.explanation!r})"
@@ -169,6 +171,9 @@ class PropertySpec:
 
         if not isinstance(self.scalar, bool):
             raise ValueError(f"{prefix}: scalar must be a bool, got {type(self.scalar).__name__}.")
+
+        if not isinstance(self.routing, bool):
+            raise ValueError(f"{prefix}: routing must be a bool, got {type(self.routing).__name__}.")
 
         if self.runtime:
             if not self.context:
@@ -301,6 +306,7 @@ def property_spec(
     runtime: bool = False,
     group_only: bool = False,
     scalar: bool = False,
+    routing: bool = False,
 ) -> PropertySpec:
     """Build a ``PropertySpec``; the ``strict=`` keyword sets the ``strict_validation`` field."""
     return PropertySpec(
@@ -321,6 +327,7 @@ def property_spec(
         runtime=runtime,
         group_only=group_only,
         scalar=scalar,
+        routing=routing,
     )
 
 
@@ -343,6 +350,12 @@ def group_only_keys(feature_group: Any) -> dict[str, PropertySpec]:
     """The group's declared group-only keys."""
     mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
     return {key: spec for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.group_only}
+
+
+def routing_keys(feature_group: Any) -> frozenset[str]:
+    """The group's declared routing keys."""
+    mapping = getattr(feature_group, "PROPERTY_MAPPING", None) or {}
+    return frozenset(key for key, spec in mapping.items() if isinstance(spec, PropertySpec) and spec.routing)
 
 
 def group_scoped_keys(feature_group: Any) -> dict[str, PropertySpec]:

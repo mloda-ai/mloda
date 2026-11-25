@@ -77,6 +77,7 @@ from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.components.property_spec import (
     group_only_keys,
     group_scoped_keys,
+    routing_keys,
     runtime_parameter_keys,
     unforwarded_keys,
 )
@@ -912,7 +913,6 @@ class Engine:
         Twins that are all direct requests are left to _reject_twins_sharing_a_frame."""
         linked = {parent for parents in self.feature_link_parents.values() for parent in parents}
         for group_class, collection in self.feature_group_collection.items():
-            declared = group_class.declared_option_keys()
             buckets: dict[str, list[Feature]] = defaultdict(list)
             for member in collection:
                 if not self.feature_link_parents.get(member.uuid) and (
@@ -922,7 +922,7 @@ class Engine:
             for name, members in buckets.items():
                 if len(members) < 2 or all(m.initial_requested_data for m in members):
                     continue
-                name_derived = self._name_derived_keys(group_class, name, declared)
+                name_derived = self._name_derived_keys(group_class, name)
                 first = members[0].options.context
                 differing = frozenset(
                     k
@@ -942,7 +942,6 @@ class Engine:
             self.feature_group_collection.items(), key=lambda item: format_feature_group_class(item[0])
         ):
             split_keys = frozenset(k for f in collection for k in f.options.split_context_keys)
-            declared = group_class.declared_option_keys()
             buckets: dict[str, list[Feature]] = defaultdict(list)
             for member in collection:
                 buckets[str(member.name)].append(member)
@@ -978,7 +977,7 @@ class Engine:
                             )
                         ):
                             continue
-                        name_derived = self._name_derived_keys(group_class, name, declared)
+                        name_derived = self._name_derived_keys(group_class, name)
                         explicit = a.options.explicit_split_context_keys | b.options.explicit_split_context_keys
                         keys = sorted(
                             str(k)
@@ -990,12 +989,22 @@ class Engine:
                             )
                         )
                         if keys:
-                            remedy = (
-                                "Give every request the same values, push context keys with cascade_context_keys so "
-                                "the inputs split too, or make them group options forwarded to the inputs."
-                                if parents
-                                else "Give every request the same values, or make the keys group options."
-                            )
+                            if not parents:
+                                remedy = (
+                                    "Give every request the same values, mark the keys with split_context_keys, "
+                                    "or make them group options."
+                                )
+                            elif group_class.replaces_rows():
+                                remedy = (
+                                    "Give every request the same values, mark the keys with split_context_keys, "
+                                    "push context keys with cascade_context_keys so the inputs split too, or make "
+                                    "them group options forwarded to the inputs."
+                                )
+                            else:
+                                remedy = (
+                                    "Give every request the same values, push context keys with cascade_context_keys "
+                                    "so the inputs split too, or make them group options forwarded to the inputs."
+                                )
                             raise ValueError(
                                 f"Feature '{name}' of {format_feature_group_class(group_class)} is reached twice with "
                                 f"differing values for context key(s) {keys}, but both copies read the same inputs on "
@@ -1004,10 +1013,10 @@ class Engine:
                             )
 
     @staticmethod
-    def _name_derived_keys(group_class: type[FeatureGroup], name: str, declared: Any) -> set[str]:
-        """Keys the feature name binds; an unreadable name binds nothing, a source group binds every declared key."""
+    def _name_derived_keys(group_class: type[FeatureGroup], name: str) -> set[str]:
+        """Keys the feature name binds; an unreadable name binds nothing, a source group binds its routing keys."""
         if is_nominal_subclass(group_class, SourceFeatureGroup):
-            return {str(k) for k in declared}  # declared keys route the read for a source group
+            return set(routing_keys(group_class))
         # An unreadable name proves no key came from it: copies split or are rejected, never silently share a value.
         return set(group_class.name_bindings(name)) | {DefaultOptionKeys.in_features.value}
 

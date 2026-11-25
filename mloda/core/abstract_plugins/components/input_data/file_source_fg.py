@@ -58,6 +58,7 @@ class _FileSourceFG(SourceFeatureGroup):
             element_validator=_is_suffix_value,
             match_guard=_is_suffix_value,
             expected="a str or a collection of str suffixes",
+            routing=True,
         ),
     }
     SAMPLE_SIZE_BYTES: ClassVar[int] = 0

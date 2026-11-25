@@ -120,6 +120,35 @@ class TestDuckdbFGDeclarations:
         assert DuckdbFG.declared_option_keys() == {"connection_handle"}
 
 
+class TestRoutingKeys:
+    """Only the keys that pick the source are routing; a content key such as text_lines is not."""
+
+    @pytest.mark.parametrize(
+        "group_name,expected",
+        [
+            ("json", {"data_access_handle", "document_suffixes"}),
+            ("markdown", {"data_access_handle", "document_suffixes"}),
+            ("text", {"data_access_handle", "document_suffixes"}),
+            ("db", {"data_access_handle"}),
+            ("sqlite", {"data_access_handle"}),
+            ("duckdb", {"connection_handle"}),
+        ],
+    )
+    def test_stock_routing_keys(self, group_name: str, expected: set[str]) -> None:
+        from mloda.core.abstract_plugins.components.property_spec import routing_keys
+        from mloda_plugins.feature_group.input_data.db_sources.duckdb_fg import DuckdbFG
+
+        groups: dict[str, Any] = {
+            "json": JsonFG,
+            "markdown": load_document_group("markdown_fg", "MarkdownFG"),
+            "text": load_document_group("text_fg", "TextFG"),
+            "db": ReadDBFG,
+            "sqlite": SqliteFG,
+            "duckdb": DuckdbFG,
+        }
+        assert routing_keys(groups[group_name]) == expected
+
+
 class TestEveryOptionKeyReadIsDeclared:
     """Observed match-time reads are a subset of the declared keys, per source reader."""
 

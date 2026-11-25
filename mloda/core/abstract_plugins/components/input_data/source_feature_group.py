@@ -70,6 +70,7 @@ HANDLE_SPEC = PropertySpec(
     element_validator=lambda value: isinstance(value, str),
     match_guard=lambda value: isinstance(value, str),
     expected="a str handle name",
+    routing=True,
 )
 
 

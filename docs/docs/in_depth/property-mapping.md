@@ -45,6 +45,7 @@ PROPERTY_MAPPING = {
 | `caller_settable` | `bool` | `True` | `False`: an MCP caller may never set the key, even when `[mcp] allow_options` lists it. See [MCP Server and CLI](mcp-server.md#what-stays-on-the-server). |
 | `forward_to_inputs` | `bool` | `True` | `False`: input features do not inherit the key unless an explicit `forward_group` allowlist names it. Context is unaffected. |
 | `group_only` | `bool` | `False` | `True`: the key is a group option and a caller placing it in `Options(context=...)` is refused at plan time. Requires `context=False`. |
+| `routing` | `bool` | `False` | `True`: read on source groups only; the key only picks the source, so copies differing in it are not split or rejected. |
 | `scalar` | `bool` | `False` | `True`: one value only; a list, tuple, set, frozenset or mapping (empty ones too) is refused at match time, by `run(parameters=...)` and by `validate_property_values`, with or without `strict_validation`. A container default is refused at construction. |
 
 A key declared with `credential_handle_spec(...)` names a credential handle and may not be moved to context. See [Declaring a credential handle](named-data-access-handles.md#declaring-a-credential-handle). A `group_only=True` key is refused in the context the same way. A `Credential`, `RegisteredCredential` or `ResolvedCredential` value in any non-pointer option, nested in containers or dataclass instances (iterators and generators are not walked), is refused at plan time.
@@ -830,8 +831,9 @@ requested directly more than once and declared option keys that the feature name
 bind. Such a key (every declared key the name does not bind: all of them when the group
 has no name patterns, the patterns do not match, or they cannot read the name) splits by
 value without a marker when a consumer reads one of the copies; `split_context_keys` is
-what splits copies that are all direct requests. A source group's declared keys are
-exempt: they route the read, and copies reading different data are already kept apart.
+what splits copies that are all direct requests. A source group's keys declared
+`routing=True` are exempt: they only pick the source, and copies reading different data are already kept
+apart. Any other declared key, such as one that shapes the content, splits or is rejected.
 
 ### Previewing the forwarded options
 

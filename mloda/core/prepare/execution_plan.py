@@ -829,7 +829,7 @@ class ExecutionPlan:
                     for uuid in parent_to_children_mapping.get(feature.uuid, ())
                     if nodes[uuid].feature.options.twin_split_keys
                     or (
-                        not parent_to_children_mapping.get(uuid)
+                        (not parent_to_children_mapping.get(uuid) or nodes[uuid].feature_group_class.replaces_rows())
                         and self._option_split_keys.get(nodes[uuid].feature_group_class)
                     )
                 }
@@ -3864,11 +3864,12 @@ Available join types:
         # Only a root feature group (no upstream ancestors) can be the actual cause of a
         # missing-Links error: a split with ancestors of its own is never the source read directly.
         is_root = not any(parent_to_children_mapping.get(feature.uuid) for feature in features)
-        if is_root:
+        if is_root or feature_group.replaces_rows():
             split_keys = frozenset(key for feature in features for key in feature.options.split_context_keys)
             self._option_split_keys[feature_group] = self._option_split_keys.get(feature_group, frozenset()) | (
                 split_keys
             )
+        if is_root:
             split_buckets = self._option_split_buckets.setdefault(feature_group, {})
             for f_hash, grouped_features in features_grouped_by_framework_and_options.items():
                 representative = next(iter(grouped_features))

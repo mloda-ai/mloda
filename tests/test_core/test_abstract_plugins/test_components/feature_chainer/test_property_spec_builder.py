@@ -795,6 +795,23 @@ class TestPropertySpecScalar:
             property_spec("d", scalar=True, default=default, strict=strict, allowed_values=("valid",))
 
 
+class TestPropertySpecRouting:
+    """The routing flag marks a source group key that only picks the source."""
+
+    def test_defaults_false_and_passes_through_builder(self) -> None:
+        assert PropertySpec("d").routing is False
+        assert property_spec("d").routing is False
+        assert property_spec("d", routing=True).routing is True
+        assert property_spec("d", routing=True) == PropertySpec("d", routing=True)
+
+    @pytest.mark.parametrize("flag", [1, "yes", None])
+    def test_routing_requires_a_bool(self, flag: Any) -> None:
+        with pytest.raises(ValueError, match="routing must be a bool"):
+            PropertySpec("d", routing=flag)
+        with pytest.raises(ValueError, match="routing must be a bool"):
+            property_spec("d", routing=flag)
+
+
 class TestCredentialHandleSpecBuilder:
     """``credential_handle_spec`` is a PropertySpec builder with the handle fields fixed."""
 

@@ -141,7 +141,8 @@ without a recorded zone is reported as aware against naive.
 
 mloda's Arrow-based builders, Polars and Spark raise a `ValueError` naming the column and zones when a column
 mixes zones or has a zone with no readable name. They also raise, naming the column, when a column mixes
-naive and aware datetimes (in a datetime column, `None`, `pd.NaT` and NumPy `NaT` count as missing, not naive). List columns follow the same rules, and gaps count as missing at any list depth and in struct fields.
+naive and aware datetimes (in a datetime column, `None`, `pd.NaT` and NumPy `NaT` count as missing, not naive).
+List columns follow the same rules, and gaps count as missing at any depth and in struct fields.
 
 Polars keeps a whole-hour fixed offset as an `Etc/GMT-N` zone (`+05:00` becomes `Etc/GMT-5`) and raises for
 a sub-hour one such as `+05:30`, naming the column and the zone.

@@ -130,9 +130,12 @@ class TestArrowBuild:
         assert arr.type == want_type
         assert _utc_nested(arr.to_pylist()) == _utc_nested(values)
 
-    def test_nested_ragged_aware_input_raises_arrow_invalid(self) -> None:
+    @pytest.mark.parametrize(
+        "values", [[[NOON_NY], [[NOON_NY]]], [[NOON_NY], NOON_NY]], ids=["ragged_depth", "scalar_and_list"]
+    )
+    def test_nested_ragged_aware_input_raises_arrow_invalid(self, values: list[Any]) -> None:
         with pytest.raises(pa.ArrowInvalid):
-            _builders().arrow_array([[NOON_NY], [[NOON_NY]]])
+            _builders().arrow_array(values)
 
     @pytest.mark.parametrize("values", [[NOON_NY], [NOON_NY, pd.NaT]], ids=["no_gap", "nat_gap"])
     def test_explicit_type_wins(self, values: list[Any]) -> None:
@@ -141,10 +144,17 @@ class TestArrowBuild:
         assert arr.type == target
         assert _utc(arr.to_pylist()) == _utc(values)
 
-    def test_explicit_type_rejects_naive_aware_mix(self) -> None:
-        target = pa.timestamp("us", tz="UTC")
+    @pytest.mark.parametrize(
+        "values, target",
+        [
+            ([_NAIVE, _UTC_NOON], pa.timestamp("us", tz="UTC")),
+            ([[_NAIVE, _UTC_NOON]], pa.list_(pa.timestamp("us", tz="UTC"))),
+        ],
+        ids=["flat", "nested"],
+    )
+    def test_explicit_type_rejects_naive_aware_mix(self, values: list[Any], target: pa.DataType) -> None:
         with pytest.raises(ValueError) as err:
-            _builders().arrow_array([_NAIVE, _UTC_NOON], type=target, column="t")
+            _builders().arrow_array(values, type=target, column="t")
         for text in ["t", "naive", "aware"]:
             assert text in str(err.value)
 

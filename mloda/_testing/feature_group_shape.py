@@ -48,7 +48,6 @@ from mloda.core.abstract_plugins.components.parallelization_modes import Paralle
 from mloda.core.abstract_plugins.components.property_spec import PropertySpec, is_no_default
 from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field_with_error
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
-from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 from mloda.core.abstract_plugins.implementation import (
     Implementation,
     current_implementations,
@@ -56,6 +55,7 @@ from mloda.core.abstract_plugins.implementation import (
     variant_block_reason,
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 
 __all__ = [
     "assert_feature_group_shape",
@@ -223,11 +223,6 @@ def _check_inputs(cls: type[FeatureGroup], names: list[str], base: Options) -> l
     return failures
 
 
-def _names_option(reason: str, key: str) -> bool:
-    """True when `key` appears in `reason` as a whole option name."""
-    return re.search(rf"(?<!\w){re.escape(key)}(?!\w)", reason) is not None
-
-
 def _check_required(
     cls: type[FeatureGroup],
     names: list[str],
@@ -235,10 +230,11 @@ def _check_required(
     bound_keys: Mapping[str, frozenset[str]],
     dac: DataAccessCollection | None = None,
 ) -> tuple[list[str], list[str]]:
-    """Dropping a required key must record a rejection naming it; on the config path resolution may name it."""
+    """Dropping a required key must record a rejection naming it; an unowned config-path name may defer to resolution."""
     failures = []
     notes: list[str] = []
     config_path = _on_config_path(cls, base)
+    owned = {n: _name_bound_keys(cls, n) is not None for n in names}
     for name, key in product(names, _required_keys(cls)):
         if key in bound_keys.get(name, frozenset()):
             continue
@@ -249,7 +245,11 @@ def _check_required(
         elif matched:
             failures.append(f"required: matches without required option '{key}'")
         elif rejection is None:
-            if config_path and not IdentifyFeatureGroupClass._selects_by_required_own_key(cls, reduced):
+            if (
+                config_path
+                and not owned[name]
+                and not IdentifyFeatureGroupClass._selects_by_required_own_key(cls, reduced)
+            ):
                 note = (
                     f"required: without '{key}' the request no longer selects {cls.__name__} on its "
                     "configuration path, so its decline is silent (nothing to check)"
@@ -259,10 +259,10 @@ def _check_required(
                 continue
             reason = (
                 IdentifyFeatureGroupClass.config_path_absent_required_reason(cls, name, reduced)
-                if config_path
+                if config_path and not owned[name]
                 else None
             )
-            if reason is None or not _names_option(reason, key):
+            if reason is None:
                 failures.append(f"required: no rejection recorded without required option '{key}'")
         elif rejection.code != CoreDeclineCode.REQUIRED_OPTION_ABSENT:
             failures.append(

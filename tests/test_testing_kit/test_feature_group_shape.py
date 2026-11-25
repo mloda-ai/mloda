@@ -645,7 +645,7 @@ def test_undeclared_option_failure_is_named() -> None:
     assert any("undeclared option" in f for f in result.failures), result.failures
 
 
-def test_option_based_request_on_a_mixin_group_drops_in_features_from_the_foreign_probe() -> None:
+def test_option_based_request_on_a_mixin_group_passes_foreign_and_required() -> None:
     base = Options(context={"aggregation_type": "sum", DefaultOptionKeys.in_features: frozenset(["x"])})
     result = check_feature_group_shape(AggregatedFeatureGroup, requests=["my_sum", "my_mean"], base_options=base)
     assert not any(f.startswith("foreign:") for f in result.failures), result.failures
@@ -683,22 +683,39 @@ def test_option_based_request_passes_required_when_resolution_names_the_key() ->
     assert result.passed, result.failures
 
 
-@pytest.mark.parametrize(
-    "reason",
-    [
-        pytest.param(None, id="no_reason"),
-        pytest.param("required option(s) zzz are absent after declared defaults and name bindings", id="other_key"),
-    ],
-)
-def test_required_failure_stays_when_resolution_names_no_absent_key(
-    monkeypatch: pytest.MonkeyPatch, reason: str | None
-) -> None:
+def test_required_failure_stays_when_resolution_names_no_absent_key(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        IdentifyFeatureGroupClass, "config_path_absent_required_reason", staticmethod(lambda *args: reason)
+        IdentifyFeatureGroupClass, "config_path_absent_required_reason", staticmethod(lambda *args: None)
     )
     result = check_feature_group_shape(_make_toy_config_group(), requests=["my_toy"], base_options=_toy_config_base())
     msgs = [f for f in result.failures if f.startswith("required: no rejection recorded without required option")]
     assert any("'op'" in m for m in msgs) and any("'n'" in m for m in msgs), result.failures
+
+
+def test_required_still_fails_for_a_silent_decline_on_an_owned_name() -> None:
+    def match(cls: Any, feature_name: Any, options: Options, data_access_collection: Any = None) -> bool:
+        if options.get("op") is None:
+            return False
+        return bool(super(cls, cls).match_feature_group_criteria(feature_name, options, data_access_collection))
+
+    namespace: dict[str, Any] = {
+        "__module__": __name__,
+        "PREFIX_PATTERN": r".*__ownsil$",
+        "RECOGNITION_ONLY_PATTERN": True,
+        "MIN_IN_FEATURES": 1,
+        "MAX_IN_FEATURES": 1,
+        "NAME_ONLY_MATCH": False,
+        "PROPERTY_MAPPING": {
+            "op": PropertySpec("Operation.", context=True, allowed_values={"up": "Up"}),
+            DefaultOptionKeys.in_features: PropertySpec("Input feature.", context=True),
+        },
+        "match_feature_group_criteria": classmethod(match),
+    }
+    group = type("OwnedSilentDeclineGroup", (FeatureChainParserMixin, FeatureGroup), namespace)
+    base = Options(context={"op": "up", DefaultOptionKeys.in_features: frozenset(["x"])})
+    result = check_feature_group_shape(group, requests=["x__ownsil"], base_options=base)
+    assert "required: no rejection recorded without required option 'op'" in result.failures, result.failures
+    assert not any(n.startswith("required:") for n in result.notes), result.notes
 
 
 def _make_config_gated_mixin_group(*, name_only: bool, needs: tuple[str, ...]) -> type[FeatureGroup]:

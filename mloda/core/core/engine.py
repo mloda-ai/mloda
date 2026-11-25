@@ -91,11 +91,8 @@ from mloda.core.abstract_plugins.components.credential_handle import (
 from mloda.core.abstract_plugins.components.link import JoinType, Link
 from mloda.core.abstract_plugins.components.match_hook import call_match_hook
 from mloda.core.abstract_plugins.components.validators.link_validator import LinkValidator
-from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import (
-    COLUMN_SEPARATOR,
-    FeatureChainParser,
-)
-from mloda.core.abstract_plugins.components.utils import is_nominal_subclass, safe_field
+from mloda.core.abstract_plugins.components.feature_chainer.feature_chain_parser import COLUMN_SEPARATOR
+from mloda.core.abstract_plugins.components.utils import is_nominal_subclass
 
 
 logger = logging.getLogger(__name__)
@@ -1008,22 +1005,11 @@ class Engine:
 
     @staticmethod
     def _name_derived_keys(group_class: type[FeatureGroup], name: str, declared: Any) -> set[str]:
-        """Keys the feature name may bind; every declared key for a source group or an unreadable name."""
+        """Keys the feature name binds; an unreadable name binds nothing, a source group binds every declared key."""
         if is_nominal_subclass(group_class, SourceFeatureGroup):
             return {str(k) for k in declared}  # declared keys route the read for a source group
-        unresolved: Any = object()  # a raise means the name is unreadable; no match (None) is a clean resolution
-        patterns: list[Any] = safe_field(group_class._get_prefix_patterns, unresolved)
-        if patterns is unresolved:
-            return {str(k) for k in declared}
-        if not patterns:
-            return {DefaultOptionKeys.in_features.value}
-        resolution: Any = safe_field(
-            lambda: FeatureChainParser.resolve_name(name, patterns, group_class.PROPERTY_MAPPING), unresolved
-        )
-        if resolution is unresolved:
-            return {str(k) for k in declared}
-        bound = {str(k) for k in resolution.bindings} if resolution is not None else set()
-        return bound | {DefaultOptionKeys.in_features.value}
+        # An unreadable name proves no key came from it: copies split or are rejected, never silently share a value.
+        return set(group_class.name_bindings(name)) | {DefaultOptionKeys.in_features.value}
 
     def _fold_into_narrower_twins(self) -> None:
         """Folds each feature into its unique minimal narrower-framework twin, following fold chains."""

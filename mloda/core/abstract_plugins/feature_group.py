@@ -325,7 +325,7 @@ class FeatureGroup(ABC):
     @final
     @classmethod
     def name_bindings(cls, feature_name: FeatureName | str) -> dict[str, Any]:
-        """Option values the feature name binds (after any name_converter); empty without prefix patterns."""
+        """Option values the feature name binds (after name_converter); empty without patterns or if they cannot read it."""
         patterns: list[Any] = safe_field(cls._get_prefix_patterns, [])
         if not patterns:
             return {}

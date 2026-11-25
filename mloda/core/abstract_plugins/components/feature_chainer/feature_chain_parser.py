@@ -639,11 +639,14 @@ class FeatureChainParser:
         A pattern is a ``str`` or compiled ``re.Pattern`` that must match the whole name (``re.fullmatch``).
         Filtering by type would hide a compiled pattern from the guard while the matcher still matches
         on it, and the guard would then reject a feature the matcher accepted.
+        A list or tuple attribute contributes its elements.
         """
         patterns: list[Any] = []
         for attribute in ("PREFIX_PATTERN", "SUFFIX_PATTERN"):
             pattern = getattr(owner, attribute, None)
-            if pattern is not None:
+            if isinstance(pattern, list | tuple):
+                patterns.extend(pattern)
+            elif pattern is not None:
                 patterns.append(pattern)
         return patterns
 

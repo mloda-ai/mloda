@@ -6,7 +6,14 @@ from typing import Any, ClassVar
 import pyarrow as pa
 import pytest
 
-from mloda.provider import ComputeFramework, DataCreatorFeatureGroup, FeatureGroup, FeatureSet, PropertySpec
+from mloda.provider import (
+    ComputeFramework,
+    DataCreatorFeatureGroup,
+    FeatureChainParser,
+    FeatureGroup,
+    FeatureSet,
+    PropertySpec,
+)
 from mloda.user import Feature, FeatureName, Options, ParallelizationMode, PluginCollector, mloda
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
@@ -83,6 +90,27 @@ class SecondLevelContextConsumer(FeatureGroup):
         }
 
 
+NAMINGS = [(True, "no_patterns"), (False, "no_patterns"), (False, "unreadable_name"), (False, "patterns_raise")]
+NAMING_IDS = ["marked", "unmarked", "unmarked-unreadable_name", "unmarked-patterns_raise"]
+
+
+def _raise_patterns(cls: type) -> Any:
+    raise RuntimeError("unreadable patterns")
+
+
+def _apply_naming(naming: str, monkeypatch: pytest.MonkeyPatch) -> None:
+    """Make the root's name patterns unreadable as the naming requires."""
+    if naming == "unreadable_name":
+        monkeypatch.setattr(ExplicitContextRoot, "PREFIX_PATTERN", ROOT, raising=False)
+        # ROOT has no "__" source, so the pattern matches but resolve_name raises.
+        with pytest.raises(ValueError):
+            FeatureChainParser.resolve_name(
+                ROOT, ExplicitContextRoot._get_prefix_patterns(), ExplicitContextRoot.PROPERTY_MAPPING
+            )
+    elif naming == "patterns_raise":
+        monkeypatch.setattr(ExplicitContextRoot, "_get_prefix_patterns", classmethod(_raise_patterns))
+
+
 def _groups(
     calls: list[tuple[int, ...]], observed: list[Options]
 ) -> tuple[type[FeatureGroup], type[FeatureGroup], type[FeatureGroup]]:
@@ -115,14 +143,16 @@ def _assert_explicit_source_marker(observed: list[Options], top_k: int, marked: 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
 @pytest.mark.parametrize("reverse", [False, True], ids=["direct-first", "consumer-first"])
 @pytest.mark.parametrize("direct_top_k", [2, 3], ids=["equal-values", "different-values"])
-@pytest.mark.parametrize("marked", [True, False], ids=["marked", "unmarked"])
+@pytest.mark.parametrize("marked, naming", NAMINGS, ids=NAMING_IDS)
 def test_renamed_input_context_shares_equal_values_and_splits_different_values(
     framework: type[ComputeFramework],
     reverse: bool,
     direct_top_k: int,
     marked: bool,
+    naming: str,
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
+    _apply_naming(naming, monkeypatch)
     if not marked:
 
         def input_features(self: RenamingContextConsumer, options: Options, feature_name: FeatureName) -> set[Feature]:
@@ -147,10 +177,11 @@ def test_renamed_input_context_shares_equal_values_and_splits_different_values(
 
 
 @pytest.mark.parametrize("framework", FRAMEWORKS)
-@pytest.mark.parametrize("marked", [False, True])
+@pytest.mark.parametrize("marked, naming", NAMINGS, ids=NAMING_IDS)
 def test_direct_requests_differing_in_a_declared_key_are_rejected_unless_marked(
-    framework: type[ComputeFramework], marked: bool
+    framework: type[ComputeFramework], marked: bool, naming: str, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    _apply_naming(naming, monkeypatch)
     calls: list[tuple[int, ...]] = []
     root, _, _ = _groups(calls, [])
     keys = {"top_k"} if marked else set()

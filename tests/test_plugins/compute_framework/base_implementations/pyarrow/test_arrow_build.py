@@ -43,6 +43,9 @@ NY = ZoneInfo("America/New_York")
 NOON_NY = datetime(2023, 3, 11, 12, 0, tzinfo=NY)
 LATER_NY = datetime(2023, 3, 13, 9, 30, tzinfo=NY)
 KOLKATA = timezone(timedelta(hours=5, minutes=30))
+_NAIVE = datetime(2023, 3, 11, 12, 0)
+_UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
+_NP_NAT = np.datetime64("NaT")
 
 ENV_VALUES = pytest.mark.parametrize("ignore_timezone", [None, "1"], ids=["unset", "pyarrow_ignore_timezone"])
 
@@ -56,7 +59,7 @@ def ignore_timezone_env(monkeypatch: pytest.MonkeyPatch, ignore_timezone: str | 
 
 
 def _utc(values: list[Any]) -> list[datetime | None]:
-    return [None if v is None or v is pd.NaT else v.astimezone(UTC) for v in values]
+    return [None if v is None or v is pd.NaT or isinstance(v, np.generic) else v.astimezone(UTC) for v in values]
 
 
 def _builders() -> Any:
@@ -76,8 +79,9 @@ class TestArrowBuild:
             ([datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA)], "+05:30"),
             ([NOON_NY, pd.NaT, LATER_NY], "America/New_York"),
             ([pd.Timestamp("2023-03-11 12:00", tz="America/New_York"), pd.NaT], "America/New_York"),
+            ([NOON_NY, _NP_NAT, LATER_NY], "America/New_York"),
         ],
-        ids=["named_zone_list", "tuple", "fixed_offset", "nat_gap", "pandas_timestamp_nat"],
+        ids=["named_zone_list", "tuple", "fixed_offset", "nat_gap", "pandas_timestamp_nat", "np_nat_gap"],
     )
     def test_array_keeps_instants_and_zone(self, values: Any, zone: str) -> None:
         arr = _builders().arrow_array(values)
@@ -117,12 +121,14 @@ class TestArrowBuildUnchanged:
         "values",
         [
             [datetime(2023, 3, 11, 12, 0), None],
+            [[_NAIVE, None], None],
+            [np.datetime64("2023-03-11T12:00", "ns"), np.datetime64("NaT", "ns")],
             [1, 2, None],
             ["a", None],
             [],
             [None, None],
         ],
-        ids=["naive", "ints", "strings", "empty", "all_none"],
+        ids=["naive", "nested_naive", "numpy_ns_nat", "ints", "strings", "empty", "all_none"],
     )
     @ENV_VALUES
     @pytest.mark.usefixtures("ignore_timezone_env")
@@ -133,26 +139,49 @@ class TestArrowBuildUnchanged:
         assert got.to_pylist() == want.to_pylist()
 
     @pytest.mark.parametrize(
-        "values, types",
+        "values, substituted, types",
         [
-            ([datetime(2023, 3, 11, 12, 0), pd.NaT], [None, pa.timestamp("us")]),
-            ([pd.Timestamp("2023-03-11 12:00"), pd.NaT], [None, pa.timestamp("us")]),
-            ([pd.NaT, pd.NaT], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
-            ([pd.NaT, None], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
+            ([_NAIVE, pd.NaT], [_NAIVE, None], [None, pa.timestamp("us")]),
+            (
+                [pd.Timestamp("2023-03-11 12:00"), pd.NaT],
+                [pd.Timestamp("2023-03-11 12:00"), None],
+                [None, pa.timestamp("us")],
+            ),
+            ([pd.NaT, pd.NaT], [None, None], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
+            ([pd.NaT, None], [None, None], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
+            ([_NAIVE, _NP_NAT], [_NAIVE, None], [None, pa.timestamp("us")]),
+            ([_NP_NAT, _NP_NAT], [None, None], [None, pa.timestamp("us"), pa.timestamp("us", tz="UTC")]),
+            ([[_NAIVE, pd.NaT]], [[_NAIVE, None]], [None, pa.list_(pa.timestamp("us"))]),
+            # UTC only: non-UTC nested aware zones are a separate gap
+            ([[_UTC_NOON, pd.NaT]], [[_UTC_NOON, None]], [None, pa.list_(pa.timestamp("us", tz="UTC"))]),
+            ([None, [_NAIVE, pd.NaT]], [None, [_NAIVE, None]], [None, pa.list_(pa.timestamp("us"))]),
+            ([[_NAIVE, _NP_NAT]], [[_NAIVE, None]], [None, pa.list_(pa.timestamp("us"))]),
+            ([[[_NAIVE, pd.NaT]]], [[[_NAIVE, None]]], [None, pa.list_(pa.list_(pa.timestamp("us")))]),
+            ([(_NAIVE, pd.NaT)], [(_NAIVE, None)], [None, pa.list_(pa.timestamp("us"))]),
         ],
-        ids=["naive_nat", "pd_timestamp_nat", "all_nat", "nat_none"],
+        ids=[
+            "naive_nat",
+            "pd_timestamp_nat",
+            "all_nat",
+            "nat_none",
+            "naive_np_nat",
+            "all_np_nat",
+            "nested_naive_nat",
+            "nested_aware_nat",
+            "nested_none_row",
+            "nested_np_nat",
+            "deep_nested_nat",
+            "tuple_nested_nat",
+        ],
     )
-    def test_nat_list_matches_none_substituted(self, values: list[Any], types: list[pa.DataType | None]) -> None:
-        substituted = [None if v is pd.NaT else v for v in values]
+    def test_nat_list_matches_none_substituted(
+        self, values: list[Any], substituted: list[Any], types: list[pa.DataType | None]
+    ) -> None:
         for type_ in types:
             got = _builders().arrow_array(values, type=type_)
             want = pa.array(substituted, type=type_)
             assert got.type == want.type
             assert got.to_pylist() == want.to_pylist()
-
-
-_NAIVE = datetime(2023, 3, 11, 12, 0)
-_UTC_NOON = datetime(2023, 3, 11, 12, 0, tzinfo=UTC)
 
 
 @pytest.mark.parametrize(
@@ -197,7 +226,10 @@ def test_aware_zone(values: list[Any], expected: str | None) -> None:
         pytest.param(None, True, id="none"),
         pytest.param(pd.NaT, True, id="pd_nat"),
         pytest.param(float("nan"), False, id="nan"),
-        pytest.param(np.datetime64("NaT"), False, id="np_nat"),
+        pytest.param(np.datetime64("NaT"), True, id="np_nat"),
+        pytest.param(np.datetime64("NaT", "ns"), True, id="np_nat_ns"),
+        pytest.param(np.timedelta64("NaT"), True, id="np_timedelta_nat"),
+        pytest.param(np.datetime64("2023-03-11T12:00"), False, id="np_datetime64_value"),
         pytest.param(0, False, id="zero"),
         pytest.param("", False, id="empty_string"),
         pytest.param(_NAIVE, False, id="naive"),
@@ -457,6 +489,8 @@ class TestEntryPointsKeepNonUtcInstants:
         pytest.param([pd.Timestamp(_NAIVE), pd.NaT], pa.timestamp("us"), [_NAIVE, None], id="pd_nat"),
         pytest.param([pd.Timestamp(_NAIVE), None], pa.timestamp("us"), [_NAIVE, None], id="pd_none"),
         pytest.param([pd.NaT, pd.NaT], None, [None, None], id="all_nat"),
+        pytest.param([_NAIVE, _NP_NAT], pa.timestamp("us"), [_NAIVE, None], id="naive_np_nat"),
+        pytest.param([_NP_NAT, _NP_NAT], None, [None, None], id="all_np_nat"),
     ],
 )
 @pytest.mark.parametrize("build", _ENTRY_POINTS, ids=lambda f: f.__name__.lstrip("_"))

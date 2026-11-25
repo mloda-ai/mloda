@@ -119,8 +119,14 @@ class PythonDictFramework(ComputeFramework):
 
     def _extract_column_data_type(self, data: Any, column_name: str) -> DataType | None:
         for val in self._column_values(data, column_name):
-            # pd.NaT is the only datetime unequal to itself; this avoids importing pandas.
-            if val is None or (isinstance(val, datetime.datetime) and val != val):
+            # pd.NaT and NumPy NaT are unequal to themselves; arrow_build.is_gap would import pyarrow.
+            if val is None or (
+                (
+                    isinstance(val, datetime.datetime)
+                    or (type(val).__module__ == "numpy" and type(val).__name__ in ("datetime64", "timedelta64"))
+                )
+                and val != val
+            ):
                 continue
             if isinstance(val, bool):
                 return DataType.BOOLEAN

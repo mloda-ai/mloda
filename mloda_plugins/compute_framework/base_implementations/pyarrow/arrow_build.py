@@ -65,9 +65,24 @@ def _unnameable(tz: tzinfo, name: str | None, where: str) -> str:
 
 
 def is_gap(v: Any) -> bool:
-    """True for None and pd.NaT."""
-    # NaT is the only datetime unequal to itself (no pandas import).
-    return v is None or (isinstance(v, datetime) and v != v)
+    """True for None, pd.NaT and NumPy NaT."""
+    # NaT is unequal to itself (no pandas or numpy import).
+    if v is None:
+        return True
+    if isinstance(v, datetime):
+        return bool(v != v)
+    kind = type(v)
+    return kind.__module__ == "numpy" and kind.__name__ in ("datetime64", "timedelta64") and bool(v != v)
+
+
+def _has_gap(values: Any) -> bool:
+    """True if a non-None gap sits at any list or tuple depth."""
+    return any(_has_gap(v) if isinstance(v, (list, tuple)) else v is not None and is_gap(v) for v in values)
+
+
+def _null_gaps(values: Any) -> list[Any]:
+    """Copy of values with every gap at any depth as None."""
+    return [_null_gaps(v) if isinstance(v, (list, tuple)) else None if is_gap(v) else v for v in values]
 
 
 def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
@@ -121,8 +136,8 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         if aware:
             utc_values = [None if is_gap(v) else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
-        if any(v is not None and is_gap(v) for v in values):
-            values = [None if is_gap(v) else v for v in values]
+        if _has_gap(values):
+            values = _null_gaps(values)
     return pa.array(values, type=type)
 
 

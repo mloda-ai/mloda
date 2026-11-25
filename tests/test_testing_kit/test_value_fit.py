@@ -111,7 +111,8 @@ _FIT_CASES: list[tuple[DataType, Any, bool]] = [
 ]
 _FIT_CASES += [(member, True, member is DataType.BOOLEAN) for member in _NUMERIC + [DataType.BOOLEAN]]
 _FIT_CASES += [(member, None, True) for member in DataType]
-_FIT_CASES += [(member, pd.NaT, True) for member in DataType]
+_NAT_FITS = {DataType.TIMESTAMP_MILLIS, DataType.TIMESTAMP_MICROS, DataType.TIMESTAMP_MICROS_TZ}
+_FIT_CASES += [(member, pd.NaT, member in _NAT_FITS) for member in DataType]
 
 
 @pytest.mark.parametrize("data_type, value, fits", _FIT_CASES)

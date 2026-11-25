@@ -450,15 +450,12 @@ class TestEntryPointsKeepNonUtcInstants:
         assert value_set(column, [_NAIVE]).type == pa.timestamp("us")
 
 
-_NAIVE_NOON = datetime(2023, 3, 11, 12, 0)
-
-
 @pytest.mark.parametrize(
     "values, want_type, want_values",
     [
-        pytest.param([_NAIVE_NOON, pd.NaT], pa.timestamp("us"), [_NAIVE_NOON, None], id="naive_nat"),
-        pytest.param([pd.Timestamp(_NAIVE_NOON), pd.NaT], pa.timestamp("us"), [_NAIVE_NOON, None], id="pd_nat"),
-        pytest.param([pd.Timestamp(_NAIVE_NOON), None], pa.timestamp("us"), [_NAIVE_NOON, None], id="pd_none"),
+        pytest.param([_NAIVE, pd.NaT], pa.timestamp("us"), [_NAIVE, None], id="naive_nat"),
+        pytest.param([pd.Timestamp(_NAIVE), pd.NaT], pa.timestamp("us"), [_NAIVE, None], id="pd_nat"),
+        pytest.param([pd.Timestamp(_NAIVE), None], pa.timestamp("us"), [_NAIVE, None], id="pd_none"),
         pytest.param([pd.NaT, pd.NaT], pa.null(), [None, None], id="all_nat"),
     ],
 )

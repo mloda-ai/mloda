@@ -762,7 +762,9 @@ class SqliteRelation(SqlBaseRelation):
         if arrow_table.num_rows > 0:
             placeholders = ", ".join("?" for _ in cols)
             insert_sql = f"INSERT INTO {quote_ident(table_name)} VALUES ({placeholders})"  # nosec
-            rows = list(zip(*(col.to_pylist() for col in arrow_table.columns)))
+            rows = [
+                tuple(_bind_value(v) for v in row) for row in zip(*(col.to_pylist() for col in arrow_table.columns))
+            ]
             connection.executemany(insert_sql, rows)
 
         return cls(connection, table_name, _types=list(arrow_table.schema.types))

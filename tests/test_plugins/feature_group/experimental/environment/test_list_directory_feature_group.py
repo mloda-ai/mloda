@@ -1,3 +1,4 @@
+import os
 from pathlib import PosixPath
 from mloda.user import Feature
 from mloda_plugins.feature_group.experimental.environment.list_directory_feature_group import (
@@ -48,3 +49,9 @@ def test_is_ignored_wildcard_patterns() -> None:
     assert ListDirectoryFeatureGroup._is_ignored("temp_file.txt", {"temp*"}) is True
     assert ListDirectoryFeatureGroup._is_ignored("logs/output.txt", {"logs/*"}) is True
     assert ListDirectoryFeatureGroup._is_ignored("keep.txt", {"*.log"}) is False
+
+
+def test_is_ignored_os_path_separators() -> None:
+    assert ListDirectoryFeatureGroup._is_ignored(os.path.join("build", "x.txt"), {"build/"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored(os.path.join("logs", "output.txt"), {"logs/*"}) is True
+    assert ListDirectoryFeatureGroup._is_ignored(os.path.join("build_tools", "x.py"), {"build/"}) is False

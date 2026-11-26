@@ -2,7 +2,7 @@
 
 The **mlodaAPI** class serves as the primary interface for interacting with the core system, streamlining the setup and execution of computational workflows
 
-`run_all()` plans and runs a request in one call (**batch run**). `prepare()` and `run()` split planning from execution for realtime needs (**inference**); see Two-Phase Execution below. For incremental result delivery see [Streaming](streaming.md).
+`run_all()` plans and runs a request in one call (**batch run**). `prepare()` and `run()` split planning from execution for realtime needs (**inference**); see [Two-Phase Execution](#two-phase-execution-prepare-run). For incremental result delivery see [Streaming](streaming.md).
 
 #### Configuration for mlodaAPI
 

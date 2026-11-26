@@ -144,7 +144,7 @@ from mloda.user.spark import SparkFramework
 
 One policy for every backend: importing `mloda.user.<backend>` never fails because the backend library is missing. `import mloda.user` needs no backend at all, importing a backend module always gives you the framework class, and a framework whose library is missing reports itself unavailable through `is_available()`. Discovery filters on `is_available()`, so an unavailable framework is never selected. The deep import paths keep working unchanged.
 
-mloda core declares zero hard dependencies; every backend is an optional extra (`pip install mloda[polars]`; the table above says which libraries an extra installs). An unavailable framework stays visible in the plugin catalogue.
+mloda core declares zero hard dependencies; every backend is an optional extra (`pip install mloda[polars]`; the table above says which libraries an extra installs). An unavailable framework stays visible in the plugin catalogue, where `is_available()` reports it unavailable.
 
 For example, without `polars` installed, `from mloda.user.polars import PolarsDataFrame` still works, `PolarsDataFrame.is_available()` returns `False`, and mloda plans with the remaining frameworks.
 
@@ -164,6 +164,8 @@ rows = result_rows(mloda.run_all(...))
 ```
 
 Strictness stays in the library; `result_rows` packages the forgiving application-side policy.
+
+##### Backend examples
 
 The example that follows is a sketch, not executed: it needs a configured backend and a
 source that provides `id`.

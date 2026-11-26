@@ -20,7 +20,7 @@ for result in mloda.stream_all(
     process(result)
 ```
 
-`stream_all` returns a `ResultStream`: it iterates exactly like the old generator and additionally exposes a `.plan` property with the resolved execution plan, plus the run's `run_id` and `plan_id`. Planning happens eagerly, so an unresolvable request raises at the `stream_all` call, not at first iteration; so does a MULTIPROCESSING preflight refusal (such as a missing `flight_server`). `ResultStream.frames()` yields `(PlanStep, frame)` pairs from the same stream instead, pairing each frame with the compute step that produced it.
+`stream_all` returns a `ResultStream`: it iterates like a generator and additionally exposes a `.plan` property with the resolved execution plan, plus the run's `run_id` and `plan_id`. Planning happens eagerly, so an unresolvable request raises at the `stream_all` call, not at first iteration; so does a MULTIPROCESSING preflight refusal (such as a missing `flight_server`). `ResultStream.frames()` yields `(PlanStep, frame)` pairs from the same stream instead, pairing each frame with the compute step that produced it.
 
 ## Comparison with `run_all`
 
@@ -35,13 +35,11 @@ results = mloda.run_all(
 # results is a list, all groups are already complete
 ```
 
-`stream_all` yields each result as soon as its group is done.
-
 Both produce the same elements, but `stream_all` yields in completion order while `run_all`'s list follows plan order (positions can differ under THREADING/MULTIPROCESSING).
 
 ## What "streaming" means here
 
-Streaming operates at **feature-group granularity**.  Each yielded value is a **complete** result table for one feature group (e.g. a `pa.Table`).  There is no partial or incremental data within a single group; you always receive the full result, never single rows or chunks of a group's input.
+Streaming operates at **feature-group granularity**.  Each yielded value is a **complete** result table for one feature group (e.g. a `pa.Table`).  There is no partial or incremental data within a single group; you always receive the full result, never single rows or partial chunks of a group's result.
 
 ## When to use `stream_all`
 

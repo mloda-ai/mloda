@@ -4,7 +4,7 @@ This example demonstrates a simple request to the mloda API. You describe WHAT d
 
 > **Tip:** For AI agents or quick prototyping, you can also use inline data with `api_data`, see the [30-second example](installation.md#4-quick-start).
 
-In this example, mloda automatically determines that the **CsvFG** feature group will fulfill the request and respond with the resulting DataFrame.
+In this example, mloda automatically determines that the **CsvFG** feature group will fulfill the request and respond with the resulting table.
 
 #### 1. Import the Required Modules
 We first need to import the necessary components to set up our request:
@@ -46,6 +46,7 @@ V8: [[-0.13000604758867731,-0.13311827417649086,-0....]]
 id: [[0,1,2,...]]
 ....
 ```
+
 #### For Realtime / Inference Use Cases
 
 `run_all()` replans on every call. For latency-sensitive use (model serving, event pipelines), call `mloda.prepare(...)` once and `session.run(api_data=...)` per request. See [mloda API: Two-Phase Execution](../in_depth/mloda-api.md#two-phase-execution-prepare-run).

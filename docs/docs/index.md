@@ -27,7 +27,7 @@ mloda addresses common challenges in data and feature engineering by leveraging 
 #### Plugins
   - Feature Groups: **Define feature dependencies**, such as creating a composite label based on features e.g. user activity, purchase history, and support interactions. Once defined, only the label needs to be requested, as dependencies are resolved automatically, simplifying processing. [Learn more here.](chapter1/feature-groups.md)
 
-  - Compute Frameworks: Define the **technology stack**, like Spark or Pandas, along with support for different storage engines such as Parquet, Delta Lake, or PostgreSQL, to execute feature transformations and computations, ensuring efficient processing at scale. [Learn more here.](chapter1/compute-frameworks.md)
+  - Compute Frameworks: Define the **technology stack**, like Spark or Pandas, along with support for different storage engines such as DuckDB, SQLite, or Iceberg, to execute feature transformations and computations, ensuring efficient processing at scale. [Learn more here.](chapter1/compute-frameworks.md)
 
   - Extenders: Automate **metadata extraction processes**, helping you enhance data governance, compliance, and traceability, such as analyzing how often features are used by models or analysts, or understanding where the data is coming from. [Learn more here.](chapter1/extender.md)
 

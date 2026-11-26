@@ -105,7 +105,7 @@ mloda uses three types of plugins:
 | **ComputeFramework** | Execution backend (Pandas, Spark, etc.) |
 | **Extender** | Hooks for logging, validation, monitoring |
 
-Most of the time, you'll work with **FeatureGroups** - Python classes that define how to access and transform data (see 30-Second Example above).
+Most of the time, you'll work with **FeatureGroups** - Python classes that define how to access and transform data.
 
 **Why plugins?**
 - **Steps, not pipelines** - Build transformations. mloda wires them together.

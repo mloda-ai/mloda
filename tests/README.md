@@ -6,7 +6,7 @@ Testing is a critical aspect of the mloda framework, ensuring reliability, corre
 ## Directory Structure
 
 Directories to two levels deep; regenerate with
-`find tests -type d -not -path "*__pycache__*" | sort`.
+`find tests -maxdepth 2 -type d -not -path "*__pycache__*" | sort`.
 
 ```
 tests/
@@ -28,8 +28,9 @@ tests/
 ├── test_parallelization_modes_support.py  # Every parallelization mode is supported
 ├── test_project_structure.py       # Repository layout invariants
 ├── test_registry_isolation.py      # Plugin registry isolation between tests
-├── mixins/                         # Shared test mixins
 ├── helpers/                        # Shared stub plugins tests import (see plugin_stubs.py)
+├── mixins/                         # Shared test mixins
+│   └── reader_feature_groups/      # Mixins for reader feature group tests
 ├── test_core/                      # Tests for core functionality
 │   ├── test_abstract_plugins/      # Tests for abstract plugin interfaces
 │   ├── test_api/                   # Tests for API functionality

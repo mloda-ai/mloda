@@ -54,15 +54,6 @@ When a feature depends on other features (via `input_features()`), the parent's 
 +------------------------------------------+---------------+------------------+
 ```
 
-**Example: String-based features inherit domain**
-```python
-Feature("Revenue", domain="Sales")
-
-class SalesRevenueGroup(FeatureGroup):
-    def input_features(self, options, feature_name):
-        return {"base_amount", "currency"}  # Both inherit "Sales"
-```
-
 **Example: Override domain for cross-domain dependency**
 ```python
 class SalesRevenueGroup(FeatureGroup):

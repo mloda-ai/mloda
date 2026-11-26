@@ -126,12 +126,6 @@ Rules:
 - Values may be either a file handle (a key of the `files` dict) or a file path (a value of the `files` dict); they are normalized to handles internally. Construction raises `ValueError` if a value matches neither.
 - For columns not listed in the map, the consumer falls back to the shared resolver: a single matching file binds, multiple matching files raise `ValueError` listing the candidates. Set `data_access_handle` on the feature's `Options` to disambiguate without `column_to_file`. See [Named Data Access Handles](named-data-access-handles.md).
 
-The existing per-feature alternative still works for one-off pinning:
-
-```py
-Feature("SK_ID_CURR", options=Options({"CsvFG": "application_train.csv"}))
-```
-
 #### Feature Scope Data Access
 
 The Feature Scope Data access is instead designed to control the access to data of any kind 
@@ -141,16 +135,6 @@ If data needs to be added specifically for a single feature (or features from th
 
 We show `CsvFG` as example, a `ReadFileFG` subclass that claims CSV files.
 In this case, we point it at a path with its class name as option key: `CsvFG`.
-
-```py
-# CsvFG is already implemented as plugin, so do not define it again.
-class CsvFG(ReadFileFG):
-    @classmethod
-    def suffixes(cls) -> tuple[str, ...]:
-        return (".csv", ".CSV")
-```
-
-As a side note, `CsvFG` is also used for the global scope automatism.
 
 To use it, we can simply:
 
@@ -196,7 +180,7 @@ For this purpose, mloda accepts request data through the `api_data` parameter.
 
 The built-in `ApiDataFG` (a `SourceFeatureGroup`) reads data given to mloda at request time. It claims a feature whose name is a column of a set in the `api_data` parameter, and loads it through the `INPUT_DATA_LOAD` hook with `data_access_identity` `api_data:<set key>`.
 
-`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `prepare()` fixes each set's columns, and `run(api_data=...)` must give the same set keys and the same column names per set (order may differ), otherwise a `ValueError` is raised before the run starts. Each set must be a mapping of column to values. Only the set keys and each set's column names are compared; values, row counts and element types are not (for sets loaded natively as a dict, see below). A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`. A subclass overriding `load_neutral` or `api_values` declares `neutral_type` itself; one building its own `ApiDataRef` passes `value_type`.
+`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. A rerun's `api_data` must match the prepared set keys and column names (see [prepare() + run()](mloda-api.md#two-phase-execution-prepare-run)); values, row counts and element types are not compared (for sets loaded natively as a dict, see below). A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`. A subclass overriding `load_neutral` or `api_values` declares `neutral_type` itself; one building its own `ApiDataRef` passes `value_type`.
 
 ```python
 from mloda.user import mloda
@@ -212,13 +196,7 @@ result = session.run(api_data={"RerunCheckRequest": {"RerunCheckScore": [0.1, 0.
 assert len(result[0]) == 3
 ```
 
-Without a `compute_frameworks` list, a set given as a dict of lists runs on `PythonDictFramework` (reason `loads natively`) when the dict framework can serve the group, and consumers that can run there follow, so the result is a dict unless `output_framework` converts it. Sets with other column types (tuples, arrays) keep today's choice. A pandas-style group without `compute_framework_rule` then also runs on dicts: declare the rule or pass `compute_frameworks`. On a rerun, a set whose step loads natively as a dict must stay a dict of lists. Plan locks of default api_data runs written before this release no longer match; rewrite them with `write_plan_lock`.
-
-Use cases:
-
-- web requests
-- real-time prediction
-- features as parameters
+Without a `compute_frameworks` list, a set given as a dict of lists runs on `PythonDictFramework` (reason `loads natively`) when the dict framework can serve the group, and consumers that can run there follow, so the result is a dict unless `output_framework` converts it. Sets with other column types (tuples, arrays) keep today's choice. A pandas-style group without `compute_framework_rule` then also runs on dicts: declare the rule or pass `compute_frameworks`.
 
 The following example shows a simple `api_data` setup.
 
@@ -249,13 +227,6 @@ Further, we do not want to always load data from outside, be it before or during
 #### DataCreatorFeatureGroup
 
 Subclass `DataCreatorFeatureGroup` and return the data from `calculate_feature`; a dict result becomes its own frame. The class name always matches; add more names via `feature_names_supported()`. It needs no **DataAccessCollection** or **Feature Scope Data Access**.
-
-Usage:
-
-- test data,
-- sample data,
-- dummy data,
-- parameter data
 
 One could imagine that for experimenting one wants to see data. Then one could use this feature as input feature to another feature instead of e.g. the true data.
 
@@ -361,35 +332,4 @@ As the input features can be fulfilled by **multiple other features**, we can ha
 
 #### Combining Data Sources with Links
 
-When input features come from different sources (e.g., ApiDataFG and a DataCreatorFeatureGroup), you can join them using Links. Create a `Link` in `input_features()` and attach it to a `Feature`:
-
-```python
-from mloda.user import Link, Index, Feature, JoinSpec
-from mloda.provider import FeatureGroup, FeatureSet
-from mloda.provider import ApiDataFG
-
-class JoinedFeature(FeatureGroup):
-
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        # Create a LEFT join between mloda data and Creator data
-        link = Link.left(
-            JoinSpec(ApiDataFG, Index(("api_id",))),
-            JoinSpec(CreatorDataFeature, Index(("creator_id",)))
-        )
-
-        # Attach link to one feature, set index on both
-        return {
-            Feature(name="api_value", link=link, index=Index(("api_id",))),
-            Feature(name="creator_value", index=Index(("creator_id",))),
-        }
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Data from both sources is now joined
-        data["JoinedFeature"] = data["api_value"] + "_" + data["creator_value"]
-        return data
-```
-
-Available join methods: `Link.left()`, `Link.inner()`, `Link.outer()`, `Link.append()`, `Link.union()`.
-
-> See `tests/test_plugins/integration_plugins/test_api_link_join.py` for a complete working example.
+When input features come from different sources, join them with a `Link` created in `input_features()`. Attach the link to one feature and set the index on both. See [Join Data](join_data.md#link) for the join types and examples; `tests/test_plugins/integration_plugins/test_api_link_join.py` is a complete working example.

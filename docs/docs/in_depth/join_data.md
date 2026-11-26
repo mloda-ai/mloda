@@ -1,20 +1,13 @@
 ## Join datasets
 
-Combining datasets from various feature groups is crucial for building comprehensive and scalable data processing pipelines. The framework automatically handles data merging in the background to accommodate the following scenarios:
+The framework merges data from feature groups automatically when a feature depends on a setup like these:
 
--   **Different Compute Frameworks**: Merging data from feature groups that utilize different underlying compute technologies.
--   **Same Compute Framework, Different Sources**: Combining datasets that use the same compute framework but originate from different data sources.
--   **Same Feature Group, Different Feature Options**: Integrating data from the same feature group configured with different feature options.
--   **Multiple Links on the Same Compute Framework**: Joining a single base FG to multiple right-side FGs (same class, subclasses, or distinct) all within the same compute framework.
+-   feature groups on different compute frameworks,
+-   the same compute framework with different sources,
+-   the same feature group with different feature options,
+-   one base feature group joined to several right-side feature groups within one framework.
 
-
-_**If we have a feature, which is dependent on an aforementioned setup,**_
-
--   we need to define a Link,
--   and the ComputeFramework must support the according merge!
-
-
-We will first discuss the basic building blocks of the **Links** (**Index**, **Join Types**) and then the **merge** in the ComputeFramework.
+For such a feature, define a Link, and the ComputeFramework must support the matching merge. Below: **Index**, **JoinType**, **Link**, then the **merge** in the ComputeFramework.
 
 #### Index
 
@@ -47,28 +40,7 @@ is_a_part_of = single_column_index.is_a_part_of(multi_column_index) # Returns Tr
 
 #### JoinType
 
-Join Types specify how two datasets are merged based on their keys. The framework supports the following join types:
-
--   Inner Join,
--   Left Join,
--   Outer Join,
--   Right Join (use sparingly; prefer left joins when possible). The declared left feature group's data is the merge engine's left argument, whichever compute framework the join executes in.
--   ASOF Join (point-in-time / as-of: equi match on the by-keys, nearest time match on the time columns).
-
-```python
-from enum import Enum
-
-class JoinType(Enum):
-    INNER = "inner"
-    LEFT = "left"
-    RIGHT = "right"
-    OUTER = "outer"
-    APPEND = "append"
-    UNION = "union"
-    ASOF = "asof"
-
-join_type = JoinType.INNER
-```
+Join Types specify how two datasets are merged based on their keys: `INNER`, `LEFT`, `RIGHT`, `OUTER`, `APPEND`, `UNION` and `ASOF` (point-in-time: equi match on the by-keys, nearest time match on the time columns), all members of `JoinType` (importable from `mloda.user`). Prefer left joins over `RIGHT`; the declared left feature group's data is the merge engine's left argument, whichever compute framework the join executes in.
 
 ASOF joins are created via `Link.asof(...)` / `Link.asof_on(...)`, carrying time columns plus
 `direction`/`tolerance`/`allow_exact_matches` (pandas `merge_asof` semantics). The by-keys (the
@@ -79,21 +51,22 @@ join: every left row survives, with null right columns when no match is found.
 `pyarrow`, `sqlite`, and `spark` (requires Java 17+ on `JAVA_HOME`). `iceberg` has no merge
 engine and does not support joins.
 
-Cross-backend caveats to be aware of:
+Support per backend (`yes`: works; `raises`: `ValueError`):
 
--   **`direction='nearest'`** is supported on `pandas`, `polars`, and `python_dict`. `pyarrow` and the
-    SQL/Spark backends (`duckdb`, `sqlite`, `spark`) raise `ValueError` for `nearest`: Acero's
-    `join_asof` and the SQL forms express only a directional (forward/backward) match.
--   **`tolerance`** accepts `float | int | timedelta`. A `timedelta` tolerance is forwarded natively
-    only by `pandas`/`polars`/`python_dict`. `pyarrow` and the SQL/Spark backends (`duckdb`, `sqlite`,
-    `spark`) cannot derive a numeric tolerance from a `timedelta` and raise `ValueError`; provide a
-    numeric tolerance (e.g. epoch seconds matching the time column). This is enforced inside the merge
-    engine at run time, not at `Link.asof(...)` construction.
--   **`pyarrow` is the most restrictive as-of backend.** Backed by Acero's `Table.join_asof`, it
-    rejects `direction='nearest'`, requires an *integer* `tolerance` (an integer-valued float such as
-    `5.0` is accepted, `5.5` is not; `timedelta` is rejected), and rejects `allow_exact_matches=False`
-    (Acero's match range always includes the exact-time row). Treat it like the SQL backends
-    (directional match, numeric tolerance), not like `pandas`/`polars`.
+| Backend | `direction='nearest'` | `timedelta` tolerance | `allow_exact_matches=False` |
+| --- | --- | --- | --- |
+| pandas | yes | yes | yes |
+| polars | yes | yes | yes |
+| python_dict | yes | yes | yes |
+| pyarrow | raises | raises | raises |
+| duckdb | raises | raises | yes |
+| sqlite | raises | raises | yes |
+| spark | raises | raises | yes |
+
+`tolerance` accepts `float | int | timedelta`; where `timedelta` raises, give a numeric tolerance (e.g. epoch seconds matching the time column). `pyarrow` (Acero `Table.join_asof`) and the SQL/Spark backends express only a directional match. `pyarrow` also needs an integer tolerance (`5.0` is accepted, `5.5` is not). These errors come from the merge engine at run time, not at `Link.asof(...)` construction.
+
+Other cross-backend caveats:
+
 -   **Overlapping non-key columns.** If the left and right frames share a column name other than the
     by-keys/time columns, `pandas` keeps both with `_x`/`_y` suffixes, whereas `pyarrow` and the
     SQL/`polars`/`python_dict` backends keep the left column and drop the right one. Rename
@@ -176,13 +149,12 @@ class OrderFeatureGroup(FeatureGroup):
     def index_columns(cls):
         return [Index(("user_id",)), Index(("order_id",))]
 
-# Instead of verbose JoinSpec construction:
 link = Link.inner(
     JoinSpec(UserFeatureGroup, UserFeatureGroup.index_columns()[0]),
     JoinSpec(OrderFeatureGroup, OrderFeatureGroup.index_columns()[0])
 )
 
-# Use the convenient _on method:
+# The _on method derives the same link:
 link = Link.inner_on(UserFeatureGroup, OrderFeatureGroup)
 
 # Select specific index when feature group has multiple (0-based position):
@@ -193,7 +165,7 @@ Available `_on` methods: `inner_on`, `left_on`, `right_on`, `outer_on`, `append_
 
 **Note:** The `_on` methods raise `ValueError` if the feature group doesn't define `index_columns()` or returns an empty list, and `IndexError` if the specified index position is out of range.
 
-**Note:** Explicit `JoinSpec` (Option 1 above) works regardless of whether the feature group defines `index_columns()`. The engine automatically injects the join columns specified in the `JoinSpec` into that feature group's feature set. The `_on` shorthand requires `index_columns()`.
+**Note:** Explicit `JoinSpec` works regardless of whether the feature group defines `index_columns()`. The engine automatically injects the join columns specified in the `JoinSpec` into that feature group's feature set. The `_on` shorthand requires `index_columns()`.
 
 #### Star Joins (Link.star)
 
@@ -237,7 +209,14 @@ The returned set is passed straight to `mlodaAPI` like any other link set.
 
 **Known limits when several links feed one consumer**
 
-Joins feeding one consumer run in sequence, each on the previous join's frame, so the result must not depend on their order. When two links share a group `B`, as in `Link.left(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.left(JoinSpec(C, ...), JoinSpec(B, ...))`, each join treats `B` as inner, outer, kept (the kept side of a left, right or asof join) or dropped. Planned: inner with inner, outer with outer, kept with kept, and kept with inner. Rejected at plan time: dropped with inner, dropped with outer, inner with outer, and two left or right joins that drop `B` and keep different groups. Dropped with kept (a chain such as `Link.left(A, B)` plus `Link.left(B, C)`) and kept with outer are rejected only when both joins join `B` on the same index and the dropped or outer join's two keys share one column name (differently named keys, as in a foreign key chain, stay planned). To fix it, keep `B` in every left or right join (`Link.star(B, A, C, index_column=..., jointype="left")`; an inner join beside them is fine), use one join type for all links, or read the joins in separate consumers. Two members of one link side (see below) count as two such links. A consumer that skips a join another consumer reads gets its own joins; the plan-time rejection stays for two members of one link side, unless the skipped join is a left, right or asof join keeping the shared group.
+Joins feeding one consumer run in sequence, each on the previous join's frame, so the result must not depend on their order. When two links share a group `B`, as in `Link.left(JoinSpec(A, ...), JoinSpec(B, ...))` and `Link.left(JoinSpec(C, ...), JoinSpec(B, ...))`, each join treats `B` as inner, outer, kept (the kept side of a left, right or asof join) or dropped.
+
+-   Planned: inner with inner, outer with outer, kept with kept, and kept with inner.
+-   Rejected at plan time: dropped with inner, dropped with outer, inner with outer, and two left or right joins that drop `B` and keep different groups.
+-   Rejected only when both joins join `B` on the same index and the dropped or outer join's two keys share one column name: dropped with kept (a chain such as `Link.left(A, B)` plus `Link.left(B, C)`) and kept with outer. Differently named keys, as in a foreign key chain, stay planned.
+-   Fix: keep `B` in every left or right join (`Link.star(B, A, C, index_column=..., jointype="left")`; an inner join beside them is fine), use one join type for all links, or read the joins in separate consumers.
+-   Two members of one link side (see below) count as two such links.
+-   A consumer that skips a join another consumer reads gets its own joins; the plan-time rejection stays for two members of one link side, unless the skipped join is a left, right or asof join keeping the shared group.
 
 #### Same-Class Joins with Discriminators
 
@@ -271,10 +250,6 @@ link = Link("inner", left, right,
 left_age = Feature("age", options={"side": "left"})
 right_age = Feature("age", options={"side": "right"})
 link = Link.from_features("inner", left, right, left_age, right_age)
-
-# 2. Tag features with matching options
-# Feature names reference the feature from the feature group
-features = {left_age, right_age}
 ```
 
 `Link.from_features` uses the group options that differ between the two features as discriminators, and raises if a side has none. It also builds ASOF links when given `asof_config=AsOfJoinConfig(...)`, importable from `mloda.user`.
@@ -362,9 +337,7 @@ mloda will then use the merge implementation in the compute framework and use th
 
 A feature between a join side and the feature consuming the join runs on that side's compute framework. The one exception is a direct input of the consumer that is pinned to another framework: the join then reads that side through the input's hop. Still rejected at plan time are an off-framework feature below another input of the consumer, one side reaching the consumer through two different frameworks, inputs off the sides' framework when the two sides differ in framework, and any such input for APPEND or UNION links. If one consumer is requested with options that reach different variants of the join sides, each variant gets its own join, also when the variants differ on one side only, and each consumer waits only on its own join. Consumers of one RIGHT link never split across its two sides; when one consumer cannot run on the right side's framework, siblings on the same side frameworks join on the left with it.
 
-In the following section, we will see how this can look like.
-
-If one feature group produces a Link side and also reads that Link's merged frame, batching can make the side wait on its own join. This previously raised `Internal error: the steps of the plan form a cycle.`; `mloda.prepare` now names the group and recommends splitting the side feature and the join reader into separate feature groups. For example, keep `g1` in the group named by the Link and put a feature reading `g1` and the other side's columns in a separate reader group. The diagnostic requires an actual dependency cycle, including any intervening framework hops; a class used only as a side with a separate reader remains valid.
+If one feature group produces a Link side and also reads that Link's merged frame, batching can make the side wait on its own join. `mloda.prepare` then names the group and recommends splitting the side feature and the join reader into separate feature groups. For example, keep `g1` in the group named by the Link and put a feature reading `g1` and the other side's columns in a separate reader group. The diagnostic requires an actual dependency cycle, including any intervening framework hops; a class used only as a side with a separate reader remains valid.
 
 #### Merging Data in the Compute Framework
 
@@ -390,25 +363,7 @@ The merge can implement:
 -   **merge_union**
 -   **merge_asof**
 
-These methods are invoked via the final implementation in the abstract class **BaseMergeEngine**, which receives the `Link` and reads the join type and indexes from it:
-
-```py
-@final
-def merge(self, left_data: Any, right_data: Any, link: Link) -> Any:
-    self.check_import()
-
-    jointype = link.jointype
-    left_index = link.left_index
-    right_index = link.right_index
-    ...
-    if jointype == JoinType.INNER:
-        return self.merge_inner(left_data, right_data, left_index, right_index)
-    elif jointype == JoinType.LEFT:
-        return self.merge_left(left_data, right_data, left_index, right_index)
-    ...
-    elif jointype == JoinType.ASOF:
-        return self.merge_asof(left_data, right_data, left_index, right_index, link.asof_config)
-```
+`BaseMergeEngine.merge` dispatches on `link.jointype`; `merge_asof` receives `link.asof_config` as a fifth argument.
 
 A simplified MergeEngine implementation looks like this:
 ```py
@@ -422,7 +377,7 @@ class PandasMergeEngine(BaseMergeEngine):
     def merge_right(...)
         ...
 
-    def merge_outer(...)
+    def merge_full_outer(...)
         ...
 
     def join_logic(
@@ -440,13 +395,3 @@ class PandasMergeEngine(BaseMergeEngine):
         left_data = self.pd_merge()(left_data, right_data, left_on=left_idx, right_on=right_idx, how=join_type)
         return left_data
 ```
-
-
-
-Key Components:
-
--   **left_data**: Left dataset for the join.
--   **right_data**: Right dataset for the join.
--   **link**: The Link carrying the join type (`link.jointype`), the join keys (`link.left_index`, `link.right_index`), and for as-of joins the `link.asof_config`.
-
-By implementing these merge functionality, the compute framework automatically handles data merging operations in the background, aligning with the relationships defined by **Index**, **JoinType**, and **Link**.

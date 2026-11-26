@@ -1,8 +1,6 @@
 ## Filter
 
-In the data and machine learning world, a filter is a technique used to narrow down or preprocess data by removing irrelevant or unwanted information based on specific conditions, improving the quality and relevance of the dataset for analysis or modeling.
-
-That however means that a data project typically contains multiple filters. For this, this project uses the **GlobalFilter** as a container for multiple **SingleFilters**. 
+A filter narrows data by condition. A project typically contains several, so the **GlobalFilter** is a container for multiple **SingleFilters**.
 
 #### SingleFilter
 
@@ -41,29 +39,9 @@ The GlobalFilter provides methods to add filters to the collection. The preferre
 
 A `Feature` passed as `filter_feature` is snapshotted, so later changes to your own object do not affect the stored filter.
 
-**add_time_and_time_travel_filters**: Adds time and time travel filtering to the GlobalFiltering. This is a convenience method. Due to the complexity of time in data/ml/ai projects, this function should be used.
+**add_time_and_time_travel_filters**: Adds an event time range (`event_from`, `event_to`) and optionally a validity period (`valid_from`, `valid_to`, which must be given together). `max_exclusive` (default `True`) makes the upper bounds exclusive. The filters apply to the `reference_time` column by default for the event range and the `time_travel` column for validity; override with `event_time_column` and `validity_time_column`. See the `GlobalFilter.add_time_and_time_travel_filters` docstring for when each range is needed.
 
-This method is useful for **filtering data based on time ranges** (event) and **validity periods** (valid).
-
-**Event Time Filter**: For historical data (e.g., checking if a customer had a valid contract at the event time), only the event time filter is needed.
-    
-**Time Travel Filter**: If prior actions (e.g., payments made before the event) are relevant, the time travel filter is required.
-
-Typically, **valid_to matches the event timestamp**, but in cases like payment plans, where payments occur after creation, some payments may be excluded based on the valid_to data.
-
-Parameters:
-
--   event_from (datetime): Start of the time range (with timezone).
--   event_to (datetime): End of the time range (with timezone).
--   valid_from (datetime | None): Start of the validity period (optional, with timezone).
--   valid_to (datetime | None): End of the validity period (optional, with timezone).
--   max_exclusive (bool): If True, the upper bounds (event_to, valid_to) are treated as exclusive.
--   event_time_column: The column name containing event timestamps. Default is "reference_time".
--   validity_time_column: The column name containing validity timestamps. Default is "time_travel".
-
-The bounds of the created **single_filters** are normalized to tz-aware `datetime` objects in UTC,
-    so each filter engine can compare them directly against the framework's native temporal type.
-    Custom filter engines that previously parsed ISO 8601 strings must now accept `datetime` values.
+The bounds of the created **single_filters** are normalized to tz-aware `datetime` objects in UTC, so each filter engine can compare them directly against the framework's native temporal type.
 
 #### How to create a collection of single filters (GlobalFilter)
 
@@ -112,9 +90,7 @@ Result
 #### Example access to Filters in the Feature Group
 
 Now, we need to also use a FeatureGroup which supports it. In this example, we show where we can access the SingleFilters.
-The implementation of the concrete filters is dependent on the feature group. This example is rather complex as we filter a python dictionary. 
-
-Further, the feature is a `DataCreatorFeatureGroup`, so we create the data here itself. 
+The implementation of the concrete filters depends on the feature group. The feature here is a `DataCreatorFeatureGroup` that filters a python dictionary itself.
 
 ```python
 from mloda.user import mloda
@@ -166,15 +142,11 @@ result[0]
 ```
 Expected Output
 
-```python
+```text
 ExampleOrderFilter: [[2,3]]
 ```
 
-Although this example is complex, it is noteworthy, that the framework considers filters as features and setup as that in the framework. 
-
-### Summary
-
-This filtering system improves data preprocessing through GlobalFilter and SingleFilters, allowing flexible, condition-based refinement, including time-based filtering. It maintains consistency using FilterType and supports complex machine learning use cases. If you encounter a commonly used filter not yet included, feel free to open an issue or submit a pull request.
+Note that the framework treats filters as features and sets them up as such.
 
 ---
 
@@ -268,8 +240,7 @@ new reason under the same column for instance, warns on its own. That dedupe dec
 only; `dropped_filters` records per declaration either way.
 
 The uuid is `SingleFilter.uuid` of the declaration in `GlobalFilter.filters`, which is what joins a
-recorded fact back to the filter that lost. The key previously carried no uuid, so code unpacking it
-as `for (feature_group, name), elimination in ...` must now unpack three parts.
+recorded fact back to the filter that lost.
 
 A filter that matches no FeatureGroup at all is reported once after setup, with its nearest miss
 appended when one was recorded: across FeatureGroups the deepest gate wins, and a matcher defect
@@ -346,39 +317,7 @@ filter is applied, not *where* the computation runs physically:
 All frameworks that return `True` produce the same logical result (non-matching rows
 absent from output), but the physical execution path differs.
 
-### Usage patterns
-
-#### Pattern 1: Let the framework handle everything (default)
-
-The most common case. Your FeatureGroup ignores filters entirely, and the framework
-removes non-matching rows after calculation. No override needed.
-
-```
-class SalesTotal(FeatureGroup):
-    @classmethod
-    def calculate_feature(cls, data, features: FeatureSet):
-        # Just compute; framework handles filtering afterward
-        return pa.table({cls.get_class_name(): compute_totals(data)})
-```
-
-#### Patterns 2 & 3: Inline masking
-
-For patterns that use `features.mask_engine` to build boolean masks inside
-`calculate_feature()`, see [Mask Engine](mask_engine.md).
-
-#### Pattern 4: Force elimination on a non-eliminating engine
-
-A custom FilterEngine can skip row elimination by returning `False` from
-`final_filters()` (e.g. an engine that applies filters at scan time). If your
-FeatureGroup computes derived columns that the scan could not filter, override
-`final_filters()` to force elimination:
-
-```
-class DerivedFeature(FeatureGroup):
-    @classmethod
-    def final_filters(cls) -> bool:
-        return True  # override the engine's default of False
-```
+For inline masking with `features.mask_engine`, see [Mask Engine](mask_engine.md). A custom FilterEngine that skips row elimination (for example at scan time) can be overridden per group: return `True` from `final_filters()` to force elimination for derived columns the scan could not filter.
 
 ### The overlap contract
 
@@ -428,8 +367,7 @@ return pa.table({
 
 ### Pipeline data flows
 
-The following examples show what happens to data at each stage for the four patterns
-above. All flows use the same input and filter:
+The following examples show what happens to data at each stage. All flows use the same input and filter:
 
 ```
 Input:
@@ -449,22 +387,6 @@ Filter: status == "active"
 | `calculate_feature()` output | `[10, 20, 30, 40]` with `status = [active, inactive, active, inactive]` |
 | `run_final_filter()` | Creates mask `[True, False, True, False]`, applies `table.filter(mask)` |
 | **Final result** | `[10, 30]` with `status = [active, active]` (2 rows) |
-
-#### Lazy framework + final filters (DuckDB, SQLite, Polars, Spark)
-
-| Stage | Data |
-|-------|------|
-| `calculate_feature()` output | Lazy relation: `SELECT value, status FROM source` |
-| `run_final_filter()` | Appends filter: `WHERE "status" = 'active'` |
-| **Materialized result** | `[10, 30]` with `status = [active, active]` (2 rows) |
-
-The result is identical to eager row elimination, but no intermediate full-table
-materialization occurs.
-
-#### Inline masking (all rows preserved)
-
-See the [Mask Engine pipeline data flow](mask_engine.md#pipeline-data-flow-inline-masking)
-for details on this pattern.
 
 #### Masking and elimination (same filter, two FeatureGroups)
 

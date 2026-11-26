@@ -163,18 +163,7 @@ Credential values are masked in errors and logs except under known connection fi
 
 A connection lives in the DataAccessCollection, and the framework binds the single one it accepts. Pin one with `connection_handle` or `Feature(name, connection=conn)` (see [Selecting a connection](named-data-access-handles.md#selecting-a-connection-connection_handle) and [Framework Connection Object](framework-connection-object.md)). A source group that reads a connection declares `ClaimRoute("connection", ...)` and `match_connection` (see `DuckdbFG`); choosing a connection by its content happens in the source group's `find_sources` (see `DuckdbFG.find_sources`), while `match_connection` reports which connection a match reads.
 
-## Practical Examples
-
-### Scenario 1: Standard File Processing (Source FeatureGroup Only)
-
-**Use Case**: Reading CSV files with Pandas
-**Pattern**: Only a source FeatureGroup is needed; `CsvFG` claims the feature when a file has the column
-
-```py
-Feature("id", options={"CsvFG": "data/people.csv"})
-```
-
-### Scenario 2: DataCreatorFeatureGroup + Feature(connection=)
+## Example: DataCreatorFeatureGroup + Feature(connection=)
 
 **Use Case**: Analytics with DuckDB requiring a connection object
 **Pattern**: `DataCreatorFeatureGroup` supplies the data and the group is restricted to the DuckDB framework, which builds its frame on the connection the feature pins
@@ -192,49 +181,8 @@ class DuckDBAnalyticsFeature(DataCreatorFeatureGroup):
 Feature("analytics_input", connection=conn)
 ```
 
-For database connection patterns, see [Framework Connection Object](framework-connection-object.md).
-
-### Scenario 3: In-Memory Processing (DataCreatorFeatureGroup Only)
-
-**Use Case**: Creating synthetic data with Pandas
-**Pattern**: Only `DataCreatorFeatureGroup` is needed
-
-```py
-class SyntheticDataFeature(DataCreatorFeatureGroup):
-    @classmethod
-    def feature_names_supported(cls) -> set[str]:
-        return {"synthetic_data"}
-```
-
-## Integration with Other Concepts
-
-### Compute Frameworks
-- **Source FeatureGroups and `DataCreatorFeatureGroup`**: work with all compute frameworks
-- **Connections**: only frameworks that take a connection object (like DuckDB) bind one
-
-For more information, see:
-- [Compute Frameworks](../chapter1/compute-frameworks.md)
-- [Framework Connection Object](framework-connection-object.md)
-- [Compute Framework Integration](compute-framework-integration.md)
-
-### Feature Groups
-These patterns are fundamental to how feature groups access data. For more details, see:
-- [Feature Groups](../chapter1/feature-groups.md)
-- [Feature Group Matching](feature-group-matching.md)
-
-## Best Practices
-
-- Use source FeatureGroups for files, documents and databases, `ApiDataFG` for runtime data and `DataCreatorFeatureGroup` for synthetic data.
-- In a source group, focus on robust source discovery, error handling and performance.
-
 ## Related Documentation
 
-- **[(Feature) data](access-feature-data.md)** - Comprehensive guide to data access in mloda
-- **[Framework Connection Object](framework-connection-object.md)** - Managing stateful connections
-- **[Feature Groups](../chapter1/feature-groups.md)** - Introduction to feature groups
-- **[Compute Frameworks](../chapter1/compute-frameworks.md)** - Overview of compute framework system
-- **[Feature Group Matching](feature-group-matching.md)** - How features are matched to implementations
-
-## Summary
-
-**Source FeatureGroups** are the way mloda reads files, documents, databases and custom sources. `DataCreatorFeatureGroup` and `ApiDataFG` supply in-memory data.
+- [(Feature) data](access-feature-data.md)
+- [Framework Connection Object](framework-connection-object.md)
+- [Feature Group Matching](feature-group-matching.md)

@@ -1,25 +1,6 @@
 # Artifacts
 
-Artifacts are a crucial part of the mloda, enabling the storage and retrieval of intermediate results in feature engineering processes.
-Example use cases are embeddings, Feature Matrices, Model Checkpoints and more.
-
-## Overview
-
-Artifacts are managed through a set of abstract and concrete classes that define how artifacts are created, saved, and loaded. The primary classes involved in artifact management include:
-
-- `BaseArtifact`: The base class for all artifacts.
-- `FeatureGroup`: The base class for feature groups, including methods for artifact management. This class may contain a `BaseArtifact`.
-
-## Key Components
-
-#### BaseArtifact
-
-The `BaseArtifact` class serves as the foundation for all artifacts. It provides the basic interface and functionality required for artifact management.
-
-
-#### FeatureGroup
-
-The `FeatureGroup` class defines the structure for feature groups, including methods for creating data, calculating features, and managing artifacts. It includes methods such as `artifact` and `load_artifact` to handle artifact operations.
+Artifacts store and retrieve intermediate results (embeddings, feature matrices, model checkpoints). A `FeatureGroup` declares its artifact class (a `BaseArtifact` subclass) through `artifact()` and uses `load_artifact` to read it back.
 
 ## Example
 
@@ -110,20 +91,6 @@ saved_artifacts = session.run().artifacts
 result = session.run(artifacts=saved_artifacts)
 ```
 
-#### Cross-validation pattern
-
-```py
-# pseudocode
-session = mloda.prepare(["MyArtifactFeature"], [PyArrowTable])
-
-for fold_data in folds:
-    # Train fold
-    trained = session.run().artifacts
-
-    # Predict fold
-    session.run(artifacts=trained)
-```
-
 When `artifacts` is not provided (the default), the artifact mode from
 `prepare()` is used. Baking an artifact into `Options` at prepare time and also
 supplying it via `run(artifacts=...)` for the same feature are mutually
@@ -139,7 +106,7 @@ Runtime keys must be the feature names the plan lists in `session.artifact_input
 is), and a loaded artifact value is shared by concurrent runs, so treat it as
 read-only in `calculate_feature`.
 
-Provider migration: a custom `custom_loader` reads `features.artifact_value`
+A custom `custom_loader` reads `features.artifact_value`
 (the prepare-time Options value or this run's `artifacts` value, bound for this
 FeatureSet's one artifact key, see below), not Options.
 
@@ -177,8 +144,6 @@ def custom_saver(cls, features: FeatureSet, artifact: Any) -> Any | None:
 
 #### Testing Artifacts
 
-Testing artifact features involves creating test cases that ensure artifacts are correctly saved and loaded. The following example shows how to test the `BaseTestArtifactFeature` class.
-
 [View the test file on GitHub](https://github.com/mloda-ai/mloda/blob/main/tests/test_core/test_artifacts/test_artifacts.py)
 
 #### Complex Artifact Example: SklearnArtifact
@@ -209,9 +174,3 @@ class MySklearnFeatureGroup(FeatureGroup):
             artifact_data = SklearnArtifact.load_sklearn_artifact(features, key)
             fitted_model = artifact_data["fitted_transformer"]
 ```
-
-This pattern supports file-based storage, multiple artifact management, and complex serialization.
-
-#### Conclusion
-
-Artifacts are a powerful feature in mloda, enabling efficient management of intermediate results in the machine learning pipeline. By understanding and utilizing the provided classes and methods, you can effectively manage artifacts in your projects.

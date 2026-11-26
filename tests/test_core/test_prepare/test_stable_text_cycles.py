@@ -28,6 +28,18 @@ def _options_in_own_group() -> Options:
     return o
 
 
+def _group_dict_in_itself() -> Options:
+    o = Options(group={})
+    o.group["self"] = o.group
+    return o
+
+
+def _context_dict_in_itself() -> Options:
+    o = Options(context={})
+    o.context["self"] = o.context
+    return o
+
+
 def _set_through_options() -> Options:
     s: set[Any] = set()
     o = Options(group={"s": s})
@@ -75,8 +87,10 @@ def test_a_value_seen_twice_without_a_cycle_is_written_in_full_both_times() -> N
     [
         (_options_in_own_group, "Options(group={'self': Options(...)}, context={})"),
         (_set_through_options, "Options(group={'s': {Options(...)}}, context={})"),
+        (_group_dict_in_itself, "Options(group={'self': {...}}, context={})"),
+        (_context_dict_in_itself, "Options(group={}, context={'self': {...}})"),
     ],
-    ids=["options_in_own_group", "set_through_options"],
+    ids=["options_in_own_group", "set_through_options", "group_dict_in_itself", "context_dict_in_itself"],
 )
 def test_a_cycle_closing_through_options_has_a_text(build: Any, expected: str) -> None:
     assert stable_text(build()) == expected

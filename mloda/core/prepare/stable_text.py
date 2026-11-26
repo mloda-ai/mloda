@@ -20,8 +20,8 @@ def _stable_text(value: object, path: frozenset[int]) -> str:
             return "Options(...)"
         inner = path | {id(value)}
         parts = (
-            f"group={_stable_text(_str_option_dict(value.group), inner)}, "
-            f"context={_stable_text(_str_option_dict(value.context), inner)}"
+            f"group={_stable_text(_str_option_dict(value.group), inner | {id(value.group)})}, "
+            f"context={_stable_text(_str_option_dict(value.context), inner | {id(value.context)})}"
         )
         if value.propagate_context_keys:
             parts += f", propagate_context_keys={_stable_text(value.propagate_context_keys, inner)}"

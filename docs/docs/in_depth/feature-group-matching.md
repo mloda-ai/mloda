@@ -37,13 +37,11 @@ Containment covers plugin raises only: a framework-owned raise (a forwarded valu
 
 During a candidate's input-chain attempt, only a `FeatureResolutionError` from an input (a missing input, a rejection, or a source refusal, pointed or not) and an unmarked raise of the candidate's own `input_features` or `set_feature_name` (logged) are contained; marked match aborts, framework validation errors and `FEATURE_GROUP_MATCHED` extender raises still abort resolution.
 
-Filter matching contains the same way: a raise is a non-match for that probe, like a `False` return, and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss, as is a typed decline the matcher records; a framework-owned raise still aborts. Every entry names the gate that dropped the filter and that gate's reason. [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) tables the gates the two paths share and where filter policy differs.
+Filter matching contains the same way: a raise is a non-match for that probe and is recorded in `GlobalFilter.dropped_filters` as a `match hook` near-miss; a framework-owned raise still aborts. See [How filters reach your FeatureGroup](filter_data.md#how-filters-reach-your-featuregroup) for the gates and [Filter scope](filter_data.md#filter-scope-is-the-featureset) for how a matched filter attaches to the whole `FeatureSet`.
 
 A filter whose column is served by a different data source than its feature is dropped and recorded in `dropped_filters` as an `input data` near-miss naming both sources. A filter column found in several files of a file-source group resolves to the host feature's file; otherwise the filter is dropped with the warning. A string `feature_group` scope that matches no accessible group adds a `Did you mean one of: ...?` line to the failure message.
 
-The probe runs per feature, but a matched filter attaches to the whole `FeatureSet`, so a non-match for one feature does not suppress a filter a sibling matched. See [Filter scope](filter_data.md#filter-scope-is-the-featureset).
-
-Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match. Filter matching additionally reports a falsy value that is not `False`, and each distinct report is a WARNING once per setup.
+Every caller reads the return by truthiness: any falsy value is a non-match, any truthy value a match (filter matching also reports a falsy value that is not `False`).
 
 A recorded rejection can carry a machine-readable `code` (a `DeclineCode` from `mloda.provider`), rendered as ` [code: <value>]` after the reason and available as `Elimination.code`. Tools should match on the code, not the reason text. A plugin subclasses `DeclineCode` with its own prefixed members (for example `"myplugin_stale_cache"`) and passes `code=` to `record_match_rejection`. A `"variant"` elimination, or an `"inputs"` elimination whose input is variant-blocked, also carries `Elimination.variants` (the blocked variant names) and `Elimination.allow_variants` (the `allow_variants` value that would admit the candidate, empty when its group does not list the variant).
 
@@ -51,7 +49,7 @@ A match hook that refuses the feature because of its name, for example an unknow
 
 In a plugin test, `collect_match_rejections()` (from `mloda.provider`) collects what a direct `match_feature_group_criteria` call recorded. It yields a dict from the owner name (the class name on built-in paths) to a `MatchRejection` (`reason`, `stage`, `candidates`, `refusal`, which equality ignores, and `code`) and restores the previous window on exit. Open one window per call: the first recording per owner wins, so a reason from an earlier call in the same window masks a later call's. It collects nothing around `mloda.run_all`, because the engine opens its own window per candidate. See [Feature Group Testing](feature-group-testing.md) for an example.
 
-The options view depends on the caller: feature resolution passes declared (pre-default) options, while filter matching runs after intake and passes the resolved feature's effective (post-default) options merged onto the filter feature's own. Matching logic that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
+Feature resolution passes declared (pre-default) options; filter matching passes effective (post-default) ones, so a hook that reads option values can see different values on the two paths. See [Applying declared defaults](property-mapping.md#applying-declared-defaults).
 
 #### Option writes from a match hook
 
@@ -59,73 +57,11 @@ A match hook may write into the options it is handed. Each candidate matches aga
 
 ### 2. PROPERTY_MAPPING Configuration
 
-The `PROPERTY_MAPPING` defines how configuration-based features are validated:
+`PROPERTY_MAPPING` maps each option key to a `PropertySpec` that validates configuration-based features (strict membership, `element_validator`, `match_guard`); see [PROPERTY_MAPPING Configuration](property-mapping.md) for the full model.
 
-```python
-from mloda.provider import PropertySpec
+## Default matcher (plain FeatureGroup)
 
-PROPERTY_MAPPING = {
-    "aggregation_type": PropertySpec(
-        "Aggregation to apply",
-        allowed_values={
-            "sum": "Sum aggregation",
-            "avg": "Average aggregation",
-            "max": "Maximum aggregation",
-        },
-        strict_validation=True,
-    ),
-    DefaultOptionKeys.in_features: PropertySpec(
-        "Source feature for aggregation",
-        strict_validation=False,
-    ),
-}
-```
-
-Every value in the mapping is a `PropertySpec`; accepted values go under `allowed_values`.
-A raw dict spec raises at class definition, and an unknown field is a constructor
-`TypeError`. See [PROPERTY_MAPPING Configuration](property-mapping.md) for the full model.
-On the configuration path, a class with the default `MIN_IN_FEATURES = 1` does not match options that omit `in_features`, because an absent or explicit `None` `in_features` counts as zero; a source-less chained group sets `MIN_IN_FEATURES = 0` to opt out.
-
-### 3. Validation Modes
-
-#### Strict Validation
-With `strict_validation=True`, parameter values must be in the value space:
-
-```python
-# This will match
-options = Options(context={"aggregation_type": "sum"})  # "sum" is in mapping
-
-# This will fail validation
-options = Options(context={"aggregation_type": "custom"})  # "custom" not in mapping
-```
-
-#### Flexible Validation
-With `strict_validation=False` (the default), any value is accepted:
-
-```python
-# Both will match
-options = Options(context={"in_features": "sales"})      # Any value OK
-options = Options(context={"in_features": "custom_feature"})  # Any value OK
-```
-
-#### Custom Validation Functions
-For complex validation beyond simple value lists:
-
-```python
-from mloda.provider import is_positive_int
-
-PROPERTY_MAPPING = {
-    "window_size": PropertySpec(
-        "Size of the time window",
-        strict_validation=True,
-        element_validator=is_positive_int,
-    ),
-}
-```
-
-## Legacy Default Matching Criteria
-
-For feature groups not yet modernized, the default matching criteria still apply:
+A `FeatureGroup` that does not override `match_feature_group_criteria` matches by these rules:
 
 1. **Class Name Match**: The feature name exactly matches the feature group's class name.
    ```py
@@ -164,33 +100,7 @@ feature = Feature(
 )  # Matches via PROPERTY_MAPPING validation
 ```
 
-### Parameter Classification Impact
-
-The group/context parameter separation affects matching behavior:
-
-```python
-# These create different Feature Group instances (different group parameters)
-feature1 = Feature("placeholder", Options(
-    group={"data_source": "production"},
-    context={"aggregation_type": "sum", "in_features": "sales"}
-))
-
-feature2 = Feature("placeholder", Options(
-    group={"data_source": "staging"},  # Different group parameter
-    context={"aggregation_type": "sum", "in_features": "sales"}
-))
-
-# These create the same Feature Group instance (same group, different context)
-feature3 = Feature("placeholder", Options(
-    group={"data_source": "production"},
-    context={"aggregation_type": "sum", "in_features": "sales"}
-))
-
-feature4 = Feature("placeholder", Options(
-    group={"data_source": "production"},  # Same group parameter
-    context={"aggregation_type": "avg", "in_features": "revenue"}  # Different context
-))
-```
+Group and context parameters decide which feature group instance a feature joins; see [Parameter classification](property-mapping.md#parameter-classification).
 
 ## Declared Attributes and Input Requirements
 
@@ -199,13 +109,3 @@ A feature group can override the classmethod `declared_attributes(features)` to 
 A feature states what it must find declared through the `required_declarations` keyword, for example `Feature("depth_raw", required_declarations={"scale": None})`, returned from `input_features()` or passed in a request. The mapping is key to required value: `None` accepts any declared value, anything else must be equal and of the same type (`True` does not satisfy `1`). Resolution checks each input feature against the declarations of the candidate feature group merged with those of its selected reader (the reader wins on a shared key). It calls `declared_attributes(None)`, so a declaration that depends on the runtime `FeatureSet` cannot be checked. A candidate that misses it, a source FeatureGroup included, is refused as its own class, and a sibling group can still match. The elimination is recorded at the `declarations` stage. A `declared_attributes` that raises counts as a miss. When no candidate is left, the run fails before any data is loaded, naming the consumer (or the request) and the key. The requirement belongs to the Feature object, so a shared instance carries it for every consumer that returns it. Features that differ only in `required_declarations` count as the same feature: they merge at intake, and a set keeps one of them. A chained group whose `input_features` builds bare Features from the parsed name must override `input_features` to attach one.
 
 At execution time core calls `declared_attributes(features)` with the runtime `FeatureSet` and exposes the result to extenders (see [Extender](../chapter1/extender.md) for `HookContext.declared_attributes`, the feature group's on its calculate and validate hooks, the source group's on `INPUT_DATA_LOAD`). Plan-time checks (`required_declarations`) only see `declared_attributes(None)`, and `FEATURE_GROUP_MATCHED` carries no declarations (`INPUT_DATA_MATCH` carries the candidate source group's `declared_attributes(None)`), so a declaration a governance check relies on (license, classification) must not depend on the `FeatureSet`. Declarations describe the data and leave through telemetry, so never put option values or credentials in them.
-
-## Migration Path
-
-When modernizing a feature group:
-
-1. **Add PROPERTY_MAPPING** with parameter definitions
-2. **Update match_feature_group_criteria** to use unified parser
-3. **Classify parameters** as group vs context appropriately
-4. **Test both approaches** work correctly
-5. **Update documentation** and examples

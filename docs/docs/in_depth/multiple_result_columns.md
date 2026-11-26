@@ -32,7 +32,7 @@ temperature~std
 
 ### Returning Multiple Columns
 
-When implementing a feature group that returns multiple columns:
+When implementing a feature group that returns multiple columns, build the names by hand or use `apply_naming_convention()`:
 
 ```py
 class MultiColumnFeatureGroup(FeatureGroup):
@@ -46,6 +46,19 @@ class MultiColumnFeatureGroup(FeatureGroup):
             f"{feature_name}~max": [4, 5, 6],
             f"{feature_name}~min": [0, 1, 2]
         }
+```
+
+With `apply_naming_convention()`, a 2D array becomes `~N` suffixed columns:
+
+```py
+class MultiColumnProducer(FeatureGroup):
+    @classmethod
+    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
+        result = encoder.transform(data)  # 2D numpy array (n_samples, n_features)
+
+        feature_name = str(features.get_name_of_one_feature())
+        return cls.apply_naming_convention(result, feature_name)
+        # {"category__onehot_encoded~0": ..., "category__onehot_encoded~1": ..., ...}
 ```
 
 ### Consuming Multiple Columns
@@ -75,33 +88,6 @@ class MultiColumnConsumer(FeatureGroup):
         return {feature_name: result}
 ```
 
-**Benefits**:
-- No need to manually enumerate column names
-- Automatically adapts if number of columns changes
-- Cleaner, more maintainable code
-
-#### Manual Column Access (Legacy)
-
-For backwards compatibility, you can still access columns manually:
-
-```py
-class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        return {Feature.not_typed("MultiColumnFeature")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Manual access to specific columns
-        mean_values = data["MultiColumnFeature~mean"]
-        max_values = data["MultiColumnFeature~max"]
-
-        # Perform calculations using these columns
-        result = mean_values + max_values
-
-        feature_name = str(features.get_name_of_one_feature())
-        return {feature_name: result}
-```
-
 #### Specific Sub-Column Dependency
 
 You can declare a dependency on a specific sub-column directly, without needing all columns:
@@ -120,12 +106,6 @@ class SpecificSubColumnConsumer(FeatureGroup):
         feature_name = str(features.get_name_of_one_feature())
         return {feature_name: values * 10}
 ```
-
-**Benefits**:
-
-- No need for pass-through FeatureGroups
-- Clearer dependency declarations
-- Only pulls the specific column needed
 
 **Behavior Summary**:
 
@@ -173,11 +153,7 @@ If the parts depend on the feature name or options, override the classmethod `ou
 - An artifact saved by a part request covers only the requested parts; a later whole-feature request cannot reuse it.
 - A declared part matches only in full: declare `0` and `0~lower` to resolve both `f~0` and `f~0~lower`, or override `output_parts` for variable-width nested parts. A request for `f~0` still returns its nested columns.
 - Groups that declare nothing still resolve `vec~1`, which now returns only `vec~1`, and a global filter on `vec~1` filters by that column; a missing index fails after the computation.
-- `match_feature_group_criteria` matches the base name only; the part rule applies during feature resolution and in global filters, where `<base>~<part>` is read against the declared parts.
-- Artifacts are keyed by the base feature name, not a part column.
 - `supports_compute_framework` and `Implementation.accepts` take a keyword-only `part`, the requested declared output part, so a part can run on a framework that refuses the whole.
-- `feature_name` is the base name when `part` is set (in resolution and in global filters), otherwise the requested name.
-- With `part=None` a `~` name can still arrive whole: the implicit `vec~N` path of a group declaring no parts, and a group matching `x~k` as a whole name.
 - A whole and a part request fold into one step when one framework allows both. Otherwise (pins, or a consumer whose framework rule excludes the whole's framework) each runs as its own step computing the base, so the producer should honor `parts_only`.
 - A trailing `~N` is also read against the declared parts: `measure~0` fails at resolution unless `0` is declared.
 - A part's declared data type is checked on its own column (`measure~value`).
@@ -190,29 +166,9 @@ The mloda framework automatically handles the selection of columns that follow t
    - Match the feature name exactly, or
    - Follow the pattern `feature_name~suffix`
 
-2. This is implemented in the `identify_naming_convention` method in the `ComputeFramework` class:
-
-```py
-def identify_naming_convention(
-    self,
-    selected_feature_names: Sequence[FeatureName],
-    column_names: set[str],
-    ordering: str | None = None,
-    request_feature_order: list[str] | None = None,
-) -> set[str] | list[str]: ...
-```
+2. `ComputeFramework.identify_naming_convention` selects them.
 
 It collects every column that equals a requested feature name or starts with `feature_name~`, and raises a `ValueError` if no column matches. By default it returns a list sorted by name; with `ordering="alphabetical"` it returns a sorted list, and with `ordering="request_order"` it returns a list ordered by `request_feature_order` (falling back to `selected_feature_names`). Any other `ordering` value raises a `ValueError`.
-
-## Best Practices
-
-1. **Use Automatic Discovery**: Prefer `resolve_multi_column_feature()` over manual column enumeration when you need all columns
-2. **Use Specific Sub-Column Dependencies**: When you only need one sub-column, use `Feature("base_feature~N")` for clearer intent and efficiency
-3. **Consistent Naming**: Use consistent suffixes across related feature groups
-4. **Use `apply_naming_convention()`**: When producing multi-column outputs, use the utility for consistency
-5. **Documentation**: Document the meaning of each suffix in your feature group's docstring
-6. **Validation**: Consider validating that all expected columns are present when consuming multiple columns
-7. **Error Handling**: Handle cases where expected columns might be missing
 
 ## Available Utilities
 
@@ -225,4 +181,4 @@ mloda provides several utilities for working with multi-column features:
 | `expand_feature_columns(feature_name, num_columns)` | Generate column name list | Producer: Pre-generate expected column names |
 | `get_column_base_feature(column_name)` | Strip trailing `~N` suffix from column | Both: Extract base feature from `feature~N` (last `~` wins) |
 
-**Note**: When declaring dependencies with `Feature("base_feature~N")` or `Feature("base_feature~part")`, the framework resolves to the FeatureGroup that produces `base_feature` and extracts only the specified sub-column. A numeric suffix works for any group that supports the base feature; a non-digit suffix such as `~mean` needs a group that declares it as an output part. `get_column_base_feature` still strips only a trailing numeric suffix.
+**Note**: `Feature("base_feature~N")` and `Feature("base_feature~part")` resolve to the group that produces `base_feature` and extract only that sub-column. A numeric suffix works for any group that supports the base feature; a non-digit suffix such as `~mean` needs a group that declares it as an output part. `get_column_base_feature` strips only a trailing numeric suffix.

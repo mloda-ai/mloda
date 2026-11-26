@@ -200,15 +200,7 @@ Feature("subject_token", feature_group=ClaimsReader)
 Feature("subject_token", feature_group="ClaimsReader")
 ```
 
-The same scope in a JSON config ([feature config](../feature-config.md)):
-
-```json
-[
-    {"name": "subject_token", "feature_group": "ClaimsReader"}
-]
-```
-
-The config form takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.
+The config form ([feature config](../feature-config.md)) takes the class-name string only, because JSON cannot express a class object; the class-object form is Python-only.
 
 Both forms match the scoped class and its subclasses, preferring the most specific one. Naming an abstract family base therefore selects the concrete subclass, so a config can scope to the family without naming a compute-framework-specific class:
 
@@ -243,7 +235,15 @@ What keeps a subclass out:
 - A compute-framework pin the subclass cannot serve.
 - A [plan lock](../plan-lock.md): a takeover changes the recorded class and fails `check_plan_lock` with `PlanLockMismatchError`.
 
-To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda.testing.subclass_scope`. A pattern-matching parent needs `requests=`. Pass `input_data=` (a `TypedTestData`, optional `adapter=`) to also compare the subclass's output columns with the parent's; a changed column, or a requested column only the subclass writes, passes only when a divergence record the subclass declares itself (on the group or its own Implementation, any kind but GAP) covers it; a column the subclass drops always fails, even with a record; on run-time named parts, a part only the subclass writes is an added column too; a VARIANT record counts only when the selecting options allow that variant through `allow_variants`; a request the planner would not route on the adapter's framework, a rule exclusion, a missing Implementation and an input fixture with no rows leave the comparison skipped: a `values:` note from `check_subclass_scope`, a failure from `assert_subclass_scope` unless `require_run=False`. It reports a subclass that steals plain requests or misses its own; it also probes each selecting key with another value, so a subclass gated on the key's presence fails as a steal. A key the subclass does not need to match belongs out of `selecting`; one it needs but whose value does not select it goes in `free=`, which keeps it set, skips its other-value probe, and checks that the free keys alone do not select the subclass. A subclass whose selecting keys are all `deferred_binding=True` without a default matches without them by design, so that bare-request probe is a `scope:` note, not a failure.
+To test that a subclass takes over only for its own option, call `check_subclass_scope(Sub, Parent, selecting)` (or `assert_subclass_scope`) from `mloda.testing.subclass_scope`. It reports a subclass that steals plain requests or misses its own; it also probes each selecting key with another value, so a subclass gated on the key's presence fails as a steal.
+
+- A pattern-matching parent needs `requests=`.
+- Pass `input_data=` (a `TypedTestData`, optional `adapter=`) to also compare the subclass's output columns with the parent's:
+  - A changed column, or a requested column only the subclass writes (on run-time named parts, a part only the subclass writes), passes only when a divergence record the subclass declares itself (on the group or its own Implementation, any kind but GAP) covers it. A VARIANT record counts only when the selecting options allow that variant through `allow_variants`.
+  - A column the subclass drops always fails, even with a record.
+  - When the comparison cannot run (a request the planner would not route on the adapter's framework, a rule exclusion, a missing Implementation, an input fixture with no rows), `check_subclass_scope` adds a `values:` note and `assert_subclass_scope` fails unless `require_run=False`.
+- A key the subclass does not need to match belongs out of `selecting`; one it needs but whose value does not select it goes in `free=`, which keeps it set, skips its other-value probe, and checks that the free keys alone do not select the subclass.
+- A subclass whose selecting keys are all `deferred_binding=True` without a default matches without them by design, so that bare-request probe is a `scope:` note, not a failure.
 
 For siblings under an inert base (backend families), call `check_sibling_scope(Parent, {Sib: Sib.BACKENDS, ...}, key)` (or `assert_sibling_scope`). Each sibling must resolve exactly its own values, the value sets must be disjoint, an unknown or absent value must resolve to nothing, and the base must match nothing and stay silent. Pass `base_options=` for another required key. It lives in `mloda._testing.subclass_scope` until `mloda-testing` re-exports it.
 
@@ -331,9 +331,7 @@ If both versions of the class have **identical** source code (e.g., re-running a
 
 #### 1. Take the most recent version (iterative development)
 
-For rapid iteration in notebooks, opt in to "newest wins" using the builder method on `PluginCollector`:
-
-**Option A**: set the override flag on a fresh collector:
+For rapid iteration in notebooks, opt in to "newest wins" using the builder method on `PluginCollector`. Set the override flag on a fresh collector, or compose it with disable/enable filters:
 
 ```python
 from mloda.provider import FeatureGroup
@@ -345,15 +343,7 @@ class SomeFG(FeatureGroup):
 
 
 plugin_collector = PluginCollector().set_allow_redefinition()
-```
-
-**Option B**: compose with disable/enable filters:
-
-```python
-plugin_collector = (
-    PluginCollector.disabled_feature_groups({SomeFG})
-    .set_allow_redefinition()
-)
+plugin_collector = PluginCollector.disabled_feature_groups({SomeFG}).set_allow_redefinition()
 ```
 
 Pass this collector through to `mloda.run_all`, `resolve_feature`, or any other entry point that accepts a `plugin_collector` argument.
@@ -370,56 +360,11 @@ Restarting the Jupyter kernel clears `Out[N]` history and unloads all stale clas
 EmptyResultError: Result carries no schema (no columns): MyFeatureGroup. ...
 ```
 
-This error fires when a **final** requested feature group returns a result with
-*no schema* (zero columns). There is no opt-in or opt-out: the rule applies
-uniformly on every compute framework. Note that **zero rows is not an error**: a
-well-typed frame with the right columns and no rows is a valid result and
-passes through. Only a result that carries no columns at all is rejected.
+This error fires when a **final** requested feature group returns a result with no schema (zero columns), on every compute framework. Zero rows is not an error: a well-typed frame with the right columns and no rows passes through.
 
-On the PythonDict framework, whose native representation is a columnar
-`dict[str, list]`, the schema is the set of keys: `{"col": []}` carries a
-schema, while `{}` (zero columns) is the only schema-less value and raises.
-Returning a row-oriented `[]` ("nothing to ingest": an empty source directory, a
-query with no hits) also carries no columns and therefore raises. Return
-`{"my_feature": []}` instead.
+On the PythonDict framework the schema is the set of keys: `{"col": []}` carries a schema, while `{}` and a row-oriented `[]` carry none and raise. Return `{"my_feature": []}` instead. If an empty result is a legitimate answer (a graph traversal with no path, a search with no hits), return a schema-bearing empty result: keep the columns and drop the rows. If the schema-less result is a bug (missing data, wrong filter), the error is correct.
 
-If the schema-less result is genuine (a bug, missing data, wrong filter), this
-error is correct behavior: it protects callers from silently receiving output
-they cannot interpret.
-
-### When to fix it
-
-If an empty result is a legitimate answer for your domain, for example: graph
-traversals that may find no path, search queries that may match nothing,
-authorization filters that may deny all rows, or agent memory that may have no
-relevant entries, return a *schema-bearing* empty result: keep the columns and
-drop the rows. On PythonDict that is a dict with empty column lists; on the
-other frameworks it is an empty typed table or frame with the right columns.
-
-```py
-class MyFeatureGroup(FeatureGroup):
-    @classmethod
-    def calculate_feature(cls, data, features):
-        ...
-        return {"my_feature": []}  # schema-bearing, zero rows: valid
-```
-
-A schema-bearing empty result flows through to the caller without raising. The
-public import `from mloda.provider import EmptyResultError` (a `ValueError`
-subclass) supports a typed `except` when you invoke framework or plugin code
-directly. When calling `mloda.run_all`, worker errors are wrapped in a generic
-`Exception` whose message embeds the original traceback, so match on the
-`EmptyResultError` name in the raised exception's message instead.
-
-### Intermediates are exempt
-
-The check applies only to features that were explicitly requested by the caller.
-Intermediate feature groups, meaning those whose output feeds another feature
-group rather than the final result, are never subject to `EmptyResultError`.
-An intermediate step must still return a column for every feature it computes.
-
-For full details on how the guard works and the schema-presence gate, see
-[Empty Results](../compute-framework-integration.md#empty-results).
+`EmptyResultError` (`from mloda.provider import EmptyResultError`, a `ValueError` subclass) can be caught by type, also through `mloda.run_all`. Intermediate feature groups are exempt but must still return a column for every feature they compute. See [Empty Results](../compute-framework-integration.md#empty-results) for how the guard works.
 
 ## MissingInputFeatureError
 

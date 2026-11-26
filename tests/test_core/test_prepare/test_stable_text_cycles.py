@@ -22,6 +22,19 @@ def _self_referential_dict() -> dict[str, Any]:
     return cyclic
 
 
+def _options_in_own_group() -> Options:
+    o = Options(group={})
+    o.group["self"] = o
+    return o
+
+
+def _set_through_options() -> Options:
+    s: set[Any] = set()
+    o = Options(group={"s": s})
+    s.add(o)
+    return o
+
+
 class CyclicOptionSource(DataCreatorFeatureGroup):
     @classmethod
     def feature_names_supported(cls) -> set[str]:
@@ -55,6 +68,18 @@ def test_a_value_seen_twice_without_a_cycle_is_written_in_full_both_times() -> N
 
     assert stable_text([shared, shared]) == "[[1, 2], [1, 2]]"
     assert stable_text({"x": shared, "y": (shared,)}) == "{'x': [1, 2], 'y': ([1, 2],)}"
+
+
+@pytest.mark.parametrize(
+    "build, expected",
+    [
+        (_options_in_own_group, "Options(group={'self': Options(...)}, context={})"),
+        (_set_through_options, "Options(group={'s': {Options(...)}}, context={})"),
+    ],
+    ids=["options_in_own_group", "set_through_options"],
+)
+def test_a_cycle_closing_through_options_has_a_text(build: Any, expected: str) -> None:
+    assert stable_text(build()) == expected
 
 
 @pytest.mark.parametrize("build", [_self_referential_list, _self_referential_dict], ids=["list", "dict"])

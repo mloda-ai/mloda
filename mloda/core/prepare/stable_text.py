@@ -10,24 +10,23 @@ _ADDRESS = re.compile(r" at 0x[0-9a-fA-F]+")
 
 
 def stable_text(value: object) -> str:
-    """Text of a value with addresses removed and set elements sorted, so it is equal across interpreters.
-
-    A container met again inside itself is written as `[...]`, `{...}` or `(...)`, as `repr` does, so a
-    self-referential option value has a text instead of raising `RecursionError`.
-    """
+    """Text with addresses removed, set elements sorted and a container nested in itself written as repr does."""
     return _stable_text(value, frozenset())
 
 
 def _stable_text(value: object, path: frozenset[int]) -> str:
     if isinstance(value, Options):
+        if id(value) in path:
+            return "Options(...)"
+        inner = path | {id(value)}
         parts = (
-            f"group={_stable_text(_str_option_dict(value.group), path)}, "
-            f"context={_stable_text(_str_option_dict(value.context), path)}"
+            f"group={_stable_text(_str_option_dict(value.group), inner)}, "
+            f"context={_stable_text(_str_option_dict(value.context), inner)}"
         )
         if value.propagate_context_keys:
-            parts += f", propagate_context_keys={_stable_text(value.propagate_context_keys, path)}"
+            parts += f", propagate_context_keys={_stable_text(value.propagate_context_keys, inner)}"
         if value.cascade_context_keys:
-            parts += f", cascade_context_keys={_stable_text(value.cascade_context_keys, path)}"
+            parts += f", cascade_context_keys={_stable_text(value.cascade_context_keys, inner)}"
         return f"Options({parts})"
     if type(value) is dict or type(value) is ReadOnlyDict:
         if id(value) in path:

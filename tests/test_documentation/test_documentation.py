@@ -169,31 +169,55 @@ def test_no_absolute_site_links(fpath: Path) -> None:
     assert not matches, f"{fpath} contains absolute mloda-ai.github.io links (should be relative): {matches}"
 
 
-@pytest.mark.parametrize("fpath", doc_files(DOCS_ROOT), ids=doc_id)
-def test_internal_link_targets_exist(fpath: Path) -> None:
-    text = fpath.read_text(encoding="utf-8")
+LINKED_README_FILES = [
+    REPO_ROOT / "README.md",
+    REPO_ROOT / "CONTRIBUTING.md",
+    REPO_ROOT / "mloda" / "core" / "README.md",
+    REPO_ROOT / "mloda_plugins" / "README.md",
+    REPO_ROOT / "tests" / "README.md",
+]
+
+
+def _broken_internal_links(fpath: Path, text: str) -> list[str]:
+    """Relative links whose file is missing, or whose #anchor matches no heading of the page it points at."""
     errors: list[str] = []
 
     for match in MARKDOWN_LINK_PATTERN.finditer(text):
         link_text, target = match.group(1), match.group(2)
 
-        if target.startswith(("http://", "https://", "mailto:", "#")):
+        if target.startswith(("http://", "https://", "mailto:")):
             continue
 
         path_part, _, anchor = target.partition("#")
 
-        if path_part:
-            resolved = (fpath.parent / path_part).resolve()
-            if not resolved.exists():
-                errors.append(f"[{link_text}]({target}) -> file not found: {resolved}")
-                continue
+        if not path_part:
+            if anchor and anchor not in {_heading_to_anchor(m.group(1)) for m in HEADING_PATTERN.finditer(text)}:
+                errors.append(f"[{link_text}]({target}) -> anchor #{anchor} not found in this page")
+            continue
 
-            if anchor:
-                headings = _extract_headings(resolved)
-                if anchor not in headings:
-                    errors.append(f"[{link_text}]({target}) -> anchor #{anchor} not found in {resolved.name}")
+        resolved = (fpath.parent / path_part).resolve()
+        if not resolved.exists():
+            errors.append(f"[{link_text}]({target}) -> file not found: {resolved}")
+            continue
 
+        if anchor and resolved.suffix == ".md" and anchor not in _extract_headings(resolved):
+            errors.append(f"[{link_text}]({target}) -> anchor #{anchor} not found in {resolved.name}")
+
+    return errors
+
+
+@pytest.mark.parametrize("fpath", doc_files(DOCS_ROOT) + LINKED_README_FILES, ids=doc_id)
+def test_internal_link_targets_exist(fpath: Path) -> None:
+    errors = _broken_internal_links(fpath, fpath.read_text(encoding="utf-8"))
     assert not errors, f"{fpath} has broken internal links:\n" + "\n".join(errors)
+
+
+def test_broken_same_page_anchor_is_reported() -> None:
+    """A same-page anchor that matches no heading of the page must be flagged, a matching one must not."""
+    page = REPO_ROOT / "docs" / "docs" / "synthetic.md"
+    text = "# Title\n\n## Real Heading\n\nSee [ok](#real-heading) and [bad](#renamed-heading).\n"
+    errors = _broken_internal_links(page, text)
+    assert len(errors) == 1 and "#renamed-heading" in errors[0], errors
 
 
 @pytest.mark.timeout(120)

@@ -166,7 +166,7 @@ class TestSkipping(TimeWindowRuleSuite):
     unsupported_cases = {"dst_short_day_calendar": (Cause.BACKEND, "declared unsupported")}
 """
 
-# Kept small: an outer timeout firing inside the in-process run is reported as an inner failure.
+# Kept small: a signal-method outer timeout firing inside the in-process run is reported as an inner failure.
 SELECTED = (
     "(dst_short_day_calendar or dst_short_day_elapsed or fixed_length_short_day or gap_raise_lower_bound_in_the_gap)"
     " and sum"

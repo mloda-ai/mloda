@@ -222,7 +222,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     pointed_source: ClassVar[str | None] = None
 
     def undeclared_names(self) -> list[str]:
-        """Names a pointed declared-route group must decline, naming each in its rejection; override when the group declares the default."""
+        """Names a pointed declared-route group must decline, naming each, without source I/O or option writes; override when the group declares the default."""
         return ["mixin_arbitrary_undeclared_name"]
 
     def run_all_kwargs(self) -> dict[str, Any]:
@@ -398,19 +398,21 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         self._require(self._applicability().pointer, "the group takes no pointer")
         group = self._group_name()
         options = self._options({group: self.own_pointer()})
-        dac = self.own_dac()
+        names = self.undeclared_names()
+        dacs = (None, self.own_dac())
         touched = self._spy_source_io(monkeypatch)
-        group_before = copy.deepcopy(options.group)
-        context_before = copy.deepcopy(options.context)
-        for name in self.undeclared_names():
-            rejection_window.clear()
-            assert not self._matches(name, options, dac), name
-            assert group in rejection_window, f"no rejection recorded for {name!r}"
-            assert name in rejection_window[group].reason, name
-            assert rejection_window[group].code is CoreDeclineCode.NAME_NOT_DECLARED, name
-            assert touched == [], f"source I/O before declining {name!r}: {touched}"
-            assert options.group == group_before, f"options.group changed declining {name!r}"
-            assert options.context == context_before, f"options.context changed declining {name!r}"
+        group_before = dict(options.group)
+        context_before = dict(options.context)
+        for dac in dacs:
+            for name in names:
+                rejection_window.clear()
+                assert not self._matches(name, options, dac), name
+                assert group in rejection_window, f"no rejection recorded for {name!r}"
+                assert name in rejection_window[group].reason, name
+                assert rejection_window[group].code is CoreDeclineCode.NAME_NOT_DECLARED, name
+                assert touched == [], f"source I/O before declining {name!r}: {touched}"
+                assert options.group == group_before, f"options.group changed declining {name!r}"
+                assert options.context == context_before, f"options.context changed declining {name!r}"
 
     def test_an_arbitrary_name_does_not_claim_with_the_own_source_present(self) -> None:
         assert not self._claims(Feature("mixin_arbitrary_undeclared_name"), self.own_dac())

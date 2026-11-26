@@ -3,14 +3,17 @@ from typing import Any
 
 import pytest
 
+from mloda._testing.framework_adapter import IcebergAdapter
 from tests.test_plugins.compute_framework.base_implementations.iceberg.iceberg_test_table import adapter_handle
+
+# Pay the cold pyiceberg/sqlalchemy.orm import at collection, outside the per-test timeout.
+if IcebergAdapter().is_available():
+    import pyiceberg.catalog.sql  # noqa: F401
 
 
 @pytest.fixture
 def iceberg_adapter() -> Iterator[Any]:
     """An opened IcebergAdapter (real SQL catalog in a temp warehouse), closed on teardown."""
-    from mloda._testing.framework_adapter import IcebergAdapter
-
     adapter = IcebergAdapter()
     if not adapter.is_available():
         pytest.skip("Iceberg backend unavailable")

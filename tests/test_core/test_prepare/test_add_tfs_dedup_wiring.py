@@ -520,7 +520,7 @@ def _hub_matches_two_joins_scenario(
     hub_link_token: UUID, other_link_token: UUID
 ) -> tuple[list[JoinStep | FeatureGroupStep], Graph]:
     """Hub parent P genuinely matches both JoinSteps; only the token order differs between calls. Q is the
-    genuine source-side member of ``hub_join_step`` (what ``run_link`` actually produces: source uuids
+    genuine source-side member of ``hub_join_step`` (what ``decide_link_joins`` actually produces: source uuids
     narrowed to genuine declared-side members), so P and Q are linked via real uuid adjacency, not merely
     by sharing a declared-side class."""
     graph = Graph()
@@ -609,7 +609,7 @@ def _bridge_scenario(bridged: bool) -> BridgeScenario:
     """Two genuinely unlinked explicit hops (producer_x, class BridgeXFG on PandasDataFrame;
     producer_y, class BridgeYFG on PyArrowTable) feed one consumer on PythonDictFramework, plus
     join-served parents whose class is an exact match for a hop's own class, on PythonDictFramework
-    (what ``run_link`` actually produces: destination/source uuids are narrowed to genuine
+    (what ``decide_link_joins`` actually produces: destination/source uuids are narrowed to genuine
     declared-side members). ``bridged=True`` gives BOTH hops a join-served counterpart, and the two
     counterparts sit on opposite sides of the same JoinStep, so they are themselves genuinely
     linked; this ties both explicit hops into one group. ``bridged=False`` gives only the left hop
@@ -717,7 +717,7 @@ class SiblingBridgeScenario(NamedTuple):
 def _sibling_bridge_scenario() -> SiblingBridgeScenario:
     """Consumer (PythonDict) pulls from S1 (Pandas) and S2 (PyArrow), two sibling subclasses of a
     link's declared left side with no Link between them, plus a genuinely join-served third parent
-    whose class equals S1's exactly (a real declared-side member, as ``run_link`` narrows
+    whose class equals S1's exactly (a real declared-side member, as ``decide_link_joins`` narrows
     destination/source uuids to declared-side members only). The join-served parent legitimately
     binds to the S1 hop; it must not also bridge the unrelated S2 hop just because S2 happens to
     descend from the same declared-side base class."""

@@ -612,11 +612,11 @@ class TestDataLifecycleManagerKeepIndex:
         assert result.num_columns == 0
 
 
-class TestDataLifecycleManagerGetResults:
+class TestDataLifecycleManagerGetResultItems:
     """Test getting all collected results."""
 
-    def test_get_results_returns_list_of_all_results(self) -> None:
-        """Should return list of all result data."""
+    def test_get_result_items_returns_all_results(self) -> None:
+        """Should return every result with its step uuid."""
         manager = DataLifecycleManager()
         step_uuid1 = uuid4()
         step_uuid2 = uuid4()
@@ -627,36 +627,20 @@ class TestDataLifecycleManagerGetResults:
         manager.result_data_collection[step_uuid1] = result1
         manager.result_data_collection[step_uuid2] = result2
 
-        results = manager.get_results()
+        items = manager.get_result_items()
+        results = [value for _, value in items]
 
+        assert [uuid for uuid, _ in items] == [step_uuid1, step_uuid2]
         assert len(results) == 2
         assert result1 in results
         assert result2 in results
 
-    def test_get_results_returns_empty_list_when_no_results(self) -> None:
+    def test_get_result_items_raises_when_no_results(self) -> None:
         """Should raise ValueError when no results collected."""
         manager = DataLifecycleManager()
 
         with pytest.raises(ValueError, match="No results found"):
-            manager.get_results()
-
-    def test_get_results_maintains_order_independence(self) -> None:
-        """Should return results as a list regardless of insertion order."""
-        manager = DataLifecycleManager()
-        step_uuid1 = uuid4()
-        step_uuid2 = uuid4()
-        step_uuid3 = uuid4()
-
-        manager.result_data_collection[step_uuid1] = "result1"
-        manager.result_data_collection[step_uuid2] = "result2"
-        manager.result_data_collection[step_uuid3] = "result3"
-
-        results = manager.get_results()
-
-        assert len(results) == 3
-        assert "result1" in results
-        assert "result2" in results
-        assert "result3" in results
+            manager.get_result_items()
 
 
 class TestDataLifecycleManagerIntegration:
@@ -711,8 +695,7 @@ class TestDataLifecycleManagerIntegration:
         mock_cfw2.drop_last_data.assert_called_once()
 
         # Get results
-        results = manager.get_results()
-        assert len(results) == 2
+        assert len(manager.get_result_items()) == 2
 
     def test_mixed_location_and_local_data_workflow(self) -> None:
         """Test workflow with both local data and flight server data."""
@@ -752,8 +735,7 @@ class TestDataLifecycleManagerIntegration:
         manager.add_to_result_data_collection(mock_cfw1, features1, step_uuid1)
         manager.add_to_result_data_collection(mock_cfw2, features2, step_uuid2, location=location)
 
-        results = manager.get_results()
-        assert len(results) == 2
+        assert len(manager.get_result_items()) == 2
 
 
 class TestPopResultDataCollection:

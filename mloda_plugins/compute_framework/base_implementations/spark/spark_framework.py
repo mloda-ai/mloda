@@ -237,12 +237,6 @@ class SparkFramework(ComputeFramework):
             raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
         return DataFrame
 
-    @classmethod
-    def spark_session(cls) -> Any:
-        if SparkSession is None:
-            raise ImportError("PySpark is not installed. To be able to use this framework, please install pyspark.")
-        return SparkSession
-
     def _infer_spark_type(self, value: Any) -> Any:
         """Infer Spark data type from Python value."""
         if isinstance(value, bool):

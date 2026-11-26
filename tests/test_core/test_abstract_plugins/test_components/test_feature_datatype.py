@@ -3,8 +3,7 @@
 These tests validate:
 1. similarity_hash() includes data_type when explicitly set
 2. base_similarity_hash() excludes data_type for lenient grouping
-3. is_different_data_type() correctly identifies features with different data types
-4. similarity_hash() and base_similarity_hash() incorporate ONLY the context entries
+3. similarity_hash() and base_similarity_hash() incorporate ONLY the context entries
    whose key is in options.inherited_context_keys (context DELIVERED via
    Options.inherit_from). Features differing in plain author-set context keep equal
    hashes (the documented "context does not affect splitting" contract); features
@@ -68,46 +67,6 @@ def test_base_similarity_hash_excludes_data_type() -> None:
     assert base_int32 == base_int64 == base_untyped, (
         "All features with same options should have same base hash. "
         f"Got: int32={base_int32}, int64={base_int64}, untyped={base_untyped}"
-    )
-
-
-def test_is_different_data_type_correct_behavior() -> None:
-    """Test that is_different_data_type() correctly identifies data type differences.
-
-    The method should return True when two features have:
-    - Same name
-    - Different data types
-
-    This test currently FAILS due to bug at line 167:
-    - Incorrectly compares self.name with other.options
-    - Incorrectly uses == instead of != for data_type comparison
-    """
-    # Case 1: Same name, different data types -> should return True
-    feature_int32 = Feature.int32_of("age")
-    feature_int64 = Feature.int64_of("age")
-
-    assert feature_int32.is_different_data_type(feature_int64) is True, (
-        "Features with same name but different data types should be identified as different. "
-        f"feature_int32.data_type={feature_int32.data_type}, "
-        f"feature_int64.data_type={feature_int64.data_type}"
-    )
-
-    # Case 2: Same name, same data type -> should return False
-    feature_int32_a = Feature.int32_of("age")
-    feature_int32_b = Feature.int32_of("age")
-
-    assert feature_int32_a.is_different_data_type(feature_int32_b) is False, (
-        "Features with same name and same data type should NOT be identified as different. "
-        f"Both have data_type={feature_int32_a.data_type}"
-    )
-
-    # Case 3: Different names, different data types -> should return False
-    # (not "different data type" in the sense this method intends to capture)
-    feature_age = Feature.int32_of("age")
-    feature_height = Feature.int64_of("height")
-
-    assert feature_age.is_different_data_type(feature_height) is False, (
-        "Features with different names should return False regardless of data types"
     )
 
 

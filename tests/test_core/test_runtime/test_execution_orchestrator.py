@@ -221,14 +221,6 @@ class TestExecutionOrchestratorOrchestrationMethods:
         assert hasattr(orchestrator, "join")
         assert callable(orchestrator.join)
 
-    def test_has_get_result_method(self) -> None:
-        """ExecutionOrchestrator should have a get_result() method."""
-        mock_planner = Mock(spec=ExecutionPlan)
-        orchestrator = ExecutionOrchestrator(mock_planner)
-
-        assert hasattr(orchestrator, "get_result")
-        assert callable(orchestrator.get_result)
-
     def test_fresh_orchestrator_has_an_empty_run_outcome(self) -> None:
         orchestrator = ExecutionOrchestrator(Mock(spec=ExecutionPlan))
 
@@ -1185,7 +1177,7 @@ class TestEnterPrestartsStandbyWorkers:
 
 
 class TestGetResultItemsPlanOrder:
-    """get_result_items()/get_result() must report plan order, not result_data_collection insertion order."""
+    """get_result_items() must report plan order, not result_data_collection insertion order."""
 
     def _make_step(self, step_uuid: UUID) -> Mock:
         step = Mock(spec=FeatureGroupStep)
@@ -1214,12 +1206,6 @@ class TestGetResultItemsPlanOrder:
             (uuid_b, "result_b"),
             (uuid_c, "result_c"),
         ]
-
-    def test_get_result_returns_values_in_plan_order(self) -> None:
-        uuid_a, uuid_b, uuid_c = uuid_mod.uuid4(), uuid_mod.uuid4(), uuid_mod.uuid4()
-        orchestrator = self._orchestrator_with_plan(uuid_a, uuid_b, uuid_c)
-
-        assert orchestrator.get_result() == ["result_a", "result_b", "result_c"]
 
     def test_uuid_missing_from_plan_sorts_after_known_order_and_does_not_raise(self) -> None:
         uuid_a, uuid_b, uuid_c, uuid_unplanned = (

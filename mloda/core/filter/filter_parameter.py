@@ -1,25 +1,7 @@
 from dataclasses import dataclass
-from typing import Any, Protocol, cast, runtime_checkable
+from typing import Any, cast
 
 from mloda.core.abstract_plugins.components.utils import require_value_collection, unhashable_part
-
-
-@runtime_checkable
-class FilterParameter(Protocol):
-    @property
-    def value(self) -> Any | None: ...
-
-    @property
-    def values(self) -> list[Any] | None: ...
-
-    @property
-    def min_value(self) -> Any | None: ...
-
-    @property
-    def max_value(self) -> Any | None: ...
-
-    @property
-    def max_exclusive(self) -> bool: ...
 
 
 def _normalize_collections(value: Any) -> Any:

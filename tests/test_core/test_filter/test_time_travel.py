@@ -89,7 +89,7 @@ class TestTimeTravel:
         runner = MlodaTestRunner.run_engine(
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter
         )
-        for result in runner.get_result():
+        for _, result in runner.get_result_items():
             res = result.to_pydict()
             assert res == {filter_test: [1, 2, 3]}
 
@@ -107,6 +107,6 @@ class TestTimeTravel:
         runner = MlodaTestRunner.run_engine(
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter
         )
-        for result in runner.get_result():
+        for _, result in runner.get_result_items():
             res = result.to_pydict()
             assert res == {filter_test: [1]}

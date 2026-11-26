@@ -98,7 +98,7 @@ def _build_orphaned_source_plan() -> Built:
     link_trekker = LinkTrekker()
     # Natural key (declared left, declared right): first_link needs no inversion.
     trek(link_trekker, first_link, (FIRST_DESTINATION_CFW, SOURCE_CFW), consumer.uuid)
-    # Flipped key: second_link's queue entry below uses the declared order, so run_link finds
+    # Flipped key: second_link's queue entry below uses the declared order, so decide_link_joins finds
     # nothing there and inverts onto (second_destination, source).
     trek(link_trekker, second_link, (SECOND_DESTINATION_CFW, SOURCE_CFW), consumer.uuid)
 

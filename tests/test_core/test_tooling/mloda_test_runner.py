@@ -34,7 +34,6 @@ from mloda.steward import Extender
 from mloda.user import mloda
 from mloda.user import GlobalFilter
 from mloda.core.core.engine import Engine
-from mloda.core.runtime.flight.flight_server import FlightServer
 from mloda.core.runtime.run import ExecutionOrchestrator
 from mloda_plugins.compute_framework.base_implementations.pyarrow.table import PyArrowTable
 
@@ -217,6 +216,17 @@ class MlodaTestRunner:
         return runner
 
     @staticmethod
+    def flight_table_keys(location: str | None) -> set[str]:
+        """Table keys on the flight server; location is None until the shared server has started."""
+        if location is None:
+            return set()
+        import pyarrow.flight as flight
+
+        with flight.FlightClient(location) as client:
+            raw = {x.descriptor.path[0] for x in client.list_flights()}
+        return {key.decode("utf-8") if isinstance(key, bytes) else key for key in raw}
+
+    @staticmethod
     def assert_flight_server_clean(
         parallelization_modes: set[ParallelizationMode],
         flight_server: Any,
@@ -242,13 +252,13 @@ class MlodaTestRunner:
 
         start = time.time()
         while time.time() - start < timeout:
-            flight_infos = FlightServer.list_flight_infos(flight_server.location)
+            flight_infos = MlodaTestRunner.flight_table_keys(flight_server.location)
             if len(flight_infos) == 0:
                 return
             time.sleep(0.02)
 
         # Final check with assertion
-        flight_infos = FlightServer.list_flight_infos(flight_server.location)
+        flight_infos = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert len(flight_infos) == 0, f"Flight server still has {len(flight_infos)} datasets"
 
 

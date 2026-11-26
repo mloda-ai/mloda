@@ -143,11 +143,3 @@ class read_recorder:  # noqa: N801
 def record_credential_read(handle: str) -> None:
     for recorder in _READ_RECORDERS.get():
         recorder.add(handle)
-
-
-def _read_granted(handle: str) -> Any:
-    """Test-only reader of the current step's granted credential."""
-    lookup = _GRANT_HOLDER.get()
-    if lookup is None:
-        raise RuntimeError(f"Credential '{handle}' is not available outside a step.")
-    return lookup.credential(handle)

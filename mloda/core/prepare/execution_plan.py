@@ -40,14 +40,12 @@ from mloda.core.prepare.resolve_links import LinkFrameworkTrekker, LinkTrekker, 
 from mloda.core.prepare.resolved_join import (
     DeclinedOrientation,
     JoinSide,
-    JoinSignature,
     ResolvedJoin,
     ResolvedJoinPlan,
 )
 from mloda.core.prepare.resolved_join_builder import (
     DeclaredFrameworks,
     build_resolved_join_side,
-    joinstep_signatures,
     raise_on_join_plan_divergence,
     wire_join_dependencies,
 )
@@ -170,7 +168,6 @@ class ExecutionPlan:
         self.declined_orientations: list[LinkFrameworkTrekker] = []
         self.declared_frameworks: DeclaredFrameworks = {}
         self.resolved_join_plan = ResolvedJoinPlan((), ())
-        self.join_signatures_at_build: frozenset[JoinSignature] = frozenset()
 
         # Per root feature_group class, the distinct option/context buckets run_feature_group split
         # it into: f_hash -> (a representative feature, the union of feature uuids in that bucket).
@@ -233,7 +230,6 @@ class ExecutionPlan:
         resolved_records = wire_join_dependencies(self.planned_records, join_steps)
         declined = tuple(DeclinedOrientation(key[0].uuid, key[1], key[2]) for key in self.declined_orientations)
         self.resolved_join_plan = ResolvedJoinPlan(resolved_records, declined)
-        self.join_signatures_at_build = joinstep_signatures(join_steps)
         raise_on_join_plan_divergence(self.resolved_join_plan, join_steps)
         raise_on_dishonest_join_record(self.resolved_join_plan, join_steps, graph)
         if validate:
@@ -2660,23 +2656,11 @@ Available join types:
         if not destination_framework_uuids or not source_framework_uuids:
             raise ValueError(
                 internal_invariant_error(
-                    "run_link resolved an empty destination_framework_uuids or source_framework_uuids.",
+                    "_build_join resolved an empty destination_framework_uuids or source_framework_uuids.",
                     f"link={link}, destination_framework_uuids={destination_framework_uuids}, "
                     f"source_framework_uuids={source_framework_uuids}",
                 )
             )
-
-    def run_link(
-        self,
-        link_fw: LinkFrameworkTrekker,
-        link_trekker: LinkTrekker,
-        graph: Graph,
-        pre_execution_plan: list[LinkFrameworkTrekker | FeatureGroupStep],
-        child_links: dict[UUID, set[LinkFrameworkTrekker]] | None = None,
-    ) -> list[JoinStep]:
-        """Decide and build one key; orders only the parts of that single key."""
-        decided = self.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan, child_links)
-        return self._build_decisions(decided[link_fw], graph)
 
     def _build_decisions(self, decisions: list[JoinDecision | DeclinedJoin], graph: Graph) -> list[JoinStep]:
         """Build each decision in order; a declined orientation is recorded once."""

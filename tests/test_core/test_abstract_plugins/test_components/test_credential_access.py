@@ -28,11 +28,11 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     _READ_RECORDERS,
     CredentialLookup,
     StaticGrant,
-    _read_granted,
     grant_scope,
     read_recorder,
 )
 from mloda.core.abstract_plugins.components.credential import Credential
+from tests.helpers.credential_grant_reader import _read_granted
 from mloda.core.abstract_plugins.components.failed_rows import _COLLECTOR, FailedRowsCollector
 from mloda.core.abstract_plugins.components.input_data.api_data_scope import _API_DATA_LOOKUP, api_data_scope
 from mloda.core.abstract_plugins.compute_framework import ComputeFramework, _current_compute_framework

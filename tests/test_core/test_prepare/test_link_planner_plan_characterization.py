@@ -257,7 +257,7 @@ def _plan(
     right_fg: type[FeatureGroup],
     child_fg: type[FeatureGroup],
 ) -> Planned:
-    """Hand-built two-parent graph, the smallest shape run_link accepts."""
+    """Hand-built two-parent graph, the smallest shape the join planner accepts."""
     graph = Graph()
     graph.add_node(left.uuid, NodeProperties(left, left_fg))
     graph.add_node(right.uuid, NodeProperties(right, right_fg))
@@ -618,7 +618,7 @@ def test_an_orientation_without_a_valid_pairing_plans_no_joinstep() -> None:
 
 
 def test_a_trekker_inverted_after_queueing_swaps_the_merge_sides() -> None:
-    """The queue keeps the declared orientation, so run_link rediscovers the inverted one."""
+    """The queue keeps the declared orientation, so decide_link_joins rediscovers the inverted one."""
     planned = _pair_scenario(child_cfw=PandasDataFrame)
     _trek(planned, PandasDataFrame, PyArrowTable)
 
@@ -633,7 +633,7 @@ def test_a_trekker_inverted_after_queueing_swaps_the_merge_sides() -> None:
 
 
 def test_a_hand_built_inconsistent_trekker_key_yields_a_consistent_joinstep() -> None:
-    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state; run_link
+    """This trekker key contradicts the graph, so create_link_trekker_key never reaches this state; decide_link_joins
     still orients the case-override result by the destination side."""
     planned = _pair_scenario()
     _trek(planned, PandasDataFrame, PyArrowTable)

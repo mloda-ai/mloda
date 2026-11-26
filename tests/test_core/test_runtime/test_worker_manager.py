@@ -704,25 +704,6 @@ class TestWorkerManagerResultPolling:
             mp_queue.join_thread()
 
 
-class TestWorkerManagerStepCompletion:
-    """Test checking if steps are completed."""
-
-    def test_is_step_done_returns_true_for_completed_step(self) -> None:
-        """is_step_done should return True if step UUID is in collection."""
-        manager = WorkerManager()
-        step_uuid = uuid4()
-        manager.result_uuids_collection.add(step_uuid)
-
-        assert manager.is_step_done(step_uuid) is True
-
-    def test_is_step_done_returns_false_for_incomplete_step(self) -> None:
-        """is_step_done should return False if step UUID not in collection."""
-        manager = WorkerManager()
-        step_uuid = uuid4()
-
-        assert manager.is_step_done(step_uuid) is False
-
-
 class TestWorkerManagerDeadWorkerDetection:
     """Test detection of abnormally-terminated worker processes (e.g. OOM SIGKILL)."""
 
@@ -1225,7 +1206,7 @@ class TestWorkerManagerIntegration:
 
         # Poll results
         manager.poll_result_queues()
-        assert manager.is_step_done(step_uuid)
+        assert step_uuid in manager.result_uuids_collection
 
         # Join all
         manager.join_all()

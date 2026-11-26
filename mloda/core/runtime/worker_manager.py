@@ -168,10 +168,6 @@ class WorkerManager:
                 orphaned.append((cfw_uuid, exitcode, sorted(pending, key=str)))
         return orphaned
 
-    def is_step_done(self, step_uuid: UUID) -> bool:
-        """Return step_uuid in result_uuids_collection."""
-        return step_uuid in self.result_uuids_collection
-
     def join_all(self, graceful_timeout: float = 2.0, abandon_threads: bool = False) -> None:
         """Sends STOP to alive workers and waits up to graceful_timeout for them to exit
         (running their close() teardown) before terminating any that remain. With abandon_threads,

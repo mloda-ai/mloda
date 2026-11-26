@@ -974,7 +974,7 @@ class _FileRecordingExtender(Extender):
 
 
 def _granted(handle: str) -> Any:
-    from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+    from tests.helpers.credential_grant_reader import _read_granted
 
     return _read_granted(handle)
 

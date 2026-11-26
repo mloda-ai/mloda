@@ -608,9 +608,6 @@ class Feature:
             self.__dict__["_frozen_hash"] = computed
         return computed
 
-    def hash_ignoring_compute_frameworks(self) -> int:
-        return self._hash(False)
-
     def _hash(
         self, include_compute_frameworks: bool, include_child_options: bool = True, include_data_type: bool = True
     ) -> int:
@@ -752,9 +749,6 @@ class Feature:
         if isinstance(value, (list, tuple)):
             return tuple(Feature._reduce(item, seen) for item in value)
         return _deep_hashable(value)
-
-    def is_different_data_type(self, other: Feature) -> bool:
-        return self.name == other.name and self.data_type != other.data_type
 
     def _split_context_hashable(self, split_keys: frozenset[str]) -> Any:
         """Order-independent view of this feature's context values for the split keys."""

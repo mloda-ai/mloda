@@ -212,20 +212,8 @@ class DataLifecycleManager:
             raise ValueError(f"No transformation from {source} to {target} for the output framework.")
         return self.transformer.apply_chain(source, target, chain, data, self.output_connection)
 
-    def get_results(self) -> list[Any]:
-        """
-        Returns list of all collected results.
-
-        Returns:
-            List of all result data.
-
-        Raises:
-            ValueError: If no results have been collected.
-        """
-        return [value for _, value in self.get_result_items()]
-
     def get_result_items(self) -> list[tuple[UUID, Any]]:
-        """Like get_results(), but keeps each result's step uuid."""
+        """Return all collected results as (step uuid, result) pairs."""
         if not self.result_data_collection:
             raise ValueError(
                 f"No results found: {self.__class__.__name__} has an empty result collection, "

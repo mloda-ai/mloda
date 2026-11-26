@@ -2285,7 +2285,7 @@ class TestGrantDispatch:
 
 
 def _reading_execute(handle: str) -> Any:
-    from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+    from tests.helpers.credential_grant_reader import _read_granted
 
     def execute(*args: Any, **kwargs: Any) -> None:
         value = _read_granted(handle)
@@ -2343,7 +2343,7 @@ class _UnwalkedStateError(Exception):
 
 
 def _unwalked_state_execute(handle: str) -> Callable[..., None]:
-    from mloda.core.abstract_plugins.components.credential_grant import _read_granted
+    from tests.helpers.credential_grant_reader import _read_granted
 
     def execute(*args: Any, **kwargs: Any) -> None:
         raise _UnwalkedStateError(_read_granted(handle)["hmac"])

@@ -4,7 +4,7 @@ from typing import Any, cast
 
 import pytest
 
-from mloda._testing.source.source_suite import MatchRefuseAll, SourceFeatureGroupTestMixin, _spy
+from mloda._testing.source.source_suite import MatchRefuseAll, SourceFeatureGroupTestMixin
 from mloda.core.abstract_plugins.components.data_access_collection import DataAccessCollection
 from mloda.core.abstract_plugins.components.input_data.source_feature_group import HANDLE_OPTION
 from mloda.core.abstract_plugins.components.match_rejection import CoreDeclineCode
@@ -54,9 +54,7 @@ class TestApiDataFGContract(SourceFeatureGroupTestMixin):
     def test_a_refusing_input_data_match_gate_keeps_the_source_untouched_and_reports_the_reason(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        touched: list[str] = []
-        for name in ("find_sources", "columns", "has_column"):
-            monkeypatch.setattr(ApiDataFG, name, _spy(name, getattr(ApiDataFG, name), touched))
+        touched = self._spy_source_io(monkeypatch)
 
         with reader_probe_scope(ReaderProbeScope(MatchRefuseAll(), None, None, None, None)):
             with pytest.raises(FeatureResolutionError) as exc_info:

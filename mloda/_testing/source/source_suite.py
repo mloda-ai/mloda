@@ -331,6 +331,15 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         assert self._claims(feature, None)
         return self._claimed_match(feature).source
 
+    def _spy_source_io(self, monkeypatch: pytest.MonkeyPatch) -> list[str]:
+        """Patch the group's source I/O entry points to record calls; returns the shared record."""
+        touched: list[str] = []
+        for name in ("find_sources", "columns", "has_column"):
+            monkeypatch.setattr(
+                self.feature_group_class, name, _spy(name, getattr(self.feature_group_class, name), touched)
+            )
+        return touched
+
     def _matches(self, name: str, options: Options, dac: DataAccessCollection | None) -> bool:
         """The group's match verdict through the shared hook; a contained raise fails the test."""
         outcome = call_match_hook(self.feature_group_class, name, options, dac)
@@ -383,18 +392,25 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
         assert not self._claims(Feature(self.feature_group_class.get_class_name()), self.own_dac())
 
     def test_a_pointed_undeclared_name_declines_naming_it_on_declared_routes(
-        self, rejection_window: dict[str, MatchRejection]
+        self, rejection_window: dict[str, MatchRejection], monkeypatch: pytest.MonkeyPatch
     ) -> None:
         self._require(self._applicability().declared_names_only, "not every route declares its names")
         self._require(self._applicability().pointer, "the group takes no pointer")
         group = self._group_name()
         options = self._options({group: self.own_pointer()})
+        dac = self.own_dac()
+        touched = self._spy_source_io(monkeypatch)
+        group_before = copy.deepcopy(options.group)
+        context_before = copy.deepcopy(options.context)
         for name in self.undeclared_names():
             rejection_window.clear()
-            assert not self._matches(name, options, None), name
+            assert not self._matches(name, options, dac), name
             assert group in rejection_window, f"no rejection recorded for {name!r}"
             assert name in rejection_window[group].reason, name
             assert rejection_window[group].code is CoreDeclineCode.NAME_NOT_DECLARED, name
+            assert touched == [], f"source I/O before declining {name!r}: {touched}"
+            assert options.group == group_before, f"options.group changed declining {name!r}"
+            assert options.context == context_before, f"options.context changed declining {name!r}"
 
     def test_an_arbitrary_name_does_not_claim_with_the_own_source_present(self) -> None:
         assert not self._claims(Feature("mixin_arbitrary_undeclared_name"), self.own_dac())
@@ -441,11 +457,7 @@ class SourceFeatureGroupTestMixin(ConformanceSuite, suite_base=True):
     def test_a_refusing_input_data_match_gate_keeps_the_source_untouched_and_reports_the_reason(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        touched: list[str] = []
-        for name in ("find_sources", "columns", "has_column"):
-            monkeypatch.setattr(
-                self.feature_group_class, name, _spy(name, getattr(self.feature_group_class, name), touched)
-            )
+        touched = self._spy_source_io(monkeypatch)
 
         feature = self._own_feature()
         with reader_probe_scope(ReaderProbeScope(MatchRefuseAll(), None, None, None, None)):

@@ -290,7 +290,7 @@ class mlodaAPI:
             data_access_collection, self._connection_handles = self._bind_feature_connections(
                 _requested_features, data_access_collection
             )
-            seeds = self._seed_map(requested_features, _requested_features, copy_features)
+            aliases = self._request_aliases(requested_features, _requested_features, copy_features)
 
             self._api_data_columns = self._api_data_spec(api_data)
             self._api_data_types = self._api_data_type_spec(api_data)
@@ -301,7 +301,6 @@ class mlodaAPI:
 
             self.strict_type_enforcement = strict_type_enforcement
             self.features = self._process_features(_requested_features)
-            self.features.requested = seeds
             setup_compute_framework = SetupComputeFramework(
                 compute_frameworks,
                 self.features,
@@ -323,7 +322,7 @@ class mlodaAPI:
             raise SetupConfigurationError(str(error)) from error
 
         with self._credential_redaction():
-            self.engine = self._create_engine()
+            self.engine = self._create_engine(aliases)
         self._api_data_types = self._native_api_data_types()
 
     @staticmethod
@@ -506,13 +505,13 @@ class mlodaAPI:
         return tuple(copies) if isinstance(requested_features, tuple) else copies
 
     @staticmethod
-    def _seed_map(original: Any, copied: Any, copy_features: bool) -> dict[int, tuple[Feature, Feature]]:
-        """Alias each caller object to its plan copy; the engine keys the plan objects itself."""
+    def _request_aliases(original: Any, copied: Any, copy_features: bool) -> list[tuple[Feature, Feature]]:
+        """Pair each caller object with its plan copy; the engine keys the plan objects itself."""
         if copy_features or isinstance(original, str):
-            return {}
+            return []
         originals = original.collection if isinstance(original, Features) else original
         planned = copied.collection if isinstance(copied, Features) else copied
-        return {id(o): (o, p) for o, p in zip(originals, planned, strict=True) if isinstance(p, Feature)}
+        return [(o, p) for o, p in zip(originals, planned, strict=True) if isinstance(p, Feature)]
 
     @staticmethod
     def _bind_feature_connections(
@@ -1385,7 +1384,7 @@ class mlodaAPI:
         if hasattr(runner, "executor"):
             runner.executor.data_access_collection = None
 
-    def _create_engine(self) -> Engine:
+    def _create_engine(self, request_aliases: Sequence[tuple[Feature, Feature]] = ()) -> Engine:
         engine = Engine(
             self.features,
             self.compute_framework,
@@ -1398,6 +1397,7 @@ class mlodaAPI:
             plan_context=self.plan_context,
             framework_preference=self.framework_preference,
             output_framework=self.output_framework,
+            request_aliases=request_aliases,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

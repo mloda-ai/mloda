@@ -1,4 +1,5 @@
 from typing import Any
+import pytest
 from unittest.mock import patch
 from mloda.user import DataType
 
@@ -230,3 +231,60 @@ class TestEngine:
             engine.setup_features_recursion(features)
 
             assert links == set(), "Engine must not mutate the caller's own links set object"
+
+
+def _plan_input_engine(plan_object: Feature, alias: Feature | None) -> Engine:
+    engine = Engine.__new__(Engine)
+    engine._requested = {id(plan_object): plan_object}
+    if alias is not None:
+        engine._requested[id(alias)] = plan_object
+    engine._snapshots = {}
+    return engine
+
+
+class TestPlanInput:
+    @pytest.mark.parametrize("second_alias", [False, True])
+    @pytest.mark.parametrize("first_alias", [False, True])
+    def test_first_reach_returns_the_plan_object_and_the_next_a_clean_copy(
+        self, first_alias: bool, second_alias: bool
+    ) -> None:
+        plan_object = Feature("plan_input_x", initial_requested_data=True)
+        alias = Feature("plan_input_x")
+        engine = _plan_input_engine(plan_object, alias)
+        first = alias if first_alias else plan_object
+        second = alias if second_alias else plan_object
+
+        assert engine._plan_input(first) is plan_object
+        plan_object.options.add_to_context("late", "value")
+        again = engine._plan_input(second)
+
+        assert isinstance(again, Feature)
+        assert again is not plan_object
+        assert again.name == plan_object.name
+        assert again.options.get("late") is None
+        assert again.initial_requested_data is False
+
+    def test_later_reach_takes_forwarding_directives_from_the_returned_entry(self) -> None:
+        plan_object = Feature("plan_input_y")
+        alias = Feature("plan_input_y")
+        engine = _plan_input_engine(plan_object, alias)
+        assert engine._plan_input(plan_object) is plan_object
+        entry = Feature(
+            "plan_input_y",
+            forward_group=frozenset({"g"}),
+            forward_group_exclude=frozenset({"h"}),
+            inherit_context_keys=frozenset({"c"}),
+        )
+        engine._requested[id(entry)] = plan_object
+        returned = engine._plan_input(entry)
+
+        assert isinstance(returned, Feature)
+        assert returned.forward_group == frozenset({"g"})
+        assert returned.forward_group_exclude == frozenset({"h"})
+        assert returned.inherit_context_keys == frozenset({"c"})
+
+    def test_unseeded_feature_and_str_are_returned_unchanged(self) -> None:
+        engine = _plan_input_engine(Feature("plan_input_z"), None)
+        other = Feature("plan_input_other")
+        assert engine._plan_input(other) is other
+        assert engine._plan_input("plain") == "plain"

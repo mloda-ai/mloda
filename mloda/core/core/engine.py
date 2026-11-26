@@ -1,5 +1,5 @@
 from collections import defaultdict
-from collections.abc import Iterable, Mapping
+from collections.abc import Iterable, Mapping, Sequence
 from copy import copy
 from dataclasses import replace
 import heapq
@@ -70,7 +70,7 @@ from mloda.core.prepare.resolution_types import (
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.abstract_plugins.feature_group import FeatureGroup, format_feature_group_class
 from mloda.core.abstract_plugins.components.feature import Feature
-from mloda.core.abstract_plugins.components.feature_collection import Features, consume_seed
+from mloda.core.abstract_plugins.components.feature_collection import Features
 from mloda.core.abstract_plugins.components.hashable_dict import _deep_equal, _deep_hashable
 from mloda.core.abstract_plugins.components.input_data.match_cache import run_match_cache
 from mloda.core.abstract_plugins.components.handle_option_names import CONNECTION_HANDLE_OPTION, HANDLE_OPTION_NAMES
@@ -118,6 +118,7 @@ class Engine:
         plan_context: PlanContext | None = None,
         framework_preference: Mapping[type[ComputeFramework], int] | None = None,
         output_framework: type[ComputeFramework] | None = None,
+        request_aliases: Sequence[tuple[Feature, Feature]] = (),
     ) -> None:
         self.output_framework = output_framework
         self.transformer = ComputeFrameworkTransformer()
@@ -181,11 +182,12 @@ class Engine:
         # Per surviving feature uuid, the parents its winning group replaced, unioned over merged duplicates.
         self.specialized_from: dict[UUID, tuple[type[FeatureGroup], ...]] = {}
         self.resolution_records: list[ResolutionRecord] = []
-        # Unconsumed seeds by id: (clean source, plan request object); an input_features return of one plans into it.
-        self._requested: dict[int, tuple[Feature, Feature]] = {}
-        self._sources: dict[int, Feature] = {}
+        # Plan request objects, and the caller aliases of them, by id; an input_features return of one plans into it.
+        self._requested: dict[int, Feature] = {}
+        # Clean snapshots by plan object id; a key means the plan object was already reached once.
+        self._snapshots: dict[int, Feature] = {}
         with run_match_cache(), accessible_implementations(self.implementations), input_resolution_scope(self):
-            self.execution_planner = self.create_setup_execution_plan(features)
+            self.execution_planner = self.create_setup_execution_plan(features, request_aliases)
         if self.function_extender:
             self.run_context = replace(self.run_context, plugin_versions=self._resolve_plugin_versions())
         self.connections = self._resolve_connections()
@@ -291,7 +293,9 @@ class Engine:
             return orchestrator
         raise ValueError("ExecutionOrchestrator setup failed.")
 
-    def create_setup_execution_plan(self, features: Features) -> ExecutionPlan:
+    def create_setup_execution_plan(
+        self, features: Features, request_aliases: Sequence[tuple[Feature, Feature]] = ()
+    ) -> ExecutionPlan:
         if self.global_filter:
             self.global_filter.reset_match_tracking()
 
@@ -308,15 +312,9 @@ class Engine:
                 plan.principal if plan else None,
             )
         )
-        snapshots: dict[int, Feature] = {}
-        for f in features.collection:
-            snapshot = f.copy_for_plan()
-            snapshot.initial_requested_data = False
-            snapshots[id(f)] = snapshot
-        self._requested = {id(f): (snapshots[id(f)], f) for f in features.collection}
-        for alias, (_, plan_object) in features.requested.items():
-            self._requested[alias] = (snapshots[id(plan_object)], plan_object)
-        self._sources = {}
+        self._requested = {id(f): f for f in features.collection}
+        self._requested.update({id(caller): plan_object for caller, plan_object in request_aliases})
+        self._snapshots = {}
         with reader_probe_scope(probe_scope):
             self.setup_features_recursion(features)
         self._fold_into_narrower_twins()
@@ -326,6 +324,8 @@ class Engine:
         self._warn_on_uncascaded_context()
         if self.global_filter:
             self.global_filter.warn_on_unmatched_filters()
+        self._requested = {}
+        self._snapshots = {}
 
         graph_builder = BuildGraph(self.feature_link_parents, self.feature_group_collection)
         graph_builder.build_graph_from_feature_links()
@@ -406,11 +406,32 @@ class Engine:
             self.add_feature_link_to_links(feature)
         for feature in self._consumers_first(features) if depth == 0 else features:
             if depth == 0:
-                consume_seed(self._requested, self._sources, feature)
+                self._snapshot(feature)
             # Stamped right before resolution: a reused instance must name this consumer, not an earlier one.
             feature.resolving_consumer = consumer
             feature.resolving_path = path
             self._process_feature(feature, features, requested, depth)
+
+    def _snapshot(self, plan_object: Feature) -> None:
+        """Take the plan object's clean snapshot on first reach."""
+        if id(plan_object) not in self._snapshots:
+            snapshot = plan_object.copy_for_plan()
+            snapshot.initial_requested_data = False
+            self._snapshots[id(plan_object)] = snapshot
+
+    def _plan_input(self, entry: Feature | str) -> Feature | str:
+        """Resolve a returned request object: the plan object on first reach, a clean snapshot copy after."""
+        if not isinstance(entry, Feature) or id(entry) not in self._requested:
+            return entry
+        plan_object = self._requested[id(entry)]
+        if id(plan_object) not in self._snapshots:
+            self._snapshot(plan_object)
+            return plan_object
+        copy = self._snapshots[id(plan_object)].copy_for_plan()
+        copy.forward_group = entry.forward_group
+        copy.forward_group_exclude = entry.forward_group_exclude
+        copy.inherit_context_keys = entry.inherit_context_keys
+        return copy
 
     def _consumers_first(self, features: Features) -> list[Feature]:
         """Stable topological order: each request precedes every seeded request its options name."""
@@ -426,9 +447,9 @@ class Engine:
                     continue
                 seen.add(id(value))
                 if isinstance(value, Feature):
-                    seed = self._requested.get(id(value))
-                    if seed is not None:
-                        target = index.get(id(seed[1]))
+                    plan_object = self._requested.get(id(value))
+                    if plan_object is not None:
+                        target = index.get(id(plan_object))
                         if target is not None and target != i:
                             edges[i].add(target)
                     else:
@@ -1611,6 +1632,7 @@ class Engine:
         # Captured before recursion renames digit-only ~N part requests to their base (issue #2031).
         declared_names = {str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered}
         declared_order = [str(entry) if isinstance(entry, str) else str(entry.name) for entry in ordered]
+        ordered = [self._plan_input(entry) for entry in ordered]
         features = Features(
             ordered,
             child_options=options,
@@ -1618,7 +1640,6 @@ class Engine:
             parent_domain=parent_domain,
             consumer_local_keys=unforwarded_keys(feature_group_class.PROPERTY_MAPPING),
             requested=self._requested,
-            sources=self._sources,
         )
         consumer_name = feature_group_class.get_class_name()
         consumer_property_keys = self._property_mapping_keys(feature_group_class)

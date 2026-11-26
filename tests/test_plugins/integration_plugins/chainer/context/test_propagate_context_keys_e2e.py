@@ -283,6 +283,7 @@ class TestPropagateContextKeysE2E:
         )
         assert session.engine is not None
         assert session.engine._requested == {}
+        assert session.engine._snapshots == {}
         stored = [f for group in session.engine.feature_group_collection.values() for f in group]
         for letter in letters:
             assert len([f for f in stored if str(f.name) == f"{prefix}_{letter}"]) == 1

@@ -281,6 +281,8 @@ class mlodaAPI:
             # The features object is potentially changed during the run, so we need to deepcopy it by default, so that follow up runs with the same object are not affected.
             # Set copy_features=False to disable deep copying for use cases where features contain non-copyable objects.
             # Feature objects are then shallow-copied, so the plan never writes into the caller's Features.
+            if not copy_features and not isinstance(requested_features, (Features, str, list, tuple)):
+                requested_features = list(requested_features)
             _requested_features = (
                 deepcopy(requested_features) if copy_features else self._shallow_copy_features(requested_features)
             )
@@ -288,6 +290,7 @@ class mlodaAPI:
             data_access_collection, self._connection_handles = self._bind_feature_connections(
                 _requested_features, data_access_collection
             )
+            aliases = self._request_aliases(requested_features, _requested_features, copy_features)
 
             self._api_data_columns = self._api_data_spec(api_data)
             self._api_data_types = self._api_data_type_spec(api_data)
@@ -319,7 +322,7 @@ class mlodaAPI:
             raise SetupConfigurationError(str(error)) from error
 
         with self._credential_redaction():
-            self.engine = self._create_engine()
+            self.engine = self._create_engine(aliases)
         self._api_data_types = self._native_api_data_types()
 
     @staticmethod
@@ -501,6 +504,15 @@ class mlodaAPI:
             return requested_features
         copies = [f.copy_for_plan() if isinstance(f, Feature) else f for f in requested_features]
         return tuple(copies) if isinstance(requested_features, tuple) else copies
+
+    @staticmethod
+    def _request_aliases(original: Any, copied: Any, copy_features: bool) -> list[tuple[Feature, Feature]]:
+        """Pair each caller object with its plan copy; the engine keys the plan objects itself."""
+        if copy_features or isinstance(original, str):
+            return []
+        originals = original.collection if isinstance(original, Features) else original
+        planned = copied.collection if isinstance(copied, Features) else copied
+        return [(o, p) for o, p in zip(originals, planned, strict=True) if isinstance(p, Feature)]
 
     @staticmethod
     def _bind_feature_connections(
@@ -1373,7 +1385,7 @@ class mlodaAPI:
         if hasattr(runner, "executor"):
             runner.executor.data_access_collection = None
 
-    def _create_engine(self) -> Engine:
+    def _create_engine(self, request_aliases: Sequence[tuple[Feature, Feature]] = ()) -> Engine:
         engine = Engine(
             self.features,
             self.compute_framework,
@@ -1386,6 +1398,7 @@ class mlodaAPI:
             plan_context=self.plan_context,
             framework_preference=self.framework_preference,
             output_framework=self.output_framework,
+            request_aliases=request_aliases,
         )
         if not isinstance(engine, Engine):
             raise ValueError("Engine initialization failed.")

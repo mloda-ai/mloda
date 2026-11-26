@@ -5,7 +5,11 @@ from typing import Any, ClassVar
 import pandas as pd
 import pytest
 
-from mloda.user import Feature, FeatureName, Options, PluginCollector, mloda
+from unittest.mock import patch
+
+from mloda.core.abstract_plugins.components.feature_collection import Features
+from mloda.core.core.engine import Engine
+from mloda.user import DataType, Feature, FeatureName, Options, PluginCollector, mloda
 from mloda.provider import (
     ComputeFramework,
     DataCreatorFeatureGroup,
@@ -196,7 +200,9 @@ class TestPropagateContextKeysE2E:
         {PropagateContextFeatureGroupTest, ChainerContextParserTestDataCreator}
     )
 
-    def test_propagation_affects_upstream_computation(self) -> None:
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["cb", "bc"])
+    def test_propagation_affects_upstream_computation(self, order: str, copy_features: bool) -> None:
         feat_b = Feature(
             name="feat_b",
             options=Options(
@@ -217,38 +223,237 @@ class TestPropagateContextKeysE2E:
                 propagate_context_keys=frozenset({"env"}),
             ),
         )
+        by_letter = {"b": feat_b, "c": feat_c}
         result = mloda.run_all(
-            [feat_c, feat_b, "Sales"],
+            [*[by_letter[letter] for letter in order], "Sales"],
             compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
         )
         assert find_column(result, "feat_b") == [1200, 1400, 1600, 1800, 2000]
         assert find_column(result, "feat_c") == [4600, 5200, 5800, 6400, 7000]
+        if not copy_features:
+            assert "env" not in feat_b.options.context
+            assert feat_b.child_options is None
 
-    @pytest.mark.xfail(
-        strict=True,
-        reason="A requested Feature named as a later request's input is merged in place and stored twice in its set.",
-    )
-    def test_requested_input_named_by_a_later_request_is_stored_once(self) -> None:
+    @staticmethod
+    def _dup_requests(
+        prefix: str, order: str, in_form: str, d_env: str = "prod", b_type: DataType | None = None
+    ) -> list[Feature | str]:
+        """b is the shared input; c and d name it (plain or inside a list) and push env into it."""
         feat_b = Feature(
-            name="dup_feat_b",
+            name=f"{prefix}_b",
+            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1"}),
+            data_type=b_type,
+        )
+        in_value: Any = {"plain": feat_b, "list": [feat_b], "tuple": (feat_b,)}[in_form]
+        by_letter = {
+            "b": feat_b,
+            "c": Feature(
+                name=f"{prefix}_c",
+                options=Options(
+                    context={DefaultOptionKeys.in_features: in_value, "ident": "identifier2", "env": "prod"},
+                    propagate_context_keys=frozenset({"env"}),
+                ),
+            ),
+            "d": Feature(
+                name=f"{prefix}_d",
+                options=Options(
+                    context={DefaultOptionKeys.in_features: in_value, "ident": "identifier2", "env": d_env},
+                    propagate_context_keys=frozenset({"env"}),
+                ),
+            ),
+        }
+        return [*[by_letter[letter] for letter in order], "Sales"]
+
+    @pytest.mark.parametrize("in_form", ["plain", "list", "tuple"])
+    @pytest.mark.parametrize("consumers", ["c", "cd"])
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["bc", "cb"])
+    def test_requested_input_named_by_a_later_request_is_stored_once(
+        self, order: str, copy_features: bool, consumers: str, in_form: str
+    ) -> None:
+        letters = order.replace("c", consumers)
+        prefix = f"dup_{order}_{int(copy_features)}_{consumers}_{in_form}"
+        session = mloda.prepare(
+            self._dup_requests(prefix, letters, in_form),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+        )
+        assert session.engine is not None
+        assert session.engine._requested == {}
+        assert session.engine._snapshots == {}
+        stored = [f for group in session.engine.feature_group_collection.values() for f in group]
+        for letter in letters:
+            assert len([f for f in stored if str(f.name) == f"{prefix}_{letter}"]) == 1
+
+        result = mloda.run_all(
+            self._dup_requests(prefix, letters, in_form),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+        )
+        assert find_column(result, f"{prefix}_b") == [1200, 1400, 1600, 1800, 2000]
+        for letter in letters.replace("b", ""):
+            assert find_column(result, f"{prefix}_{letter}") == [4600, 5200, 5800, 6400, 7000]
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["bcd", "cdb", "dcb"])
+    def test_requested_input_pushed_differing_values_raises_in_every_order(
+        self, order: str, copy_features: bool
+    ) -> None:
+        prefix = f"twin_{order}_{int(copy_features)}"
+        with pytest.raises(ValueError, match="reached twice with differing values"):
+            mloda.run_all(
+                self._dup_requests(prefix, order, "plain", d_env="staging"),
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=self.plugin_collector,
+                copy_features=copy_features,
+            )
+
+    @staticmethod
+    def _tier_requests(prefix: str, order: str) -> list[Feature | str]:
+        """y pushes env into x; z names y only through a non-input option."""
+        feat_x = Feature(
+            name=f"{prefix}_x",
             options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1"}),
         )
-        feat_c = Feature(
-            name="dup_feat_c",
+        feat_y = Feature(
+            name=f"{prefix}_y",
             options=Options(
-                context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2", "env": "prod"},
+                context={DefaultOptionKeys.in_features: feat_x, "ident": "identifier2", "env": "prod"},
                 propagate_context_keys=frozenset({"env"}),
             ),
         )
-        session = mloda.prepare(
-            [feat_b, feat_c, "Sales"],
+        feat_z = Feature(
+            name=f"{prefix}_z",
+            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1", "meta": feat_y}),
+        )
+        by_letter = {"x": feat_x, "y": feat_y, "z": feat_z}
+        return [*[by_letter[letter] for letter in order], "Sales"]
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["xyz", "zxy", "zyx", "xy"])
+    def test_non_input_option_naming_a_requested_feature_plans_in_every_order(
+        self, order: str, copy_features: bool
+    ) -> None:
+        prefix = f"tier_{order}_{int(copy_features)}"
+        result = mloda.run_all(
+            self._tier_requests(prefix, order),
             compute_frameworks=[PandasDataFrame],
             plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+        )
+        assert find_column(result, f"{prefix}_x") == [1200, 1400, 1600, 1800, 2000]
+        assert find_column(result, f"{prefix}_y") == [4600, 5200, 5800, 6400, 7000]
+        if "z" in order:
+            assert find_column(result, f"{prefix}_z") == [200, 400, 600, 800, 1000]
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["xy", "yx"])
+    def test_requests_naming_each_other_in_non_input_options_plan_and_compute(
+        self, order: str, copy_features: bool
+    ) -> None:
+        prefix = f"mutual_{order}_{int(copy_features)}"
+        by_letter = {
+            letter: Feature(
+                name=f"{prefix}_{letter}",
+                options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": ident}),
+            )
+            for letter, ident in (("x", "identifier1"), ("y", "identifier2"))
+        }
+        by_letter["x"].options.add_to_context("meta", by_letter["y"])
+        by_letter["y"].options.add_to_context("meta", by_letter["x"])
+        result = mloda.run_all(
+            [*[by_letter[letter] for letter in order], "Sales"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+        )
+        assert find_column(result, f"{prefix}_x") == [200, 400, 600, 800, 1000]
+        assert len(find_column(result, f"{prefix}_y")) == 5
+
+    @staticmethod
+    def _two_consumer_requests(prefix: str, order: str) -> list[Feature | str]:
+        """c pushes env into b; d forwards group option grp=1 and pushes nothing."""
+        feat_b = Feature(
+            name=f"{prefix}_b",
+            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1"}),
+        )
+        by_letter = {
+            "b": feat_b,
+            "c": Feature(
+                name=f"{prefix}_c",
+                options=Options(
+                    context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2", "env": "prod"},
+                    propagate_context_keys=frozenset({"env"}),
+                ),
+            ),
+            "d": Feature(
+                name=f"{prefix}_d",
+                options=Options(
+                    group={"grp": 1}, context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2"}
+                ),
+            ),
+        }
+        return [*[by_letter[letter] for letter in order], "Sales"]
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize(
+        "order, first_consumer",
+        [("bcd", "c"), ("cdb", "c"), ("cbd", "c"), ("bdc", "d"), ("dcb", "d"), ("dbc", "d")],
+    )
+    def test_requested_input_follows_the_first_listed_consumer(
+        self, order: str, first_consumer: str, copy_features: bool
+    ) -> None:
+        prefix = f"two_{order}_{int(copy_features)}"
+        result = mloda.run_all(
+            self._two_consumer_requests(prefix, order),
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+        )
+        expected = [1200, 1400, 1600, 1800, 2000] if first_consumer == "c" else [200, 400, 600, 800, 1000]
+        assert find_column(result, f"{prefix}_b") == expected
+
+    @pytest.mark.parametrize("order", ["bcd", "cdb", "dcb"])
+    def test_direct_engine_second_consumer_copies_the_clean_snapshot(self, order: str) -> None:
+        prefix = f"eng_{order}"
+        features = Features(self._dup_requests(prefix, order, "plain"))
+        for feature in features:
+            feature.initial_requested_data = True
+        seen: list[tuple[Any, Any, bool]] = []
+        original = Features.merge_options
+
+        def spy(collection: Features, feature: Feature, child_options: Options) -> None:
+            if str(feature.name) == f"{prefix}_b":
+                seen.append((feature.uuid, feature.options.get("env"), feature.initial_requested_data))
+            original(collection, feature, child_options)
+
+        with patch.object(Features, "merge_options", spy):
+            Engine(features, {PandasDataFrame}, None, plugin_collector=self.plugin_collector)
+
+        # Both consumers push env=prod: the second copy must not already carry the first consumer's env.
+        assert len(seen) == 2
+        assert seen[0][0] != seen[1][0]
+        assert seen[1][1] is None
+        assert seen[1][2] is False
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["bcd", "cdb"])
+    def test_typed_strict_request_with_second_consumer_is_stored_once(self, order: str, copy_features: bool) -> None:
+        prefix = f"typed_{order}_{int(copy_features)}"
+        session = mloda.prepare(
+            self._dup_requests(prefix, order, "plain", b_type=DataType.INT64)[:-1],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+            strict_type_enforcement=True,
         )
         assert session.engine is not None
         stored = [f for group in session.engine.feature_group_collection.values() for f in group]
-        assert len([f for f in stored if str(f.name) == "dup_feat_b"]) == 1
+        assert len([f for f in stored if str(f.name) == f"{prefix}_b"]) == 1
 
     def test_no_propagation_without_propagate_context_keys(self) -> None:
         feat_b = Feature(
@@ -484,6 +689,7 @@ class TestPropagateContextKeysE2E:
             _run_guard(requests if cascade_first else requests[::-1])
         assert CASCADE_GUARD_SHARED in str(excinfo.value)
         assert "cascade_context_keys" in str(excinfo.value)
+        assert "inputs were already resolved" in str(excinfo.value)
 
     @pytest.mark.parametrize("cascade_first", [True, False])
     def test_inputs_differing_in_compute_framework_fail_at_plan_time(self, cascade_first: bool) -> None:
@@ -516,53 +722,48 @@ class TestPropagateContextKeysE2E:
     _ENV_ROOT_COLLECTOR = PluginCollector.enabled_feature_groups(
         {PropagateContextFeatureGroupTest, CascadeEnvRootGroupTest}
     )
-    _CHAIN_ORDERS_OK = ["zyx", "zxy", "z", "zy", "zx", "xzy", "xz"]
-    _CHAIN_ORDERS_RAISE = ["yzx", "yxz", "xyz"]
+    _CHAIN_ORDERS_OK = ["z", "zy", "yz", "zx", "xz", "zyx", "zxy", "yzx", "yxz", "xzy", "xyz"]
     _CHAIN_EXPECTED = {
         "x": [1020, 1040, 1060],
         "y": [4060, 4120, 4180],
         "z": [9120, 9240, 9360],
     }
 
-    def _run_env_root(self, requests: list[Feature]) -> list[Any]:
+    def _run_env_root(self, requests: list[Feature], copy_features: bool = True) -> list[Any]:
         return mloda.run_all(
             list[Feature | str](requests),
             compute_frameworks=[PandasDataFrame],
             plugin_collector=self._ENV_ROOT_COLLECTOR,
+            copy_features=copy_features,
         )
 
+    @pytest.mark.parametrize("copy_features", [True, False])
     @pytest.mark.parametrize("order", _CHAIN_ORDERS_OK)
-    def test_shared_chain_cascade_reaches_root_for_any_successful_order(self, order: str) -> None:
-        prefix = f"cer_ok_{order}"
+    def test_shared_chain_cascade_reaches_root_for_any_order(self, order: str, copy_features: bool) -> None:
+        prefix = f"cer_ok_{order}_{int(copy_features)}"
         chain = dict(zip("xyz", _cascade_chain(prefix, root=CASCADE_ENV_ROOT)))
-        result = self._run_env_root([chain[level] for level in order])
+        result = self._run_env_root([chain[level] for level in order], copy_features)
         for level in order:
             assert find_column(result, f"{prefix}_{level}") == self._CHAIN_EXPECTED[level]
 
-    @pytest.mark.xfail(
-        strict=True, reason="a requested input merged in place by a later request is stored twice (known gap)"
-    )
-    def test_chain_yz_stores_each_object_once(self) -> None:
-        x, y, z = _cascade_chain("cer_yz_once", root=CASCADE_ENV_ROOT)
-        session = mloda.prepare(
-            [y, z],
-            compute_frameworks=[PandasDataFrame],
-            plugin_collector=self._ENV_ROOT_COLLECTOR,
-        )
+    @pytest.mark.parametrize("copy_features", [True, False])
+    def test_chain_yz_stores_each_object_once(self, copy_features: bool) -> None:
+        def prepare(order: str) -> Any:
+            chain = dict(zip("xyz", _cascade_chain(f"cer_yz_once_{int(copy_features)}", root=CASCADE_ENV_ROOT)))
+            return mloda.prepare(
+                list[Feature | str]([chain[level] for level in order]),
+                compute_frameworks=[PandasDataFrame],
+                plugin_collector=self._ENV_ROOT_COLLECTOR,
+                copy_features=copy_features,
+            )
+
+        session = prepare("yz")
         assert session.engine is not None
         for features in session.engine.feature_group_collection.values():
             stored = list(features)
             assert len(stored) == len({id(f) for f in stored})
             assert len(stored) == len({f.uuid for f in stored})
-
-    @pytest.mark.parametrize("order", _CHAIN_ORDERS_RAISE)
-    def test_shared_chain_gaining_cascade_after_inputs_resolved_raises(self, order: str) -> None:
-        prefix = f"cer_raise_{order}"
-        chain = dict(zip("xyz", _cascade_chain(prefix, root=CASCADE_ENV_ROOT)))
-        with pytest.raises(ValueError) as excinfo:
-            self._run_env_root([chain[level] for level in order])
-        assert "cascade_context_keys" in str(excinfo.value)
-        assert any(f"{prefix}_{level}" in str(excinfo.value) for level in "xy")
+        assert len(session.resolved_plan()) == len(prepare("zy").resolved_plan())
 
     @pytest.mark.parametrize("order", ["ab", "ba"])
     def test_shared_mid_gaining_cascade_from_second_consumer(self, order: str) -> None:
@@ -586,3 +787,40 @@ class TestPropagateContextKeysE2E:
         result = self._run_env_root([consumers[name] for name in order])
         assert find_column(result, f"cer_a_{order}") == [4, 8, 12]
         assert find_column(result, f"cer_b_{order}") == [3040, 3080, 3120]
+
+
+class _CyclicList(list[Any]):
+    pass
+
+
+class _CyclicDict(dict[str, Any]):
+    pass
+
+
+class TestCyclicOptionsInRequestOrderWalk:
+    @pytest.mark.parametrize("container", ["list", "dict"])
+    def test_request_with_a_cyclic_option_value_plans_without_recursion(self, container: str) -> None:
+        # Subclasses keep stable_text (exact-type checks) off the cycle, so only the order walk meets it.
+        cyclic: Any = _CyclicList() if container == "list" else _CyclicDict()
+        if container == "list":
+            cyclic.append(cyclic)
+        else:
+            cyclic["self"] = cyclic
+        feat_b = Feature(
+            name=f"cyc_walk_b_{container}",
+            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1", "cyc": cyclic}),
+        )
+        feat_c = Feature(
+            name=f"cyc_walk_c_{container}",
+            options=Options(context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2"}),
+        )
+
+        session = mloda.prepare(
+            [feat_b, feat_c, "Sales"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {PropagateContextFeatureGroupTest, ChainerContextParserTestDataCreator}
+            ),
+        )
+
+        assert session.engine is not None

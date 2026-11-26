@@ -18,6 +18,10 @@ from tests.test_core.test_setup.test_link_resolver import BaseLinkTestFeatureGro
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
+def _same_pairs(actual: Any, expected: list[tuple[Any, Any]]) -> bool:
+    return len(actual) == len(expected) and all(a is x and b is y for (a, b), (x, y) in zip(actual, expected))
+
+
 class TestmlodaAPI:
     @pytest.fixture
     def features(self) -> list[str]:
@@ -85,15 +89,60 @@ class TestmlodaAPI:
             assert api_feature.options.get("k") is shared_value
 
     def test_copy_features_false_accepts_a_generator_of_features(self) -> None:
-        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
-            api_request = mlodaAPI((Feature(f"gen_{i}") for i in range(2)), copy_features=False)  # type: ignore[arg-type]
+        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan") as plan_mock:
+            originals = [Feature(f"gen_{i}") for i in range(2)]
+            api_request = mlodaAPI((o for o in originals), copy_features=False)  # type: ignore[arg-type]
             assert [str(f.name) for f in api_request.features] == ["gen_0", "gen_1"]
+            plan_objects = list(api_request.features)
+            assert _same_pairs(plan_mock.call_args.args[1], list(zip(originals, plan_objects)))
 
     def test_copy_features_false_features_object_does_not_share_bookkeeping(self) -> None:
         original = Features([Feature("bk_feature")])
         copied = mlodaAPI._shallow_copy_features(original)
         assert copied.parent_uuids is not original.parent_uuids
         assert copied.requested is not original.requested
+
+    @pytest.mark.parametrize("shape", ["list", "mixed", "features"])
+    @pytest.mark.parametrize("copy_features", [True, False])
+    def test_api_seeds_only_aliases_for_the_callers_objects(self, copy_features: bool, shape: str) -> None:
+        original = Feature("seed_map_feature", options={"k": "v"})
+        plan_object = original.copy_for_plan()
+        request: Any = {
+            "list": [original],
+            "mixed": ["mixed_str_feature", original],
+            "features": Features([original]),
+        }[shape]
+        planned: Any = {
+            "list": [plan_object],
+            "mixed": ["mixed_str_feature", plan_object],
+            "features": Features([plan_object]),
+        }[shape]
+        aliases = mlodaAPI._request_aliases(request, planned, copy_features)
+        assert _same_pairs(aliases, [] if copy_features else [(original, plan_object)])
+
+    @pytest.mark.parametrize("copy_features", [True, False])
+    def test_engine_maps_plan_objects_and_caller_aliases_to_the_plan_object(self, copy_features: bool) -> None:
+        original = Feature("engine_seed_feature", options={"k": "v"})
+        seen: list[dict[int, Feature]] = []
+
+        class _Stop(Exception):
+            pass
+
+        def spy(engine: Engine, features: Features, *args: Any, **kwargs: Any) -> None:
+            seen.append(dict(engine._requested))
+            raise _Stop
+
+        with patch.object(Engine, "setup_features_recursion", spy):
+            with pytest.raises(_Stop):
+                mlodaAPI([original], copy_features=copy_features)
+
+        mapping = seen[0]
+        (plan_object,) = {id(p): p for p in mapping.values()}.values()
+        assert plan_object is not original
+        assert mapping[id(plan_object)] is plan_object
+        assert (id(original) in mapping) is (not copy_features)
+        if not copy_features:
+            assert mapping[id(original)] is plan_object
 
 
 class TestBareStringRejected:

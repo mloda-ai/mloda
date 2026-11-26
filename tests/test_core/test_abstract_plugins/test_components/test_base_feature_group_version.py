@@ -566,7 +566,7 @@ def _write_package(tmp_path: Path, top: str, files: dict[str, str]) -> None:
     for rel_path, source in files.items():
         full = pkg_dir / rel_path
         full.parent.mkdir(parents=True, exist_ok=True)
-        full.write_text(source)
+        full.write_text(source, encoding="utf-8", newline="")
     importlib.invalidate_caches()
 
 
@@ -574,7 +574,7 @@ def _rewrite_package(tmp_path: Path, top: str, files: dict[str, str]) -> None:
     pkg_dir = tmp_path / top
     for rel_path, source in files.items():
         full = pkg_dir / rel_path
-        full.write_text(source)
+        full.write_text(source, encoding="utf-8", newline="")
         current_ns = full.stat().st_mtime_ns
         bumped_ns = current_ns + 2_000_000_000
         os.utime(full, ns=(bumped_ns, bumped_ns))

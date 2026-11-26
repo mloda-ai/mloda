@@ -458,7 +458,18 @@ class TestSharedManagerWithARealServer:
 
         assert register.get_location() is None
 
-    @pytest.mark.parametrize("breakage", ["shutdown", "socket_file_removed"])
+    @pytest.mark.parametrize(
+        "breakage",
+        [
+            "shutdown",
+            pytest.param(
+                "socket_file_removed",
+                marks=pytest.mark.skipif(
+                    sys.platform == "win32", reason="Windows uses a named pipe, not a socket file"
+                ),
+            ),
+        ],
+    )
     @pytest.mark.timeout(30)
     def test_an_unusable_cached_server_is_replaced_by_a_working_one(self, breakage: str) -> None:
         first = cfw_module.shared_manager()

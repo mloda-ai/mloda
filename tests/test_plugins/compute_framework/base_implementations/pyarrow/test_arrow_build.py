@@ -359,7 +359,18 @@ def _summer(tz: Any) -> list[Any]:
     return [datetime(2023, 7, 1, 12, 0, tzinfo=tz)]
 
 
-@pytest.mark.parametrize("kind", ["keyless", "custom", "tzoffset_cet", "tzstr_est5edt", "tzlocal"])
+@pytest.mark.parametrize(
+    "kind",
+    [
+        "keyless",
+        "custom",
+        "tzoffset_cet",
+        "tzstr_est5edt",
+        pytest.param(
+            "tzlocal", marks=pytest.mark.skipif(not hasattr(time, "tzset"), reason="time.tzset is POSIX only")
+        ),
+    ],
+)
 def test_aware_zone_rejects_unnameable_zone(kind: str, request: pytest.FixtureRequest) -> None:
     from dateutil import tz
 

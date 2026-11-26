@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import time
 from pathlib import Path
 
@@ -13,6 +14,8 @@ import pytest
 
 from mloda.core.runtime.flight.runner_flight_server import ParallelRunnerFlightServer
 from mloda.core.runtime.mp_context import mp_start_context
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="needs /proc and SIGKILL")
 
 
 def _flight_server_is_gone(pid: int) -> bool:

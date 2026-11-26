@@ -3925,7 +3925,7 @@ class TestRedactException:
             ),
             pytest.param(
                 lambda: OSError(2, "No such file", "/data/x", None, "/data/y"),
-                "[Errno 2] No such file: '/data/x' -> '/data/y'",
+                str(OSError(2, "No such file", "/data/x", None, "/data/y")),
                 id="five-arg-filename2",
             ),
         ],
@@ -3957,7 +3957,7 @@ class TestRedactException:
             ),
             pytest.param(
                 lambda: OSError(2, "No such file", "/data/x", None, f"/y/{_LITERAL}"),
-                "[Errno 2] No such file: '/data/x' -> '/y/***'",
+                str(OSError(2, "No such file", "/data/x", None, "/y/***")),
                 id="filename2",
             ),
         ],

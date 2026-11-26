@@ -1014,7 +1014,7 @@ class TestWorkerManagerJoinAll:
 
         join_thread = threading.Thread(target=manager.join_all, daemon=True)
         try:
-            assert result_queue.get(timeout=5) == "READY"
+            assert result_queue.get(timeout=20) == "READY"
             assert process.is_alive(), "worker exited before join_all() could terminate it"
             assert process.exitcode is None
             join_thread.start()

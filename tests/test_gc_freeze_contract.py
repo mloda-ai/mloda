@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import gc
 import os
+import signal
 import subprocess  # nosec B404
 import sys
 import types
@@ -31,6 +32,8 @@ from mloda.core.abstract_plugins.feature_group import FeatureGroup
 # The floor the conftest predicate uses to tell its own freeze from a host's, imported rather than copied so
 # the predicate and these assertions cannot drift apart.
 from tests.conftest import MIN_FROZEN_GRAPH_OBJECTS, NO_GC_FREEZE_ENV_VAR, drop_passing_report
+
+needs_sigalrm = pytest.mark.skipif(not hasattr(signal, "SIGALRM"), reason="needs --timeout-method=signal (SIGALRM)")
 
 
 _THROWAWAY_NAME = "GcFreezeThrowawayFeatureGroup"
@@ -325,6 +328,7 @@ def _run_timeout_probe(
     )
 
 
+@needs_sigalrm
 @pytest.mark.timeout(60)
 def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallowed(tmp_path: Path) -> None:
     """The suite collects constantly, so a timeout alarm often fires in a gc callback and must still fail the test."""
@@ -351,6 +355,7 @@ def test_timeout_firing_in_a_gc_callback_fails_the_test_instead_of_being_swallow
     )
 
 
+@needs_sigalrm
 @pytest.mark.timeout(60)
 @pytest.mark.parametrize("func_only", [True, False], ids=["call_timer", "protocol_timer"])
 def test_hang_after_a_swallowed_timeout_is_still_stopped(tmp_path: Path, func_only: bool) -> None:
@@ -386,6 +391,7 @@ def test_cleanup_after_timeout() -> None:
 """
 
 
+@needs_sigalrm
 @pytest.mark.timeout(60)
 def test_cleanup_after_an_ordinary_timeout_is_not_cut_short(tmp_path: Path) -> None:
     """Only a swallowed timeout re-arms the alarm, so an ordinary one leaves cleanup unbounded like pytest-timeout."""

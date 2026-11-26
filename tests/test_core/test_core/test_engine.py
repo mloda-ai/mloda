@@ -264,24 +264,6 @@ class TestPlanInput:
         assert again.options.get("late") is None
         assert again.initial_requested_data is False
 
-    def test_later_reach_takes_forwarding_directives_from_the_returned_entry(self) -> None:
-        plan_object = Feature("plan_input_y")
-        engine = _plan_input_engine(plan_object, None)
-        assert engine._plan_input(plan_object) is plan_object
-        entry = Feature(
-            "plan_input_y",
-            forward_group=frozenset({"g"}),
-            forward_group_exclude=frozenset({"h"}),
-            inherit_context_keys=frozenset({"c"}),
-        )
-        engine._requested[id(entry)] = plan_object
-        returned = engine._plan_input(entry)
-
-        assert isinstance(returned, Feature)
-        assert returned.forward_group == frozenset({"g"})
-        assert returned.forward_group_exclude == frozenset({"h"})
-        assert returned.inherit_context_keys == frozenset({"c"})
-
     def test_unseeded_feature_and_str_are_returned_unchanged(self) -> None:
         engine = _plan_input_engine(Feature("plan_input_z"), None)
         other = Feature("plan_input_other")

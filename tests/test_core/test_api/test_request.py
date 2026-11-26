@@ -18,6 +18,10 @@ from tests.test_core.test_setup.test_link_resolver import BaseLinkTestFeatureGro
 from mloda.core.abstract_plugins.components.utils import get_all_subclasses
 
 
+def _same_pairs(actual: Any, expected: list[tuple[Any, Any]]) -> bool:
+    return len(actual) == len(expected) and all(a is x and b is y for (a, b), (x, y) in zip(actual, expected))
+
+
 class TestmlodaAPI:
     @pytest.fixture
     def features(self) -> list[str]:
@@ -90,12 +94,13 @@ class TestmlodaAPI:
             api_request = mlodaAPI((o for o in originals), copy_features=False)  # type: ignore[arg-type]
             assert [str(f.name) for f in api_request.features] == ["gen_0", "gen_1"]
             plan_objects = list(api_request.features)
-            assert plan_mock.call_args.args[1] == list(zip(originals, plan_objects))
+            assert _same_pairs(plan_mock.call_args.args[1], list(zip(originals, plan_objects)))
 
     def test_copy_features_false_features_object_does_not_share_bookkeeping(self) -> None:
         original = Features([Feature("bk_feature")])
         copied = mlodaAPI._shallow_copy_features(original)
         assert copied.parent_uuids is not original.parent_uuids
+        assert copied.requested is not original.requested
 
     @pytest.mark.parametrize("shape", ["list", "mixed", "features"])
     @pytest.mark.parametrize("copy_features", [True, False])
@@ -113,20 +118,22 @@ class TestmlodaAPI:
             "features": Features([plan_object]),
         }[shape]
         aliases = mlodaAPI._request_aliases(request, planned, copy_features)
-        assert aliases == ([] if copy_features else [(original, plan_object)])
+        assert _same_pairs(aliases, [] if copy_features else [(original, plan_object)])
 
     @pytest.mark.parametrize("copy_features", [True, False])
     def test_engine_maps_plan_objects_and_caller_aliases_to_the_plan_object(self, copy_features: bool) -> None:
         original = Feature("engine_seed_feature", options={"k": "v"})
         seen: list[dict[int, Feature]] = []
-        recursion = Engine.setup_features_recursion
+
+        class _Stop(Exception):
+            pass
 
         def spy(engine: Engine, features: Features, *args: Any, **kwargs: Any) -> None:
             seen.append(dict(engine._requested))
-            recursion(engine, features, *args, **kwargs)
+            raise _Stop
 
         with patch.object(Engine, "setup_features_recursion", spy):
-            with pytest.raises(Exception):
+            with pytest.raises(_Stop):
                 mlodaAPI([original], copy_features=copy_features)
 
         mapping = seen[0]

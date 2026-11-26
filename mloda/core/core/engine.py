@@ -427,11 +427,7 @@ class Engine:
         if id(plan_object) not in self._snapshots:
             self._snapshot(plan_object)
             return plan_object
-        copy = self._snapshots[id(plan_object)].copy_for_plan()
-        copy.forward_group = entry.forward_group
-        copy.forward_group_exclude = entry.forward_group_exclude
-        copy.inherit_context_keys = entry.inherit_context_keys
-        return copy
+        return self._snapshots[id(plan_object)].copy_for_plan()
 
     def _consumers_first(self, features: Features) -> list[Feature]:
         """Stable topological order: each request precedes every seeded request its options name."""

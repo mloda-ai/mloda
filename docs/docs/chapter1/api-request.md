@@ -46,45 +46,10 @@ V8: [[-0.13000604758867731,-0.13311827417649086,-0....]]
 id: [[0,1,2,...]]
 ....
 ```
-#### 5. Summary
-
-This example shows how easy it is to interact with the mloda API for data retrieval. By defining the data source and specifying the features, mloda handles the rest.
-
 #### For Realtime / Inference Use Cases
 
-With `run_all()`, mloda rebuilds the full execution plan on every call. That is fine for
-batch jobs, but in latency-sensitive scenarios the repeated planning overhead matters.
-
-Typical examples where this applies:
-
-- **ML model serving**: A prediction endpoint computes the same derived features for every incoming request; only the raw input row changes.
-- **Streaming / event-driven pipelines**: Each incoming event needs the same feature transformations applied in real time.
-- **Interactive applications**: A dashboard or API recalculates features on every user action with fresh parameters.
-
-The two-phase API lets you pay the planning cost once at startup and then execute
-cheaply per request:
-
-```python
-# 1. Prepare once (e.g. at server startup)
-session = mloda.prepare(feature_list, compute_frameworks=["PyArrowTable"], data_access_collection=data_access_collection,
-                       api_data={"MyKey": {"col": [0]}})
-
-# 2. Execute per request with fresh data (same set keys and column names)
-result = session.run(api_data={"MyKey": {"col": [1, 2]}})
-```
-
-See [mloda API: Two-Phase Execution](../in_depth/mloda-api.md#two-phase-execution-prepare-run) for details.
+`run_all()` replans on every call. For latency-sensitive use (model serving, event pipelines), call `mloda.prepare(...)` once and `session.run(api_data=...)` per request. See [mloda API: Two-Phase Execution](../in_depth/mloda-api.md#two-phase-execution-prepare-run).
 
 #### For AI Agents: JSON-Based Requests
 
-LLMs can generate JSON feature requests without writing Python code:
-
-```py
-from mloda.user import load_features_from_config
-
-llm_request = '["id", "V1", "V2", "Amount"]'
-features = load_features_from_config(llm_request, format="json")
-result = mloda.run_all(features=features, compute_frameworks=["PandasDataFrame"], ...)
-```
-
-See [Feature Configuration](../in_depth/feature-config.md) for more details on JSON-based configuration.
+LLMs can generate JSON feature requests without writing Python code; see [Feature Configuration](../in_depth/feature-config.md).

@@ -14,37 +14,11 @@ Plugins are **small, template-like structures** - easy to test, easy to debug, a
 
 ## Key Benefits
 
-**AI & Agent Integration**
-
-- declarative API - agents describe WHAT, not HOW
-- JSON-based feature requests for LLM tool functions
-- built-in lineage for traceability
-
-**Data Processing**
-
-- automated feature engineering and dependency resolution
-- data cleaning and synthetic data generation
-
-**Data Management**
-
-- rich metadata including data lineage and usage tracking
-- clear role separation: providers, users, and stewards
-
-**Data Quality and Security**
-
-- data quality definitions
-- unit- and integration tests
-- secure queries
-
-**Scalability**
-
-- switch compute framework without changing feature logic
-- same plugins work from notebook to production
-
-**Community Engagement by Design**
-
-- shareable plugin ecosystem
-- fostering community
+- **AI and agents:** a declarative API where agents describe WHAT, not HOW, with JSON feature requests for LLM tool functions and built-in lineage.
+- **Data processing and management:** automated dependency resolution, rich metadata, and clear roles for providers, users, and stewards.
+- **Quality and security:** data quality definitions, unit and integration tests, secure queries.
+- **Scalability:** switch compute framework without changing feature logic; the same plugins work from notebook to production.
+- **Community:** a shareable plugin ecosystem.
 
 ## Core Components and Architecture
 

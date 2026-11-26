@@ -2,25 +2,7 @@
 
 The **mlodaAPI** class serves as the primary interface for interacting with the core system, streamlining the setup and execution of computational workflows
 
-#### Major components (and steps)
-
-1. **Configuration**
-
-    Initialize the mloda with features, compute frameworks, and other settings to configure your environment.
-
-2.  **Engine Setup**
-
-    Create an execution plan by setting up the engine, which orchestrates the computation based on the defined features and configurations.
-
-3.  **Runner Setup**
-
-    Prepare the runner that will execute the plan, ensuring that all components are ready for computation.
-
-4.  **Run Engine Computation**
-
-    Apply the runner to execute the computations based on the prepared execution plan, managing the lifecycle of the computational process.
-
-This means, depending on your needs, you can run them all at once (**batch run**) or split them up, e.g. for realtime needs (**inference**).  For incremental result delivery see [Streaming](streaming.md).
+`run_all()` plans and runs a request in one call (**batch run**). `prepare()` and `run()` split planning from execution for realtime needs (**inference**); see Two-Phase Execution below. For incremental result delivery see [Streaming](streaming.md).
 
 #### Configuration for mlodaAPI
 
@@ -60,20 +42,11 @@ from mloda.user import mloda
 
 api_data = {"SampleData": {"FeatureA": [1], "FeatureB": [2], "FeatureC": [3]}}
 
-# Alphabetical ordering
 result = mloda.run_all(
     ["FeatureC", "FeatureA", "FeatureB"],
     compute_frameworks=["PandasDataFrame"],
     api_data=api_data,
-    column_ordering="alphabetical"  # Result columns: FeatureA, FeatureB, FeatureC
-)
-
-# Preserve request order
-result = mloda.run_all(
-    ["FeatureC", "FeatureA", "FeatureB"],
-    compute_frameworks=["PandasDataFrame"],
-    api_data=api_data,
-    column_ordering="request_order"  # Result columns: FeatureC, FeatureA, FeatureB
+    column_ordering="request_order"  # Result columns: FeatureC, FeatureA, FeatureB; "alphabetical" gives A, B, C
 )
 ```
 
@@ -147,16 +120,6 @@ from mloda.steward import (
 ##### resolve_feature
 
 Resolve a single feature name (or a `Feature`) to its matching FeatureGroup without running the request, reporting failures in `result.error` instead of raising. It takes `feature` (`str | Feature`) positionally plus keyword-only `options`, `plugin_collector`, `feature_group`, `links`, `data_access_collection`, and `compute_frameworks` (a set that only restricts candidates), and returns a `ResolvedFeature` (including `candidates`, `error`, `supported_compute_frameworks`, `subtype`).
-
-```python
-from mloda.steward import resolve_feature
-
-result = resolve_feature("my_feature_name")
-if result.feature_group:
-    print(f"Resolved to: {result.feature_group.__name__}")
-else:
-    print(f"Error: {result.error}")
-```
 
 See [Discover Plugins](discover-plugins.md#resolving-feature-names) for the full signature, every `ResolvedFeature` field, and worked examples (options-gated groups, scoping, broken framework declarations). `resolve_feature` is exported from `mloda.provider`, `mloda.user`, and `mloda.steward`; the `ResolvedFeature` return type is exported from `mloda.steward`.
 
@@ -299,19 +262,6 @@ from mloda.provider import FeatureResolutionError, ResolutionDiagnosis, Resoluti
 
 Get documentation for feature groups with optional filtering.
 
-```python
-from mloda.steward import get_feature_group_docs
-
-# Get all feature groups
-all_fgs = get_feature_group_docs()
-
-# Filter by name
-fgs = get_feature_group_docs(name="timestamp")
-
-# Filter by compute framework
-fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
-```
-
 **Parameters:**
 
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
@@ -327,16 +277,6 @@ fgs = get_feature_group_docs(compute_framework="PandasDataFrame")
 
 Get documentation for compute frameworks with optional filtering.
 
-```python
-from mloda.steward import get_compute_framework_docs
-
-# List every framework (is_available flags whether its backend library is installed)
-frameworks = get_compute_framework_docs()
-
-# Only frameworks whose backend library is installed
-available_frameworks = get_compute_framework_docs(available_only=True)
-```
-
 **Parameters:**
 
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
@@ -350,16 +290,6 @@ available_frameworks = get_compute_framework_docs(available_only=True)
 
 Get documentation for extenders with optional filtering.
 
-```python
-from mloda.steward import get_extender_docs
-
-# Get all extenders
-extenders = get_extender_docs()
-
-# Filter by wrapped function type
-extenders = get_extender_docs(wraps="formula")
-```
-
 **Parameters:**
 
 - **name** (`str`, optional): Filter by name (case-insensitive partial match).
@@ -369,3 +299,4 @@ extenders = get_extender_docs(wraps="formula")
 
 **Returns:** `list[ExtenderInfo]` sorted by name.
 
+See [Discover Plugins](discover-plugins.md) for worked examples of all three.

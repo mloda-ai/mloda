@@ -63,27 +63,7 @@ print(result)
 [{'customer_id': ['C001', 'C002', 'C003', 'C004', 'C005'], 'income': [50000, 75000, None, 60000, 85000]}, {'age__avg_aggr': [37.5, 37.5, 37.5, 37.5, 37.5], 'income__sum_aggr': [270000, 270000, 270000, 270000, 270000]}]
 ```
 
-Prefer DataFrames? Install a backend extra:
-
-```bash
-pip install "mloda[pandas]"
-# or mloda[polars], mloda[pyarrow], mloda[duckdb], mloda[spark]
-```
-
-```python
-from mloda.user import mloda, PluginLoader
-PluginLoader.all()
-
-result = mloda.run_all(
-    features=["customer_id", "income", "income__sum_aggr"],
-    compute_frameworks=["PandasDataFrame"],
-    api_data={"SampleData": {
-        "customer_id": ["C001", "C002", "C003"],
-        "income": [50000, 75000, 90000]
-    }}
-)
-print(result)
-```
+The same request also runs on pandas, PyArrow or Polars. Install its extra (for example `pip install "mloda[pandas]"`) and set `compute_frameworks=["PandasDataFrame"]`.
 
 `api_data` passes inline data to mloda. Each top-level key (e.g. `"SampleData"`)
 is a label grouping related columns. Features are matched to columns by name.

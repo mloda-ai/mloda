@@ -3,15 +3,6 @@
 ## Overview
 The mloda Core is the central engine of the mloda framework, orchestrating the interactions between plugins and managing the data transformation pipeline. It handles dependencies between features and computations by coordinating linking, joining, filtering, and ordering operations to ensure optimized data processing.
 
-## Architecture
-The core architecture consists of several key components that work together to provide a flexible and resilient framework for data and feature engineering:
-
-- **Core Engine**: Orchestrates the execution of feature transformations and manages the data flow between different components.
-- **API**: Provides interfaces for interacting with the mloda framework.
-- **Runtime**: Handles the execution of transformations in different environments.
-- **Filter**: Manages data filtering operations.
-- **Prepare**: Handles the preparation and planning of execution steps.
-
 ## Directory Structure
 ```
 mloda/core/
@@ -61,12 +52,3 @@ Nothing under `mloda.core.*` is public API, whether or not a name carries a lead
 public surface is exclusively what `mloda.user`, `mloda.provider` and `mloda.steward` re-export through
 their `__all__` lists. A helper, class or function reachable only via a deep `mloda.core.*` import path
 can be renamed or removed without a deprecation warning or a release-note entry.
-
-## Development
-When extending or modifying the core functionality, consider the following guidelines:
-
-- Maintain backward compatibility with existing plugins
-- Follow the established design patterns and architecture
-- Write comprehensive tests for new functionality
-- Document changes and additions thoroughly
-- Consider performance implications, especially for large-scale data processing

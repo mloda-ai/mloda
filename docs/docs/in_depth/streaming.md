@@ -7,10 +7,17 @@ from mloda.user import mloda
 
 sensor_batch = {"SensorData": {"timestamp": [1, 2], "value": [10.5, 11.2]}}
 
+
+def process(result):
+    """Stands in for your own consumer."""
+    print(result)
+
+
 for result in mloda.stream_all(
     ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
 ):
-    print(result)
+    # each result arrives as its feature group finishes
+    process(result)
 ```
 
 `stream_all` returns a `ResultStream`: it iterates exactly like the old generator and additionally exposes a `.plan` property with the resolved execution plan, plus the run's `run_id` and `plan_id`. Planning happens eagerly, so an unresolvable request raises at the `stream_all` call, not at first iteration; so does a MULTIPROCESSING preflight refusal (such as a missing `flight_server`). `ResultStream.frames()` yields `(PlanStep, frame)` pairs from the same stream instead, pairing each frame with the compute step that produced it.
@@ -28,35 +35,13 @@ results = mloda.run_all(
 # results is a list, all groups are already complete
 ```
 
-`stream_all` yields each result as soon as its group is done:
-
-```python
-from mloda.user import mloda
-
-
-def process(result):
-    """Stands in for your own consumer."""
-    print(result)
-
-
-for result in mloda.stream_all(
-    ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
-):
-    # each result arrives as its feature group finishes
-    process(result)
-```
+`stream_all` (above) yields each result as soon as its group is done.
 
 Both produce the same elements, but `stream_all` yields in completion order while `run_all`'s list follows plan order (positions can differ under THREADING/MULTIPROCESSING).
 
 ## What "streaming" means here
 
-Streaming operates at **feature-group granularity**.  Each yielded value is a **complete** result table for one feature group (e.g. a `pa.Table`).  There is no partial or incremental data within a single group; you always receive the full result.
-
-## What is not supported
-
-- **Row-by-row streaming**: individual rows are not yielded as they are computed.
-- **Partial results**: you cannot observe a feature group's output before it has fully completed.
-- **Chunked input**: a single feature group's computation is not split into smaller streaming chunks.
+Streaming operates at **feature-group granularity**.  Each yielded value is a **complete** result table for one feature group (e.g. a `pa.Table`).  There is no partial or incremental data within a single group; you always receive the full result, never single rows or chunks of a group's input.
 
 ## When to use `stream_all`
 
@@ -139,15 +124,6 @@ for batch in sensor_source():
 ## Pattern 3: One-shot streaming with `stream_all()`
 
 When you don't need plan reuse and want a single-call streaming API, use `mloda.stream_all()`. It internally calls `prepare()` + `stream_run()`.
-
-```python
-from mloda.user import mloda
-
-for result in mloda.stream_all(
-    ["value", "value__mean_aggr"], compute_frameworks=["PandasDataFrame"], api_data=sensor_batch
-):
-    process(result)
-```
 
 `stream_all()` rebuilds the execution plan on every call. For repeated calls, prefer Pattern 2.
 

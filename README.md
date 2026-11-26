@@ -77,28 +77,6 @@ The same request also runs on pandas, PyArrow or Polars. Install its extra (for 
 
 ---
 
-## AI Use Case: LLM Tool Function
-
-Let LLMs request data without writing code:
-
-```python
-# LLM generates this JSON
-llm_request = '["customer_id", {"name": "income__sum_aggr"}]'
-
-# mloda executes it
-from mloda.user import load_features_from_config
-features = load_features_from_config(llm_request, format="json")
-result = mloda.run_all(
-    features=features,
-    compute_frameworks=["PandasDataFrame"],
-    api_data={"SampleData": {"customer_id": ["C001", "C002"], "income": [50000, 75000]}}
-)
-```
-
-More patterns: [Context Window Assembly](#2-context-window-assembly) • [RAG Pipelines](#3-rag-with-feature-chaining)
-
----
-
 ## How mloda is Different
 
 mloda separates **WHAT** you need from **HOW** to get it - through plugins. Existing tools solve parts of this, but none bridge the full gap:
@@ -127,7 +105,7 @@ mloda uses three types of plugins:
 | **ComputeFramework** | Execution backend (Pandas, Spark, etc.) |
 | **Extender** | Hooks for logging, validation, monitoring |
 
-Most of the time, you'll work with **FeatureGroups** - Python classes that define how to access and transform data (see Quick Example above).
+Most of the time, you'll work with **FeatureGroups** - Python classes that define how to access and transform data (see 30-Second Example above).
 
 **Why plugins?**
 - **Steps, not pipelines** - Build transformations. mloda wires them together.
@@ -248,16 +226,7 @@ result = mloda.run_all(features=[Feature(name="risk_assessment")], ...)
 
 ## Compute Frameworks
 
-Mix multiple backends in a single pipeline - mloda routes each feature to the right framework:
-
-```py
-result = mloda.run_all(
-    features=[...],
-    compute_frameworks=["PandasDataFrame", "PolarsDataFrame", "SparkFramework"]
-)
-
-# Results may come from different frameworks based on plugin compatibility
-```
+Mix multiple backends in a single pipeline: mloda routes each feature to the right framework (see [Compute Frameworks](https://mloda-ai.github.io/mloda/chapter1/compute-frameworks/)).
 
 Add your own frameworks - mloda is extensible.
 
@@ -330,17 +299,7 @@ We welcome contributions.
 
 **Plugin development:** see the [mloda-registry guides](https://github.com/mloda-ai/mloda-registry/tree/main/docs/guides) (step-by-step), or scaffold a new package with the [mloda-plugin-template](https://github.com/mloda-ai/mloda-plugin-template).
 
-**Core framework:** start with [`good first issue`](https://github.com/mloda-ai/mloda/labels/good%20first%20issue) or [`help wanted`](https://github.com/mloda-ai/mloda/labels/help%20wanted), then:
-
-```bash
-git clone https://github.com/mloda-ai/mloda.git
-cd mloda
-uv sync --all-extras
-source .venv/bin/activate
-tox  # full test, lint, type-check, and security suite
-```
-
-If `tox` passes, you're set. See [CONTRIBUTING.md](CONTRIBUTING.md) for the full PR workflow and code style, and the [Code of Conduct](CODE_OF_CONDUCT.md).
+**Core framework:** start with [`good first issue`](https://github.com/mloda-ai/mloda/labels/good%20first%20issue) or [`help wanted`](https://github.com/mloda-ai/mloda/labels/help%20wanted). See [CONTRIBUTING.md](CONTRIBUTING.md) for setup, the PR workflow and code style, and the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 - [GitHub Issues](https://github.com/mloda-ai/mloda/issues/) - report bugs or request features
 - [Development Guide](https://mloda-ai.github.io/mloda/development/) - in-depth contributor docs

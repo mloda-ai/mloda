@@ -102,6 +102,7 @@ class ListDirectoryFeatureGroup(FeatureGroup):
     @staticmethod
     def _is_ignored(file_path: str, ignore_patterns: set[str]) -> bool:
         """Checks if a file/directory should be ignored based on .gitignore patterns."""
+        file_path = file_path.replace(os.sep, "/")
         for pattern in ignore_patterns:
             if pattern.endswith("/"):  # Directory exclusion
                 base = pattern.rstrip("/")

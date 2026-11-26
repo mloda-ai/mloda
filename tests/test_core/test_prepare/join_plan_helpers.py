@@ -51,6 +51,7 @@ def single_join_step(
     graph: Graph,
     pre_execution_plan: list[Any],
 ) -> JoinStep | None:
-    join_steps = plan.run_link(link_fw, link_trekker, graph, pre_execution_plan)
+    decided = plan.decide_link_joins(link_fw[0], [link_fw], link_trekker, graph, pre_execution_plan)
+    join_steps = plan._build_decisions(decided[link_fw], graph)
     assert len(join_steps) <= 1
     return join_steps[0] if join_steps else None

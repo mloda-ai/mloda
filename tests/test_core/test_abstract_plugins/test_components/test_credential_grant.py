@@ -10,9 +10,9 @@ from mloda.core.abstract_plugins.components.credential_grant import (
     CredentialLookup,
     StaticGrant,
     _GRANT_HOLDER,
-    _read_granted,
     grant_scope,
 )
+from tests.helpers.credential_grant_reader import _read_granted
 from mloda.core.abstract_plugins.components.credential_scrub import (
     current_identity_secrets,
     current_registered_secrets,
@@ -82,16 +82,11 @@ class TestCredentialLookup:
 
 
 class TestGrantScope:
-    def test_read_outside_any_scope_refuses_naming_the_handle(self) -> None:
-        with pytest.raises(Exception, match="some_handle"):
-            _read_granted("some_handle")
-
     def test_declared_value_is_readable_inside_and_refused_after(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):
             assert _read_granted("h") == _credential()
 
-        with pytest.raises(RuntimeError, match="not available outside a step"):
-            _read_granted("h")
+        assert _GRANT_HOLDER.get() is None
 
     def test_lookup_is_closed_after_exit_even_through_a_context_captured_inside(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):
@@ -176,8 +171,7 @@ class TestGrantScope:
             with pytest.raises(Exception, match="h"):
                 _read_granted("h")
 
-        with pytest.raises(Exception, match="h"):
-            _read_granted("h")
+        assert _GRANT_HOLDER.get() is None
 
     def test_a_second_scope_does_not_see_the_first_scopes_handle(self) -> None:
         with grant_scope(StaticGrant({"first": _credential()})):

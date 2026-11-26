@@ -89,7 +89,7 @@ class TestGraphBuildGraph:
 
         graph = build_graph.graph
         assert len(graph.get_nodes()) == 5
-        assert len(graph.get_edges()) == 4
+        assert len(graph.edges) == 4
 
     def test_add_fg_to_graph(self) -> None:
         feature_group_collection: dict[type[FeatureGroup], set[Feature]] = defaultdict(set)
@@ -123,7 +123,7 @@ class TestGraphBuildGraph:
         assert nodes[g2.uuid].feature.compute_frameworks is None, "Should be None as it is not set in this test!"
 
         # Assert edges
-        edges = graph.get_edges()
+        edges = graph.edges
         assert len(edges) == 1
         assert edges[g2.uuid, g3.uuid].parent_feature_group_class == BaseTestGraphFeatureGroup3
         assert edges[g2.uuid, g3.uuid].child_feature_group_class == BaseTestGraphFeatureGroup3

@@ -4414,16 +4414,21 @@ class TestRedactException:
         assert caught[0].exceptions == (member,)
         assert _LITERAL not in caught[0].message
 
-    def test_reraise_redacted_does_not_raise_when_nothing_was_rebuilt(self) -> None:
+    def test_redact_escaping_exception_propagates_the_same_object_when_nothing_was_rebuilt(self) -> None:
         from mloda.core.abstract_plugins.components.credential_scrub import (
-            reraise_redacted,
+            redact_escaping_exception,
+            registered_secrets_scope,
         )
 
         group = ExceptionGroup("clean", [ValueError(f"m {_LITERAL}")])
         plain = ValueError(_LITERAL)
 
-        reraise_redacted(group, frozenset({_LITERAL}))
-        reraise_redacted(plain, frozenset({_LITERAL}))
+        for raised in (group, plain):
+            with registered_secrets_scope(frozenset({_LITERAL})):
+                with pytest.raises(BaseException) as info:
+                    with redact_escaping_exception():
+                        raise raised
+            assert info.value is raised
 
         assert all(_LITERAL not in str(member) for member in group.exceptions)
         assert all(_LITERAL not in str(arg) for arg in plain.args)

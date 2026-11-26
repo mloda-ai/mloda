@@ -87,14 +87,6 @@ class ResolvedJoin:
     def source(self) -> ResolvedJoinSide:
         return self.left if self.inverted else self.right
 
-    @property
-    def transform_from_feature_group(self) -> type[FeatureGroup]:
-        return self.source.feature_group
-
-    @property
-    def transform_to_feature_group(self) -> type[FeatureGroup]:
-        return self.destination.feature_group
-
     def signature(self, link_of_token: Mapping[UUID, UUID]) -> JoinSignature:
         return JoinSignature(
             link_uuid=self.link_uuid,
@@ -121,6 +113,3 @@ class ResolvedJoinPlan:
     def signatures(self) -> frozenset[JoinSignature]:
         link_of_token = self.link_of_token()
         return frozenset(record.signature(link_of_token) for record in self.records)
-
-    def records_of_link(self, link_uuid: UUID) -> tuple[ResolvedJoin, ...]:
-        return tuple(record for record in self.records if record.link_uuid == link_uuid)

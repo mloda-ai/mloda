@@ -1,11 +1,11 @@
-"""Tests for FilterParameter Protocol and FilterParameterImpl."""
+"""Tests for FilterParameterImpl."""
 
 import re
 from decimal import Decimal
 
 import pytest
 from typing import Any
-from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
+from mloda.core.filter.filter_parameter import FilterParameterImpl
 from mloda._testing.compute_framework.filter_suite import NON_COLLECTION_VALUES
 
 
@@ -219,23 +219,6 @@ def test_filter_parameter_is_immutable() -> None:
 
     with pytest.raises((AttributeError, Exception)):
         filter_param._raw = (("value", 50),)  # type: ignore
-
-
-# --- Protocol compliance tests ---
-
-
-def test_filter_parameter_impl_satisfies_protocol() -> None:
-    """Test FilterParameterImpl implements FilterParameter protocol."""
-    filter_param = FilterParameterImpl.from_dict({"min": 25, "max": 50})
-    assert isinstance(filter_param, FilterParameter)
-
-
-def test_protocol_has_required_properties() -> None:
-    """Test FilterParameter protocol defines all required properties."""
-    expected_properties = ["value", "values", "min_value", "max_value", "max_exclusive"]
-
-    for prop in expected_properties:
-        assert hasattr(FilterParameter, prop), f"FilterParameter should define '{prop}'"
 
 
 # --- Edge case tests ---

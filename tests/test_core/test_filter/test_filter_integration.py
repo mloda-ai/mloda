@@ -124,7 +124,7 @@ class TestGlobalFilter:
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter
         )
 
-        for result in runner.get_result():
+        for _, result in runner.get_result_items():
             res = result.to_pydict()
             assert res == {global_filter_test_basic: [1]}
 
@@ -180,7 +180,7 @@ class TestGlobalFilter:
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter
         )
 
-        results = runner.get_result()
+        results = [value for _, value in runner.get_result_items()]
         assert len(results) == 1
         for result in results:
             assert result.to_pydict() == expected
@@ -203,7 +203,7 @@ class TestGlobalFilter:
             features, parallelization_modes=modes, flight_server=flight_server, global_filter=global_filter
         )
 
-        for result in runner.get_result():
+        for _, result in runner.get_result_items():
             res = result.to_pydict()
             assert res == {"GlobalFilterHasDifferentNameTest": [1]}
 

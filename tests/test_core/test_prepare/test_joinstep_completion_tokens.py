@@ -165,7 +165,7 @@ def _add_branch(
     right_cfw: type[ComputeFramework] = PandasDataFrame,
     plan_the_link: bool = True,
 ) -> Branch:
-    """Two parents joined by ``link`` plus the consumer, the smallest shape run_link accepts."""
+    """Two parents joined by ``link`` plus the consumer, the smallest shape the join planner accepts."""
     left = feature(f"{name}_left", left_cfw, link.left_index)
     right = feature(f"{name}_right", right_cfw, link.right_index)
     child = feature(f"{name}_child", left_cfw)
@@ -356,7 +356,7 @@ def test_add_joinstep_never_makes_a_joinstep_wait_for_itself() -> None:
 
 
 def test_a_chained_append_joinstep_waits_for_the_joinstep_of_the_link_it_was_handed() -> None:
-    """Hand built JoinSteps stand in for run_link's output: the head appends what the tail first completed."""
+    """Hand built JoinSteps stand in for the join planner's output: the head appends what the tail first completed."""
     planned = _planned()
     head_link = Link.append(
         JoinSpec(TokenAppendSource, APPEND_HEAD_INDEX), JoinSpec(TokenAppendSource, APPEND_MIDDLE_INDEX)

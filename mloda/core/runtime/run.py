@@ -838,12 +838,6 @@ class ExecutionOrchestrator:
                 if owner & step_uuid:
                     del self._occupied_cfws[cfw_uuid]
 
-    def get_result(self) -> list[Any]:
-        """
-        Gets the results, ordered like `get_result_items()`.
-        """
-        return [result for _, result in self.get_result_items()]
-
     def get_result_items(self) -> list[tuple[UUID, Any]]:
         """
         Gets the results with their step uuids, ordered by position in the resolved execution

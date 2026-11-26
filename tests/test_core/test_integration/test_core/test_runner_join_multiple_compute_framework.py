@@ -246,7 +246,7 @@ class TestEngineMultipleJoinCfw:
                 flight_server=flight_server,
                 links=links,
             )
-            res = runner.get_result()
+            res = [value for _, value in runner.get_result_items()]
             assert res[0].to_pydict() == {"Join2CfwTest": [10, 2, 3]}
 
         for join_type in ["inner", "left", "right", "outer"]:
@@ -264,7 +264,7 @@ class TestEngineMultipleJoinCfw:
             flight_server=flight_server,
             links=links,
         )
-        res = runner.get_result()
+        res = [value for _, value in runner.get_result_items()]
         assert res[0].to_pydict() == {f_name: [33, 2, 3]}
 
     def test_runner_join_multiple_cfw2_join_to_same_base(

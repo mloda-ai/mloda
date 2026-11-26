@@ -223,19 +223,12 @@ class TestSparkFrameworkClassMethods:
         assert inspect.ismethod(method), "spark_dataframe should be a classmethod (bound method on class)"
         assert method.__self__ is _SparkFramework, "spark_dataframe should be bound to the SparkFramework class"
 
-    def test_spark_session_is_classmethod(self) -> None:
-        """Verify spark_session is a classmethod by checking it's bound when accessed from the class."""
-        method = getattr(_SparkFramework, "spark_session")
-        assert inspect.ismethod(method), "spark_session should be a classmethod (bound method on class)"
-        assert method.__self__ is _SparkFramework, "spark_session should be bound to the SparkFramework class"
-
     def test_methods_callable_on_class(self) -> None:
         """Verify methods can be called on the class."""
         from pyspark.sql import DataFrame
 
         assert _SparkFramework is not None
         assert _SparkFramework.spark_dataframe() == DataFrame
-        assert _SparkFramework.spark_session() == _SparkSession
 
     def test_methods_callable_on_instance(self) -> None:
         """Verify methods can be called on instances."""
@@ -245,7 +238,6 @@ class TestSparkFrameworkClassMethods:
         assert _SparkFramework is not None
         instance = _SparkFramework(mode=ParallelizationMode.SYNC, children_if_root=frozenset())
         assert instance.spark_dataframe() == DataFrame
-        assert instance.spark_session() == _SparkSession
 
 
 class TestPandasDataFrameEngineClassMethods:

@@ -86,7 +86,7 @@ class TestEngineMultipleCfw:
         used_cfws = {step.compute_framework for step in runner.execution_planner.execution_plan}  # type: ignore
         assert used_cfws == {PyArrowTable, SecondCfw}
 
-        for result in runner.get_result():
+        for _, result in runner.get_result_items():
             assert isinstance(result, pa.Table)
             res = result.to_pydict()
             if "MultipleCfwTest1" in res:
@@ -115,7 +115,7 @@ class TestEngineMultipleCfw:
         assert execution_plan[0].compute_framework == PyArrowTable  # type: ignore
         assert execution_plan[2].compute_framework == SecondCfw  # type: ignore
 
-        result = runner.get_result()
+        result = [value for _, value in runner.get_result_items()]
         assert result[0].to_pydict() == {"ChangeCfw": [2, 4, 6]}
 
     def test_runner_change_cfw_first_framework_result(
@@ -140,7 +140,7 @@ class TestEngineMultipleCfw:
             else:
                 assert step.compute_framework in used_cfws  # type: ignore
 
-        result = runner.get_result()
+        result = [value for _, value in runner.get_result_items()]
         for res in result:
             res = res.to_pydict()
             if "MultipleCfwTest1" in res:
@@ -158,5 +158,5 @@ class TestEngineMultipleCfw:
             features, compute_frameworks=COMPUTE_FRAMEWORKS, parallelization_modes=modes, flight_server=flight_server
         )
 
-        res = runner.get_result()
+        res = [value for _, value in runner.get_result_items()]
         assert res[0].to_pydict() == {"ChangeCfwThird": [4, 8, 12]}

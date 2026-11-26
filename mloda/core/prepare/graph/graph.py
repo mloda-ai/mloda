@@ -33,9 +33,6 @@ class Graph:
     def get_nodes(self) -> dict[UUID, NodeProperties]:
         return self.nodes
 
-    def get_edges(self) -> dict[tuple[UUID, UUID], EdgeProperties]:
-        return self.edges
-
     def dfs(self, node: UUID) -> None:
         if node in self.visited:
             return

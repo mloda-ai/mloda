@@ -1,7 +1,7 @@
-"""Guard against run_link constructing a JoinStep with an empty declared side.
+"""Guard against _build_join constructing a JoinStep with an empty declared side.
 
 `set() <= anything` is always True, so an empty `split.left_uuids`/`right_uuids` can slip
-through run_link's subset branch and produce an empty destination/source uuid set. Left
+through the join planner's subset branch and produce an empty destination/source uuid set. Left
 unguarded, that empty set later raises an unguarded StopIteration in compute_framework_executor.
 """
 
@@ -146,8 +146,8 @@ class WiringJoinChild(FeatureGroup):
         return {"wiring_join_child_result"}
 
 
-def test_run_link_calls_validate_join_step_uuids_with_non_empty_sides() -> None:
-    """Proves the guard is wired into run_link, not just independently correct: an ordinary,
+def test_build_join_calls_validate_join_step_uuids_with_non_empty_sides() -> None:
+    """Proves the guard is wired into _build_join, not just independently correct: an ordinary,
     successful join must invoke it with the genuine (non-empty) destination and source uuids."""
     with patch.object(ExecutionPlan, "_validate_join_step_uuids", wraps=ExecutionPlan._validate_join_step_uuids) as spy:
         mloda.prepare(

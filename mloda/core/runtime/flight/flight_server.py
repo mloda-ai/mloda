@@ -69,9 +69,6 @@ class FlightServer:
         path = descriptor.path[0]  # Path descriptor to identify the dataset
         table = reader.read_all()  # Reading the data sent by the client
 
-        # if path in self.tables:
-        #    raise ValueError("Path exists already. Overwritting currently not supported")
-
         self.tables[path] = table  # Storing the data in memory
 
     @staticmethod
@@ -140,11 +137,3 @@ class FlightServer:
             # Dummy schema and empty metadata
             schema = pa.schema([])
             yield flight.FlightInfo(schema, descriptor, [endpoint], -1, -1)
-
-    @staticmethod
-    def list_flight_infos(location: str) -> set[str]:
-        flight = _flight()
-        with flight.FlightClient(location) as client:
-            flight_infos = {x.descriptor.path[0] for x in client.list_flights()}
-        client.close()
-        return flight_infos

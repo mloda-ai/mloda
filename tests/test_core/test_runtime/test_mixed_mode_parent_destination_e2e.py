@@ -46,34 +46,27 @@ from mloda_plugins.compute_framework.base_implementations.pandas.dataframe impor
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import (
     PythonDictFramework,
 )
+from tests.test_core.test_tooling import MlodaTestRunner
 from tests.helpers.tfs_source_feature_groups import TfsRawValPyArrowSource
 from tests.test_core.test_runtime.scheduling_jitter import run_under_scheduling_jitter
-
-
-def _flight_table_keys(location: str | None) -> set[str]:
-    """Location is None until the first test starts the shared session-scoped flight server process."""
-    if location is None:
-        return set()
-    raw = FlightServer.list_flight_infos(location)
-    return {key.decode("utf-8") if isinstance(key, bytes) else key for key in raw}
 
 
 def _flight_table_keys_once_dropped(location: str | None, key: str, timeout: float = 2.0) -> set[str]:
     """Poll until ``key`` leaves the flight server or ``timeout`` passes; return the last snapshot."""
     deadline = time.monotonic() + timeout
-    keys = _flight_table_keys(location)
+    keys = MlodaTestRunner.flight_table_keys(location)
     while key in keys and time.monotonic() < deadline:
         time.sleep(0.01)
-        keys = _flight_table_keys(location)
+        keys = MlodaTestRunner.flight_table_keys(location)
     return keys
 
 
 @pytest.fixture(autouse=True)
 def _clean_flight_server(flight_server: Any) -> Any:
     """Fails a test that leaves a new table on the shared session-scoped flight server, then sweeps it."""
-    before = _flight_table_keys(flight_server.location)
+    before = MlodaTestRunner.flight_table_keys(flight_server.location)
     yield
-    after = _flight_table_keys(flight_server.location)
+    after = MlodaTestRunner.flight_table_keys(flight_server.location)
     try:
         assert not after - before, f"test leaked flight-server table(s): {after - before}"
     finally:
@@ -375,7 +368,7 @@ class TestMixedModeParentDestinationE2E:
         assert doubled is not None
         assert doubled.column("mixed_mode_root_doubled").to_pylist() == [2, 4, 6]
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_parent_resident_root_feature_stays_native_when_it_also_feeds_a_worker_under_threading(
@@ -438,7 +431,7 @@ class TestMixedModeParentDestinationE2E:
 
         assert doubled_result.column("left_val_doubled").to_pylist() == [20, 40, 60]
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
@@ -497,7 +490,7 @@ class TestPureMultiprocessingTransformHopDoesNotLeakFlightTable:
         assert len(result) == 1
         assert result[0].column("mp_transform_doubled").to_pylist() == [2, 4, 6]
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
@@ -769,7 +762,7 @@ class TestCrossFrameworkJoinHopDropTiming:
         # not also leave the run's own cleanup undone, which would otherwise fail _clean_flight_server's
         # own leak check with unrelated noise on top of the real assertion below.
         try:
-            mid_run_keys = _flight_table_keys(flight_server.location)
+            mid_run_keys = MlodaTestRunner.flight_table_keys(flight_server.location)
             assert hop_uuids[0] not in mid_run_keys, (
                 f"cross-framework join hop {hop_uuids[0]} is still on the flight server right after its "
                 f"own join finished: {mid_run_keys}; it should have been dropped incrementally, not left "
@@ -785,7 +778,7 @@ class TestCrossFrameworkJoinHopDropTiming:
 
         assert remaining == []
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_shared_cross_framework_hop_source_root_survives_until_gated_sibling_finishes(
@@ -849,7 +842,7 @@ class TestCrossFrameworkJoinHopDropTiming:
         assert first_result.column("cfw_hop_join_sum").to_pylist() == [11, 22, 33]
 
         assert len(source_root_uuids) == 1, f"expected exactly one source-root upload, got {source_root_uuids}"
-        mid_run_keys = _flight_table_keys(flight_server.location)
+        mid_run_keys = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert source_root_uuids[0] in mid_run_keys, (
             f"the gated sibling has not finished yet: source root {source_root_uuids[0]} must still "
             f"be on the flight server, not dropped just because the join finished first: {mid_run_keys}"
@@ -861,7 +854,7 @@ class TestCrossFrameworkJoinHopDropTiming:
         assert second_step.feature_names == ("cfw_hop_sibling_doubled",)
         assert list(second_result["cfw_hop_sibling_doubled"]) == [20, 40, 60]
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
 
@@ -1307,7 +1300,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         # Drain and finalize in `finally` regardless of the assertion's outcome: see the
         # analogous comment on the cross-framework join hop test above.
         try:
-            mid_run_keys = _flight_table_keys(flight_server.location)
+            mid_run_keys = MlodaTestRunner.flight_table_keys(flight_server.location)
             assert source_root_uuids[0] not in mid_run_keys, (
                 f"TransformFrameworkStep source root {source_root_uuids[0]} is still on the flight "
                 f"server right after its own hop finished: {mid_run_keys}; it should have been "
@@ -1318,7 +1311,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
 
         assert remaining == []
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_plain_hop_source_root_dropped_right_after_its_hop_when_its_class_is_shared_by_an_unrelated_join(
@@ -1410,7 +1403,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             "completion or the run-finalize sweep"
         )
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_shared_root_survives_hop_until_independent_sibling_also_finishes(
@@ -1460,7 +1453,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         assert first_result.column("gap1_hop_doubled").to_pylist() == [2, 4, 6]
 
         assert len(shared_root_uuids) == 1, f"expected exactly one shared-root upload, got {shared_root_uuids}"
-        mid_run_keys = _flight_table_keys(flight_server.location)
+        mid_run_keys = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert shared_root_uuids[0] in mid_run_keys, (
             f"the independent sibling has not finished yet: the shared root's own upload "
             f"{shared_root_uuids[0]} must still be on the flight server, not dropped just because "
@@ -1474,7 +1467,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
         remaining = list(frames)
         assert remaining == []
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_diamond_descendant_of_hop_source_and_consumer_survives_hop_finish(self, flight_server: Any) -> None:
@@ -1586,7 +1579,7 @@ class TestTransformFrameworkStepSourceRootDropTiming:
             "drop until they, too, finish"
         )
 
-        leftover = FlightServer.list_flight_infos(flight_server.location)
+        leftover = MlodaTestRunner.flight_table_keys(flight_server.location)
         assert leftover == set(), f"leaked flight tables: {leftover}"
 
     def test_descendant_hop_stays_safe_while_shared_root_is_also_a_join_source(

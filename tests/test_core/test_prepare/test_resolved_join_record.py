@@ -263,7 +263,7 @@ def _branch(
     left_options: dict[str, Any] | None = None,
     right_options: dict[str, Any] | None = None,
 ) -> Sides:
-    """Two parents joined by ``link`` plus the consumer, the smallest shape run_link accepts."""
+    """Two parents joined by ``link`` plus the consumer, the smallest shape the join planner accepts."""
     left = feature(f"{name}_left", left_cfw, link.left_index, left_options)
     right = feature(f"{name}_right", right_cfw, link.right_index, right_options)
     child = feature(f"{name}_child", child_cfw)
@@ -306,7 +306,7 @@ def _declared_pair() -> Built:
 
 
 def _inverted_pair() -> Built:
-    """The queue keeps the declared orientation, so run_link rediscovers the inverted one."""
+    """The queue keeps the declared orientation, so decide_link_joins rediscovers the inverted one."""
     planned = _planned()
     link = _pair_link()
     sides = _branch(
@@ -316,7 +316,7 @@ def _inverted_pair() -> Built:
 
 
 def _flipped_decline_parts() -> tuple[Planned, Link]:
-    """The queue key finds no children and run_link flips it to the key that declines."""
+    """The queue key finds no children and decide_link_joins flips it to the key that declines."""
     planned = _planned()
     link = Link.left(
         JoinSpec(ResolvedJoinSelfSource, Index((SELF_LEFT_KEY,))),
@@ -507,7 +507,7 @@ def _link_with_a_declared_left_split_across_frameworks_and_a_colliding_third_par
 
 
 def _right_join_farther_right_parent_and_a_colliding_third_parent() -> FallbackBranchCollision:
-    """Lands run_link's final fallback branch; an unrelated third parent shares the source framework."""
+    """Lands the join planner's final fallback branch; an unrelated third parent shares the source framework."""
     planned = _planned()
     link = _pair_link(Link.right)
 
@@ -527,7 +527,7 @@ def _right_join_farther_right_parent_and_a_colliding_third_parent() -> FallbackB
     planned.queue.append((ResolvedJoinUnlinked, {unrelated}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
     _add_child(planned, child, left, nearest_right, far_right, unrelated)
-    # The trekker key matches the queued key directly, so run_link never flips here.
+    # The trekker key matches the queued key directly, so decide_link_joins never flips here.
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
@@ -548,7 +548,7 @@ def _ordered_chain() -> Chain:
 
 
 def _case_override_inverted() -> Built:
-    """The queue keeps the declared orientation, so run_link rediscovers the inverted one; the child sits on the
+    """The queue keeps the declared orientation, so decide_link_joins rediscovers the inverted one; the child sits on the
     declared left framework too, so is_valid_join_step's case helper resolves left/right before the remap runs."""
     planned = _planned()
     link = _pair_link()
@@ -575,7 +575,7 @@ def _case_override_beats_nearer_wrong_framework_left() -> Built:
     planned.queue.append((ResolvedJoinPairRight, {right}))
     planned.queue.append((link, PyArrowTable, PyArrowTable))
     _add_child(planned, child, nearest_left, far_left, right)
-    # The trekker key matches the queued key directly, so run_link never inverts here.
+    # The trekker key matches the queued key directly, so decide_link_joins never inverts here.
     trek(planned.link_trekker, link, (PyArrowTable, PyArrowTable), child.uuid)
 
     return _finish(planned, link, Sides(far_left.uuid, right.uuid, child.uuid))
@@ -676,7 +676,7 @@ def _right_join_farther_right_parent_holds_destination_framework() -> Built:
     planned.queue.append((ResolvedJoinPairRightDescendant, {far_right}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
     _add_child(planned, child, left, nearest_right, far_right)
-    # The trekker key matches the queued key directly, so run_link never flips here.
+    # The trekker key matches the queued key directly, so decide_link_joins never flips here.
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
     return _finish(planned, link, Sides(left.uuid, far_right.uuid, child.uuid))
@@ -701,7 +701,7 @@ def _right_join_both_sides_claim_destination_framework() -> Built:
     planned.queue.append((ResolvedJoinPairRight, {right}))
     planned.queue.append((link, PyArrowTable, PandasDataFrame))
     _add_child(planned, child, nearest_left, far_left, right)
-    # The trekker key matches the queued key directly, so run_link never flips here.
+    # The trekker key matches the queued key directly, so decide_link_joins never flips here.
     trek(planned.link_trekker, link, (PyArrowTable, PandasDataFrame), child.uuid)
 
     # far_left (PyArrowTable) is the sole source-side uuid; nearest_left shares the destination
@@ -848,7 +848,7 @@ def _transform_steps(plan: ExecutionPlan, link: Link) -> list[TransformFramework
 
 
 def _records(plan: ExecutionPlan, link: Link) -> tuple[ResolvedJoin, ...]:
-    return plan.resolved_join_plan.records_of_link(link.uuid)
+    return tuple(record for record in plan.resolved_join_plan.records if record.link_uuid == link.uuid)
 
 
 def _one_record(plan: ExecutionPlan, link: Link) -> ResolvedJoin:
@@ -1099,8 +1099,8 @@ def test_a_third_parent_sharing_the_destination_framework_now_raises_a_missing_l
     assert "ResolvedJoinUnlinked" in error_message
 
 
-def test_a_third_parent_colliding_in_run_links_final_fallback_also_raises() -> None:
-    """Same leak as above, in run_link's other (final fallback) branch."""
+def test_a_third_parent_colliding_in_the_final_fallback_also_raises() -> None:
+    """Same leak as above, in the join planner's other (final fallback) branch."""
     with pytest.raises(ValueError) as exc_info:
         _right_join_farther_right_parent_and_a_colliding_third_parent()
 
@@ -1171,7 +1171,7 @@ def test_a_declined_orientation_builds_no_record_and_one_declined_entry() -> Non
 
 
 def test_a_decline_reached_through_the_inversion_branch_records_the_orientation_it_attempted() -> None:
-    """The queue key finds no children, run_link flips it, and the declined entry must name the flipped key."""
+    """The queue key finds no children, decide_link_joins flips it, and the declined entry must name the flipped key."""
     planned, link = _flipped_decline_parts()
 
     planned.plan.create_execution_plan(planned.queue, planned.graph, planned.link_trekker)
@@ -1705,8 +1705,8 @@ def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]
 
     assert join_steps, "the shape must plan at least one JoinStep for the parity to say anything"
     assert len(resolved.records) == len(join_steps)
-    assert resolved.signatures() == built.plan.join_signatures_at_build
     assert {record.token for record in resolved.records} == {step.uuid for step in join_steps}
+    assert _without_depends(resolved.signatures()) == _without_depends(joinstep_signatures(join_steps))
 
 
 def test_raise_on_join_plan_divergence_raises_on_a_mutated_step() -> None:
@@ -1989,8 +1989,8 @@ def test_a_second_planning_pass_does_not_accumulate_records() -> None:
 def test_an_order_edge_makes_the_consumer_records_depend_on_the_producer_record_tokens() -> None:
     chain = _ordered_chain()
     resolved = chain.plan.resolved_join_plan
-    producer_records = resolved.records_of_link(chain.producer.uuid)
-    consumer_records = resolved.records_of_link(chain.consumer.uuid)
+    producer_records = tuple(r for r in resolved.records if r.link_uuid == chain.producer.uuid)
+    consumer_records = tuple(r for r in resolved.records if r.link_uuid == chain.consumer.uuid)
 
     assert producer_records, "the producer link must build a record for the edge to point at"
     assert consumer_records, "the consumer link must build a record for the edge to hang off"
@@ -2015,8 +2015,8 @@ def test_the_transform_hop_moves_the_source_side_into_the_destination_side(build
     transform_steps = _transform_steps(built.plan, built.link)
 
     assert len(transform_steps) == 1, "the shape must plan exactly one hop for this to say anything"
-    assert transform_steps[0].from_feature_group is record.transform_from_feature_group
-    assert transform_steps[0].to_feature_group is record.transform_to_feature_group
+    assert transform_steps[0].from_feature_group is record.source.feature_group
+    assert transform_steps[0].to_feature_group is record.destination.feature_group
 
 
 def test_an_inverted_hop_carries_data_into_the_declared_right_side() -> None:
@@ -2052,7 +2052,7 @@ def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:
 
     assert len(join_steps) == 1
     assert len(resolved.records) == len(join_steps)
-    assert resolved.signatures() == plan.join_signatures_at_build
+    assert _without_depends(resolved.signatures()) == _without_depends(joinstep_signatures(join_steps))
     for record in resolved.records:
         assert record.destination_framework in record.destination.declared_frameworks
 

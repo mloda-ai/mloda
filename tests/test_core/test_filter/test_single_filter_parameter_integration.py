@@ -6,7 +6,7 @@ import pytest
 
 from mloda.user import SingleFilter
 from mloda.user import FilterType
-from mloda.core.filter.filter_parameter import FilterParameter, FilterParameterImpl
+from mloda.core.filter.filter_parameter import FilterParameterImpl
 
 
 # --- Parameter type tests ---
@@ -20,16 +20,6 @@ def test_parameter_is_filter_parameter_impl() -> None:
         parameter={"min": 25, "max": 50},
     )
     assert isinstance(single_filter.parameter, FilterParameterImpl)
-
-
-def test_parameter_satisfies_filter_parameter_protocol() -> None:
-    """Test SingleFilter.parameter satisfies FilterParameter protocol."""
-    single_filter = SingleFilter(
-        filter_feature="age",
-        filter_type=FilterType.RANGE,
-        parameter={"min": 25, "max": 50},
-    )
-    assert isinstance(single_filter.parameter, FilterParameter)
 
 
 # --- Property accessor tests ---

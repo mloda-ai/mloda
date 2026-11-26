@@ -1460,13 +1460,8 @@ def _rewire(nodes: list[BaseException], memo: dict[int, BaseException]) -> None:
                     attributes[name] = tuple(swapped) if isinstance(value, tuple) else swapped
 
 
-def reraise_redacted(exc: BaseException, literals: frozenset[str]) -> None:
-    """Mask ``exc`` and raise the masked copy when a group had to be rebuilt."""
-    _reraise_forms(exc, _with_escaped(literals) if literals else frozenset())
-
-
 def _reraise_forms(exc: BaseException, forms: frozenset[str]) -> None:
-    """Like reraise_redacted, with the escaped forms already expanded."""
+    """Raise the masked copy of ``exc`` when a group had to be rebuilt; the forms are already expanded."""
     masked = _redact_forms(exc, forms) if forms else exc
     if masked is exc:
         return

@@ -4,7 +4,7 @@
 typed, frozen spec that declares how that option is validated. This page is the single
 source of truth for that model: what a spec may contain, which invariant is checked at
 which moment, what runs against end-user values in what order, and what each failure
-produces.
+produces. Per-invariant test coverage is mapped in `tests/test_core/test_abstract_plugins/test_components/feature_chainer/PROPERTY_MAPPING_TEST_MATRIX.md`.
 
 Two rules carry most of the model:
 
@@ -55,20 +55,7 @@ same fields, its keyword is `strict=` (which sets `strict_validation`), and it k
 declaration readable. `PropertySpec` is the lower-level form: it is the type the builder
 returns and the type the schema is validated against, so reach for it directly when you need
 the class itself (subclassing, `isinstance` checks, or constructing a spec programmatically).
-Both are exported from `mloda.provider`.
-
-```python
-from mloda.provider import property_spec
-
-PROPERTY_MAPPING = {
-    "operation_type": property_spec(
-        "Arithmetic operation",
-        strict=True,
-        allowed_values={"add": "Addition", "sub": "Subtraction"},
-        default="add",
-    ),
-}
-```
+Both are exported from `mloda.provider`; `property_spec("Arithmetic operation", strict=True, allowed_values=..., default="add")` builds the spec above.
 
 The type IS the schema. A raw dict spec is rejected at class definition
 (`... is a dict, not a PropertySpec`), and a field name that does not exist is a plain
@@ -85,7 +72,7 @@ does not understand can be absorbed silently.
 | Match time (parser) | `allowed_values` membership | Each element of a **present** option is in the accepted set | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | `element_validator` | Each element of a **present** option satisfies a predicate | One element | `ValueError`, surfaced to the end user |
 | Match time (parser) | Required presence (config path) | A key that declares no `default` and no `required_when` was provided | The options | Non-match (`False`); a group the request selects by one of its own required keys (no `match_guard` declining) is named in the "No feature groups found" error with the missing key(s) |
-| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the remedy (`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an input further down a chained name the requested feature's `cascade_context_keys`, or a group option) |
+| Match time (parser) | Required presence (string-named path) | Same, after declared defaults and name bindings resolve; `deferred_binding=True` and the source (`in_features`) key are exempt | The name-bound options | Non-match (`False`), with a warning naming the missing key(s); for a `context=True` key the reason also names the context remedy (see [Required presence on the string-named path](#required-presence-on-the-string-named-path)) |
 | Match time (plain group) | Present values, `match_guard`, required presence | Values and `match_guard` in the default matcher of every plain group; required presence on the raw options of a group without a pattern (a patterned plain group keeps the name-path rule) | The options | Non-match (`False`), with the reason recorded (for `match_guard`, only when the spec is strict or declares `expected`) |
 | Match time (mixin) | `match_guard` | The whole value has an acceptable shape | The raw value | Non-match (`False`), reported when the spec is strict or declares `expected` |
 | Match time (mixin) | `MIN/MAX_IN_FEATURES` | In-feature count is within bounds | The in-features | Non-match (`False`) |
@@ -93,31 +80,14 @@ does not understand can be absorbed silently.
 | Class definition (mixin) | Universal-matcher diagnostic | An all-optional `PROPERTY_MAPPING` inherits the configuration matcher, so it matches any name once `in_features` supplies a source | The class | `logger.warning`, unless `ALLOW_UNIVERSAL_MATCHER = True` |
 | Class definition (mixin) | Missing-`in_features` diagnostic | A `PROPERTY_MAPPING` declares no `in_features` key while `MIN_IN_FEATURES >= 1`, and the group inherits `input_features` and the matcher | The class | `logger.warning`, silenced by `MIN_IN_FEATURES = 0` or an `in_features` key |
 
-A spec is constructed inside the class body, so its own rules fire before the class exists.
-Class definition is left with the type rules alone. Within `__post_init__` the
-declared-default check runs last, after the shape rules, because it calls the validators the
-shape rules just certified: a non-callable `element_validator` would otherwise be blamed on
-the default.
+The declared-default check runs last in `__post_init__`, because it calls the validators the shape rules just certified.
 
 Match-time mechanisms run in table order. `element_validator` **replaces** membership rather
 than adding to it: when a key declares one, `allowed_values` is not consulted. Because the
 parser runs before the mixin, an element rejected by membership or by `element_validator`
 short-circuits, and `match_guard` is never reached.
 
-Value validation does not depend on how the feature was created: membership and
-`element_validator` run on **both** match paths, the configuration-based one and the
-string-named one. Required **presence** runs on both too: the string-named path rejects a
-missing required key exactly like the configuration path does
-(see [Required presence on the string-named path](#required-presence-on-the-string-named-path)).
-A key the name encodes, a `deferred_binding=True` key, a declared-default key, and the source
-(`in_features`) key are never falsely reported missing. So `"income__pca_2d"` with no options at
-all still matches, while the same feature group with `pca_svd_solver="bogus"` in its options is
-rejected either way.
-
-`required_when` is the one mechanism that does not live inside a matcher. A class that
-declares it gets its resolved `match_feature_group_criteria` wrapped at class definition,
-and the wrapper runs the predicates after that matcher returns `True`. Overriding the
-matcher therefore keeps the contract, whether the override delegates or not.
+Value validation and required presence run on both match paths (see [Required presence on the string-named path](#required-presence-on-the-string-named-path)): `"income__pca_2d"` with no options still matches, while the same feature group with `pca_svd_solver="bogus"` in its options is rejected either way.
 
 ### A plain feature group
 
@@ -271,9 +241,7 @@ inferred from the spec's other fields.
 an `element_validator`. With neither, the accepted set is empty and the key rejects every
 value, so the spec could never match. The constructor refuses to build it.
 
-An `element_validator` **replaces** membership, so when a key declares one, `allowed_values` is
-never consulted at match time and this rule does not apply: even an empty `allowed_values` is
-inert there, because the validator, not membership, decides.
+An `element_validator` replaces membership (see the lifecycle table), so this rule does not apply to a key that declares one: even an empty `allowed_values` is inert there.
 
 ## Declared defaults must be honored
 
@@ -335,10 +303,7 @@ if is_no_default(spec.default):
     ...  # the key declares no default, so it is required
 ```
 
-Do **not** write `spec.default is NO_DEFAULT`. `is_no_default` is a type test rather than an
-identity test on purpose: a second imported copy of the module (an editable install alongside
-site-packages, or an `importlib.reload`) carries its own sentinel object, and an identity
-check would read that copy's sentinel as a *declared* default.
+Do **not** write `spec.default is NO_DEFAULT`: `is_no_default` is a type test because a second imported copy of the module (an editable install, an `importlib.reload`) carries its own sentinel, which an identity check would read as a declared default.
 
 `required_when` is for a *conditional* requirement, not for optionality: never write a
 predicate that always returns `False` to make a key optional.
@@ -369,24 +334,11 @@ while an explicit group option stays its own feature. `options_with_defaults` re
 pre-materialization contexts (e.g. `resolve_subtype` internals) and for read sites the framework hands
 pre-default options, `input_features` above all.
 
-For an engine-driven request, intake has already filled everything and the plan is frozen, so
-`run_calculate_feature` skips the compute-boundary call for a prepared FeatureSet. Direct `FeatureSet` use
-that bypasses the engine gets the fill there, and collapsing twins raise instead of merging.
-
-A materialized default or bound value is never a declared option, so it never conflicts with a
-name-bound value: the name-agreement check reads the caller's own keys only.
-
 Both sites run *after* resolution, so materialization never changes **resolution matching** (filter
 matching runs after intake and does observe materialized values, see below). It does change
 how features **group**: intake materialization deliberately canonicalizes default-equivalent twins,
 so a feature that passes a declared default explicitly and one that omits it become equal and merge
 into a single feature (with a warning naming the duplicated request; twins differing only in a name-bound value merge the same way) instead of computing twice. Twins on nested compute framework sets, or narrowed onto a pinned filter, merge after resolution and warn too; the merged feature then keeps the inputs of both requests.
-
-One consequence for authors: `input_features` is called with the DECLARED, pre-default options (the
-engine stashes them before intake rebinds, and a child inherits the same pre-default options), so a
-declared default does NOT reach an `input_features` read site. A group that wants it there calls
-`options_with_defaults` itself (see
-[A plain feature group](#a-plain-feature-group)).
 
 Which stage sees which view of the options:
 
@@ -396,9 +348,7 @@ Which stage sees which view of the options:
 | `input_features()` and child option inheritance | declared (pre-default) |
 | Splitting, planning, filter matching, `validate_input_features`, compute (`calculate_feature` and its extenders) | effective (post-default, name-bound values filled) |
 
-The splitting row assumes intake has run, which is every engine-driven request. On the direct `FeatureSet`
-path the safety net materializes inside `run_calculate_feature`, which is after
-`validate_input_features`, not before it.
+The splitting row assumes intake has run, which is every engine-driven request (`run_calculate_feature` then skips its compute-boundary call for a prepared FeatureSet). Direct `FeatureSet` use that bypasses the engine materializes inside `run_calculate_feature`, after `validate_input_features`, and collapsing twins raise instead of merging.
 
 Filter matching is the one place the same classmethod sees both views: `GlobalFilter` calls
 `match_feature_group_criteria` again after intake, passing the filter feature's own options
@@ -415,13 +365,7 @@ graph_type = feature.options.get("graph_type")  # the declared default when the 
 group and context. Because the framework has already materialized any declared default before
 `calculate_feature` runs, reading it back gives a four-level precedence: the caller's explicit value
 (which must agree with the name), then the name-bound value, then the declared spec default, then the
-call-site `default`. (Subtlety: materialization fills any key whose value `is None`, so an explicit
-`None` is replaced by a concrete spec default, while the other falsy values `0`/`False`/`""` are kept. That "None means absent" rule is the default; a spec
-opts a single key out with `allow_explicit_none=True`, after which an explicit `None` overrides even a
-concrete default and is honored across the match-time value mechanisms: it counts as present for the
-required-presence and `required_when` checks and is seen by membership, `element_validator`, and
-`match_guard`, while every flagless spec is unchanged. The flag defaults to `False`, so the existing
-`is not None` presence tests keep working.)
+call-site `default`. An explicit `None` counts as absent, so a concrete spec default replaces it (`0`, `False` and `""` are kept). Set `allow_explicit_none=True` on a key to keep an explicit `None`; it then counts as present and reaches every validator.
 
 ```py
 graph_type = feature.options.get("graph_type", "spring")  # explicit value; else the spec default; else "spring"
@@ -451,17 +395,22 @@ PROPERTY_MAPPING = {
 }
 ```
 
+Features with different group parameters belong to different feature group instances; the same group parameter with different context shares one (unless a context key is forwarded or declared, see [Context propagation](#context-propagation)):
+
+```python
+from mloda.user import Feature, Options
+
+context = {"aggregation_type": "sum", "in_features": "sales"}
+production = Feature("placeholder", Options(group={"data_source": "production"}, context=context))
+staging = Feature("placeholder", Options(group={"data_source": "staging"}, context=context))  # different instance
+```
+
 A caller who places the key explicitly in `Options(group=...)` or `Options(context=...)`
 overrides the spec's classification, except that a `group_only=True` key in the context is refused.
 
 ## How a name-parsed value binds to a key
 
-A name owns the feature for a group when one of its effective name patterns identifies the group, and an owned
-name is authoritative for every value it encodes. Every named capture group `(?P<key>...)` of an
-owned name that is a PROPERTY_MAPPING key binds to that key and is validated like an option, even
-when the option is also present; an unsupported value is a recorded match-time rejection. This
-covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`).
-A key declared with `credential_handle_spec` may not be a named capture; the class definition raises.
+Ownership, binding and agreement are defined in [Name Ownership and Agreement](feature-chain-parser.md#name-ownership-and-agreement). Binding covers a secondary capture and an `element_validator`-only spec (one with no `allowed_values`). A key declared with `credential_handle_spec` may not be a named capture; the class definition raises.
 
 By default, `_get_prefix_patterns()` collects `PREFIX_PATTERN` and `SUFFIX_PATTERN`. A custom or
 inherited override supplies the effective patterns used by matching, `name_bindings`, `resolve_subtype`,
@@ -484,10 +433,6 @@ A pattern with only positional groups falls back to the legacy rule: the first c
 to the single key whose `allowed_values` already contain it. A positional pattern whose keys share
 a reachable value is rejected at class-definition time, so migrate it to named capture groups.
 
-A declared option for a key the name binds, and a non-empty `in_features`, must agree with the
-name; a contradiction aborts the match (`MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a
-warning). Only the caller's own keys are compared, so a materialized default never conflicts. See
-[Name Ownership and Agreement](feature-chain-parser.md#name-ownership-and-agreement).
 
 ## Required presence on the string-named path
 
@@ -498,11 +443,7 @@ resolved. Exempt from the check: a declared default, a `required_when` key, a
 `deferred_binding=True` key, and the source key (`in_features`), whose presence the name prefix
 supplies and whose count `MIN/MAX_IN_FEATURES` enforces (an absent `in_features` counts as zero on the configuration path).
 
-A plain `FeatureGroup` (no mixin) without a pattern is checked the same way on its raw options, once a matching
-rule has accepted the name. A missing key records the reason and logs at debug level, so no warning is emitted per
-candidate probe. A plain group with a pattern keeps the name-path rule above, and a name no pattern owns keeps the
-default matcher's verdict. Migration: a bare `property_spec("...")` on a plain group is now required; declare
-`default=None` for an optional key.
+A plain `FeatureGroup` without a pattern is checked the same way on its raw options (see [A plain feature group](#a-plain-feature-group)); a missing key records the reason and logs at debug level, so no warning is emitted per candidate probe. A name no pattern owns keeps the default matcher's verdict.
 
 A flagged missing key makes the match a **non-match**: a warning names the group, the feature,
 and the missing key(s), and the resolution-failure report names the missing key(s) too. For missing
@@ -574,15 +515,7 @@ PROPERTY_MAPPING = {
   - WorkerPoolFeatureGroup (option value): option 'concurrency' must be a whole number of 1 or more, got str '4' [code: match_guard_rejected]
 ```
 
-The `expected` reason above, the strict match_guard reason (`Property value <text> rejected by
-match_guard for '<key>'`), `strict_validation`'s `failed validation` and `not found in mapping`
-messages all follow
-the same echo rule: they echo the rejected value only when its type is exactly `str`, `int`,
-`float` or `bool`, with its text cut to about 30 characters, or when it is `None`. Any other value,
-a `str` subclass, a numpy scalar, or an int too large to safely print, is named by its type only.
-All of these reasons can reach the "No feature groups found" error and the filter near-miss
-warnings, so do not declare `expected` or `strict_validation` on a key that can carry a secret such
-as a token or a connection string.
+Rejection messages (the `expected` reason above, the strict `match_guard` reason `Property value <text> rejected by match_guard for '<key>'`, and `strict_validation`'s `failed validation` and `not found in mapping`) echo the value only if it is `None` or exactly a `str`, `int`, `float` or `bool` (text cut to about 30 characters; `str` values are credential-scrubbed). Any other value, a `str` subclass, a numpy scalar or an int too large to print, is named by its type. These messages reach the "No feature groups found" error and the filter near-miss warnings, so never set `expected` or `strict_validation` on a key that can hold a secret such as a token or a connection string.
 
 ## Conditional requirements with `required_when`
 
@@ -615,19 +548,14 @@ PROPERTY_MAPPING = {
 When the predicate returns `True` and the option is absent, the match fails and the non-match records
 a rejection reason naming the owning class and the missing key, so the resolution-failure report
 carries a near-miss line for it; entries with `required_when` are otherwise optional. For a key
-declared with `context=True` (the default), the reason also names the remedy
-(`Options(context=...)`; for a direct input feature the consumer's `propagate_context_keys`, for an
-input further down a chained name the requested feature's `cascade_context_keys`, or a group option). The predicate must be pure and must not raise. It
+declared with `context=True` (the default), the reason also names the same context remedy as on the string-named path. The predicate must be pure and must not raise. It
 is callable by construction, and a non-bool truthy return counts as `True`.
 
 The enforcement is installed on the class, not on one matcher, so overriding
 `match_feature_group_criteria` does not lose it: the predicates still run after the override
 returns `True`. Nested guards (an override that delegates into an already guarded parent) do
 not stack: only the outermost one evaluates, so the predicates run exactly once per match call.
-The matcher must be a `classmethod`; a `staticmethod` matcher on a class that declares
-`required_when` is rejected at class definition. A plain function, callable instance, or
-`functools.partial` (no `classmethod` or `staticmethod` descriptor) is rejected on any class that
-carries this guard or the name-path presence guard.
+The matcher must be a `classmethod`; a staticmethod or a descriptor-less matcher is rejected at class definition.
 
 The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
 `match_feature_group_criteria` after the class body escapes it.
@@ -670,67 +598,8 @@ Fix it with `MIN_IN_FEATURES = 0` if the group is source-less, or declare an `in
 
 ## Migrating from the dict form
 
-Spec dicts are gone. Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`; an
-unmigrated spec raises at class definition, naming the class, the key, and the remedy.
+Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`, and a non-`PropertySpec` value raises at class definition, naming the class, the key and the remedy. Renames: `validation_function` is `element_validator` (one element per call, not a stringified sequence; a whole-container check moves to `match_guard`), `type_validator` is `match_guard`, a present `default: None` entry is the `default=None` field, and accepted values live under `allowed_values`.
 
-| Retired | Now |
-| --- | --- |
-| Any spec dict, including the flattened form (accepted values sharing one dict with the flags) | `PropertySpec(...)`, with accepted values under `allowed_values` |
-| `validation_function` | `element_validator` |
-| `type_validator` | `match_guard` |
-| A present `default: None` entry marking a key optional | the `default=None` field (an omitted `default` means the key is required) |
-| `strict_validation` as a spec-dict key | the `strict_validation` field (`strict=` on `property_spec`) |
-
-Misspelled and retired field names need no dedicated machinery any more: they are keyword
-arguments that do not exist, so the constructor raises `TypeError` at the line where the spec
-is written, and mypy reports them before the code runs.
-
-One semantic change came with the callable renames. `element_validator` receives one element
-per call for every container type; the old `validation_function` saw a stringified sequence
-(`"('a', 'b')"`). A validator written to inspect a whole container
-(`isinstance(x, list) and all(...)`) must become a per-element rule, or move to `match_guard`
-if it really is a whole-value check.
-
-## Where each invariant is pinned
-
-| Invariant | Test |
-| --- | --- |
-| `PropertySpec` construction: defaults, immutability, `allowed_values` normalization, flag and callable rules, strict needs a value space | `tests/.../feature_chainer/test_property_spec_type.py` |
-| `name_converter` applies to named captures, runs before validation, and a raising one is a rejected value | `tests/.../feature_chainer/test_parsed_name_bindings.py` |
-| Unknown or mistyped field caught by mypy at author time | `tests/.../feature_chainer/test_property_spec_author_time.py` |
-| `PROPERTY_MAPPING` accepts nothing but `PropertySpec`, and the pipeline behaves as before | `tests/.../feature_chainer/test_property_spec_hard_break.py` |
-| The constructor IS the schema (no key set left to curate) | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |
-| Shape rules, relocated from class definition to construction | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
-| Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |
-| Declared defaults materialized into runtime options | `tests/test_core/test_abstract_plugins/test_options_with_defaults.py` |
-| A declared handle stays on the declaring feature (a non-declaring consumer forwards it like any group option) and is never a named capture | `tests/test_core/test_abstract_plugins/test_components/test_credential_handle_spec.py` |
-| A credential value in a non-pointer option is refused at plan time | `tests/test_core/test_abstract_plugins/test_components/test_credential_handle_spec.py` |
-| `consumer_local_keys` and the explicit-allowlist override in `Options.inherit_from` | `tests/test_core/test_abstract_plugins/test_components/test_options_inherit_from.py` |
-| Declared defaults materialized at the compute boundary | `tests/test_core/test_abstract_plugins/test_materialize_defaults_boundary.py` |
-| Declared defaults materialized at intake, canonicalizing default-equivalent twins | `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
-| A context key that does not reach an input group declaring it as a group option logs one plan warning | `tests/test_core/test_core/test_uncascaded_context_warning.py` |
-| Filter criteria matching observes effective options | `tests/test_core/test_filter/test_filter_criteria_effective_options.py` |
-| The shared declaration mechanics: the per-key validator | `tests/.../test_components/test_declaration_surface.py` |
-| A pattern-less group: enforced `required_when`, and defaults it applies itself | `tests/.../feature_chainer/test_required_when_enforced_on_override.py`, `tests/test_core/test_abstract_plugins/test_intake_default_canonicalization.py` |
-| A plain group enforces required keys, strict values and `match_guard`, also through an override | `tests/.../feature_chainer/test_name_path_required_presence.py`, `test_strict_validation_returns_false.py`, `test_required_when_enforced_on_override.py` |
-| A plain group's rejection reasons reach the failure report | `tests/test_core/test_prepare/test_first_pass_rejection_recording.py` |
-| Container invariance, no stringification, str-as-scalar, dict-as-composite, empty containers | `tests/.../feature_chainer/test_property_mapping_sequence_unpacking.py` |
-| `scalar=True` refuses containers at match time, in `run(parameters=...)` and in `validate_property_values` | `test_property_mapping_sequence_unpacking.py`, `tests/test_core/test_api/test_prepare_run.py`, `tests/.../test_components/test_validate_property_values.py` |
-| Present option values validated on the string-named path too | `tests/.../feature_chainer/test_name_path_validates_option_values.py` |
-| Required presence on the string-named path: the mandatory non-match, the retired env var stays ignored, and the `deferred_binding` / `in_features` exemptions | `tests/.../feature_chainer/test_name_path_required_presence.py` |
-| A declared option or `in_features` that contradicts an owned name aborts the match, and the env var downgrades it | `tests/test_core/test_abstract_plugins/test_components/test_forwarded_name_mismatch.py` |
-| Empty operands and the source count on the name path | `tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py` |
-| `required_when` survives an overridden matcher, runs exactly once, and demands a classmethod | `tests/.../feature_chainer/test_required_when_enforced_on_override.py` |
-| A `required_when` non-match records its reason, so the failure report names the key and its owner | `tests/test_core/test_prepare/test_required_when_rejection_recording.py` |
-| `required_when` end to end, including the context-key remedy in the failure report | `tests/.../feature_chainer/test_property_mapping_required_when.py` |
-| Plugin specs behave identically across containers | `tests/test_plugins/feature_group/experimental/test_property_mapping_container_invariance.py` |
-| `property_spec` builder surface | `tests/.../feature_chainer/test_property_spec_builder.py` |
-| A `group_only` key in the context is refused at plan time | `tests/test_core/test_api/test_prepare_run.py` |
-| Rejection reasons surfaced to the end user | `tests/test_core/test_prepare/test_identify_feature_group_error_message.py` |
-| The all-optional universal-matcher diagnostic and its `ALLOW_UNIVERSAL_MATCHER` escape hatch | `tests/.../feature_chainer/test_universal_optional_matcher.py` |
-| `NAME_ONLY_MATCH` (name-owned match only, no configuration path) | `tests/.../feature_chainer/test_feature_chain_parser_mixin.py` (`TestNameOnlyMatch`) |
-| The missing-`in_features` definition-time diagnostic and its zero-source rejection | `tests/.../feature_chainer/test_missing_in_features_declaration.py` (the diagnostic), `tests/.../feature_chainer/test_in_feature_count_gate_name_sources.py` (the option-path zero-source non-match records no rejection) |
-| `expected` reports a `match_guard` rejection on a non-strict spec, with the capped value echo | `tests/test_core/test_prepare/test_first_pass_rejection_recording.py` |
 
 ## Runtime parameters
 
@@ -806,35 +675,11 @@ Group options remain the choice when the value should be part of feature identit
 resolution at every level, and a feature group author can pull a key level by level
 with `inherit_context_keys`.
 
-Group options forward to input features by default. A feature group keeps consumer-local keys off its
-upstreams with `forward_group_exclude`, an allowlist, or `forward_group=False` on the
-child `Feature`. `propagate_context_keys` (or `cascade_context_keys`) is the caller-side
-**push**; its counterpart is the child-side **pull** `inherit_context_keys`. For both author-side
-flows see
-[Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
+Author-side forwarding (`forward_group_exclude`, an allowlist, `forward_group=False`, the child-side pull `inherit_context_keys`) is covered in [Forwarding Options to Input Features](feature-chain-parser.md#forwarding-options-to-input-features).
 
-A forwarded or declared key also splits FeatureSets by value. A key declared with
-`Feature(..., split_context_keys=...)` (see
-[Splitting on hand-set context](feature-chain-parser.md#splitting-on-hand-set-context-with-split_context_keys))
-splits the same way. A context key delivered via the
-push (`propagate_context_keys` or `cascade_context_keys`) or the pull
-(`inherit_context_keys`) enters the
-child's `inherited_context_keys`, and features whose value for that key differs (e.g.
-`env=prod` vs `env=staging`) then compute in separate FeatureSets, one per value;
-equal values still share one computation. The split is per-FeatureGroup and by value,
-not by provenance: once any feature in that scope forwards the key, every feature in
-scope splits on it, including a sibling that set the same key directly in plain
-context. A key that no feature in scope ever forwards or declares stays metadata and does
-not split. This isolates per-value results that previously collapsed into one computation
-where a single value silently won. Same-named copies that differ in undeclared context keys
-but read the same inputs on one framework are rejected; use the same values,
-`cascade_context_keys`, or a forwarded group option. This also covers root features
-requested directly more than once and declared option keys that the feature name does not
-bind. Such a key (every declared key the name does not bind: all of them when the group
-has no name patterns, the patterns do not match, or they cannot read the name) splits by
-value without a marker when a consumer reads one of the copies; `split_context_keys` is
-what splits copies that are all direct requests. A source group's keys declared
-`routing=True` are exempt, since they only pick the source. Any other declared key splits or is rejected.
+A forwarded or declared key also splits FeatureSets by value, as does a key declared with `Feature(..., split_context_keys=...)` (see [Splitting on hand-set context](feature-chain-parser.md#splitting-on-hand-set-context-with-split_context_keys)). A key delivered via the push or the pull enters the child's `inherited_context_keys`, and features whose value differs (e.g. `env=prod` vs `env=staging`) compute in separate FeatureSets; equal values share one. The split is per-FeatureGroup and by value, not by provenance: once any feature in scope forwards the key, every feature in scope splits on it, including a sibling that set it directly in plain context. A key no feature in scope forwards or declares stays metadata.
+
+Same-named copies that differ in undeclared context keys but read the same inputs on one framework are rejected (this covers root features requested directly more than once and declared option keys the name does not bind); use the same values, `cascade_context_keys`, or a forwarded group option. A declared key the name does not bind (all of them when the group has no name patterns, the patterns do not match, or they cannot read the name) splits by value without a marker when a consumer reads one of the copies; `split_context_keys` splits copies that are all direct requests. A source group's keys declared `routing=True` are exempt, since they only pick the source.
 
 ### Previewing the forwarded options
 

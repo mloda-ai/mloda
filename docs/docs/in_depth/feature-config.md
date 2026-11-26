@@ -18,8 +18,14 @@ from mloda.user import load_features_from_config, mloda
 
 config = '''
 [
-    "simple_feature",
-    {"name": "configured_feature", "options": {"param": "value"}}
+    "customer_id",
+    {
+        "name": "sales__sum_aggr",
+        "in_features": ["sales"],
+        "context_options": {
+            "report": "weekly"
+        }
+    }
 ]
 '''
 
@@ -27,47 +33,15 @@ features = load_features_from_config(config)
 result = mloda.run_all(
     features,
     compute_frameworks=["PandasDataFrame"],
-    api_data={"SampleData": {"simple_feature": [1, 2], "configured_feature": [3, 4]}},
+    api_data={"customer_data": {"customer_id": [1, 2, 3], "sales": [10.0, 20.0, 30.0]}},
 )
 ```
 
-The config only builds the `Feature` objects; every name in it still needs a source, here `api_data`.
+The config only builds the `Feature` objects; every name in it still needs a source, here `api_data`. `sales__sum_aggr` resolves to the aggregation Feature Group, which reads its source from the name; `in_features` states the same source explicitly, and `context_options` rides along as metadata.
 
 ## JSON Format
 
-The configuration must be a JSON array. Each item can be:
-
-### 1. Simple String
-
-A plain feature name string:
-
-```json
-["feature_name"]
-```
-
-### 2. Feature Object
-
-An object with `name` and optional configuration:
-
-```json
-[
-    {
-        "name": "feature_name",
-        "options": {"key": "value"}
-    }
-]
-```
-
-### 3. Mixed Configuration
-
-Combine strings and objects:
-
-```json
-[
-    "simple_feature",
-    {"name": "configured_feature", "in_features": ["source_feature"]}
-]
-```
+The configuration must be a JSON array. Each item is a feature name string or a feature object with `name` and optional fields (below); strings and objects can be mixed.
 
 ## FeatureConfig Fields
 
@@ -83,45 +57,27 @@ Combine strings and objects:
 | `column_index` | integer | No | Index for multi-output features (adds `~N` suffix) |
 | `keep_index` | boolean | No | Return the key columns with the result (default `false`) |
 | `index` | array of strings | No | Unique key columns of the feature; the columns `keep_index` returns |
+| `implementation` | string or array | No | Framework implementation of an operation group (next to `feature_group`) |
 | `feature_group` | string | No | Feature Group class name the feature resolves to (scope read by feature resolution and filter matching) |
 
 ## Configuration Approaches
 
-### Simple Options
+### Options
 
-Use `options` for simple key-value configuration:
+Use `options` for simple key-value configuration, or `group_options` and `context_options` to separate group and context parameters:
 
 ```json
 [
+    {"name": "my_feature", "options": {"window_size": 7, "aggregation": "sum"}},
     {
-        "name": "my_feature",
-        "options": {
-            "window_size": 7,
-            "aggregation": "sum"
-        }
+        "name": "my_other_feature",
+        "group_options": {"data_source": "production"},
+        "context_options": {"aggregation_type": "sum"}
     }
 ]
 ```
 
-### Modern Group/Context Options
-
-For explicit separation of group and context parameters:
-
-```json
-[
-    {
-        "name": "my_feature",
-        "group_options": {
-            "data_source": "production"
-        },
-        "context_options": {
-            "aggregation_type": "sum"
-        }
-    }
-]
-```
-
-Note: `options` and `group_options`/`context_options` are mutually exclusive.
+`options` and `group_options`/`context_options` are mutually exclusive.
 
 ### Feature Group Scope
 
@@ -135,15 +91,9 @@ When two enabled sources declare the same column (for example a shared join key)
 ]
 ```
 
-The config form takes a non-empty class-name string only, since JSON cannot express a class object. In Python, `Feature("subject_token", feature_group=ClaimsReader)` also accepts the class object.
-
-The string matches the named class and its subclasses, preferring the most specific one, exactly like the class object. Naming an abstract family base therefore selects the concrete subclass, so the config does not have to name a compute-framework-specific class.
+The config form takes a non-empty class-name string only (JSON cannot express a class object); it matches the named class and its subclasses. The scope rules, ties and caveats are in [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md#4-scope-a-feature-to-one-source-shared-keys-across-sources).
 
 For an operation group such as `AggregatedFeatureGroup`, add an `implementation` key next to `feature_group` (a string, or a list of strings for a chain) to choose the framework implementation, e.g. `{"name": "sales__sum_aggr", "implementation": "PandasAggregation"}`. See [Compute Framework Integration](compute-framework-integration.md#pinning-an-implementation).
-
-The scope narrows candidates but does not break ties between them. If the run enables two compute frameworks whose concrete subclasses both match, the family base stays ambiguous and raises, exactly as the bare name does; enable one framework for the run. Two classes with the same name in different modules likewise both match and stay ambiguous, and the root `FeatureGroup` base is rejected.
-
-The scope is read by feature resolution and by filter matching, and stays excluded from feature identity, so requesting the same name scoped to two different sources in one list raises `ValueError: Duplicate feature setup: <name>` rather than silently dropping one; see [Feature Group resolution errors](troubleshooting/feature-group-resolution-errors.md).
 
 `keep_index` (boolean, default `false`) and `index` (non-empty array of column names) are top-level fields that set `Feature.keep_index` and `Feature.index`, e.g. `{"name": "income", "keep_index": true, "index": ["customer_id"]}`. A nested `in_features` dict rejects both.
 
@@ -243,78 +193,21 @@ The top-level `in_features` array cannot be combined with an `in_features` key i
 
 ## Multi-Column Features
 
-Access specific columns from multi-output features using `column_index`:
-
-```json
-[
-    {
-        "name": "pca_result",
-        "column_index": 0
-    }
-]
-```
-
-This produces a feature named `pca_result~0`.
+`column_index` selects one column of a multi-output feature: `{"name": "pca_result", "column_index": 0}` produces `pca_result~0`.
 
 ## Context Propagation
 
-By default, context parameters are local to each feature and do not propagate through feature chains. Use `propagate_context_keys` to push specific context keys to the feature's direct input features:
+By default, context parameters are local to each feature and do not propagate through feature chains. `propagate_context_keys` pushes the listed context keys to the feature's direct input features (one hop); `cascade_context_keys` pushes them through every input down the chain:
 
 ```json
 [
     {
         "name": "my_feature",
-        "context_options": {
-            "session_id": "abc123",
-            "window_function": "sum"
-        },
-        "propagate_context_keys": ["session_id"]
+        "context_options": {"session_id": "abc123", "window_function": "sum"},
+        "propagate_context_keys": ["session_id"],
+        "cascade_context_keys": ["window_function"]
     }
 ]
 ```
 
-In this example, `session_id` is pushed to the direct input features of `my_feature`, while `window_function` stays local. The push is one hop; see [Context propagation](property-mapping.md#context-propagation) for inputs further down a chain.
-
-`cascade_context_keys` pushes the listed keys on through every input down the chain. The value is then visible to every feature group down the chain, see [Context propagation](property-mapping.md#context-propagation) for the rules.
-
-```json
-[
-    {
-        "name": "my_feature",
-        "context_options": {
-            "session_id": "abc123"
-        },
-        "cascade_context_keys": ["session_id"]
-    }
-]
-```
-
-## Complete Example
-
-```python
-from mloda.user import load_features_from_config, mloda
-
-config = '''
-[
-    "customer_id",
-    {
-        "name": "sales__sum_aggr",
-        "in_features": ["sales"],
-        "context_options": {
-            "report": "weekly"
-        }
-    }
-]
-'''
-
-features = load_features_from_config(config)
-
-result = mloda.run_all(
-    features,
-    compute_frameworks=["PandasDataFrame"],
-    api_data={"customer_data": {"customer_id": [1, 2, 3], "sales": [10.0, 20.0, 30.0]}}
-)
-```
-
-`sales__sum_aggr` resolves to the aggregation Feature Group, which reads its source from the name.
-`in_features` states the same source explicitly, and `context_options` rides along as metadata.
+Here `session_id` reaches the direct inputs of `my_feature` and `window_function` every input down the chain. A context key not listed stays local. See [Context propagation](property-mapping.md#context-propagation) for the rules.

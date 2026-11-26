@@ -52,66 +52,18 @@ For example:
 - `point1&point2__haversine_distance` - GeoDistance with two points
 - `age&income&score__cluster_kmeans_3` - Clustering with multiple features
 
-### Unified Parser Architecture
-
-The modernized `FeatureChainParser` provides a unified approach through the `match_configuration_feature_chain_parser` method that handles:
-
-- **String-based features**: Traditional pattern matching with regex
-- **Configuration-based features**: Modern approach using Options and PROPERTY_MAPPING
-- **Dual validation**: Features can be validated using either or both approaches
-
 ### Name Ownership and Agreement
 
 One resolution, `FeatureChainParserMixin.resolve_feature_name`, returns a `NameResolution` (`owned`, `bindings`, `sources`, `value_for(key)`). Matching, the rejection diagnostic, `input_features`, `_extract_source_features` and `_resolve_operation` all read it.
 
-- **Ownership:** a name owns the feature when its `PREFIX_PATTERN` identifies the group, and an owned name is authoritative for every value it encodes.
+- **Ownership:** a name owns the feature when the group's effective name pattern (`PREFIX_PATTERN` or `SUFFIX_PATTERN`) identifies it, and an owned name is authoritative for every value it encodes.
 - **Binding:** every named capture of an owned name that is a `PROPERTY_MAPPING` key is bound and validated like an option, even when the option is also set; an unsupported value is a recorded match-time rejection. A key's `name_converter` converts the captured text before validation (a raising one is a rejected value). A legacy positional capture binds only a value already in the key's `allowed_values`, unconverted.
 - **Agreement:** a declared option for a key the name binds, and a non-empty `in_features`, must agree with the name (`in_features` must equal the name's direct sources). A contradiction aborts the match with an error; `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An agreeing `in_features` supplies the input features, so their options and `feature_group` scope are kept; a downgraded mismatch uses the name's bare sources instead. An override that calls only `match_parser_criteria` skips this check. A plugin that parses a value from the name by hand (one its captures do not bind) runs the option checks (not the `in_features` one) with `cls.validate_hand_parsed_bindings(feature_name, bindings, options)`.
 - **Operands:** every name or config source must be non-empty and the count within `MIN_IN_FEATURES` / `MAX_IN_FEATURES` (name path: recorded rejection; config path: silent non-match).
 
-### Options Architecture: Group vs Context Parameters
+### Options and Configuration-Based Creation
 
-The new `Options` class separates parameters into two categories:
-
-- **Group Parameters**: Affect Feature Group resolution and splitting (stored in `options.group`)
-- **Context Parameters**: Metadata that doesn't affect splitting (stored in `options.context`)
-
-```python
-from mloda.user import Options
-
-# New Options architecture
-options = Options(
-    group={
-        "data_source": "production",  # Affects Feature Group splitting
-    },
-    context={
-        "aggregation_type": "sum",    # Doesn't affect splitting
-        "in_features": "sales"
-    }
-)
-```
-
-### Configuration-Based Feature Creation
-
-Modern feature creation uses the Options architecture:
-
-```python
-from mloda.user import Feature, Options
-
-# Traditional string-based approach:
-feature = Feature("sales__sum_aggr")
-
-# Modern configuration-based approach:
-feature = Feature(
-    "placeholder",  # Will be replaced during processing
-    Options(
-        context={
-            "aggregation_type": "sum",
-            "in_features": "sales"
-        }
-    )
-)
-```
+`Options` separates group parameters (they affect feature group resolution and splitting) from context parameters (metadata that does not split); see [Parameter classification](property-mapping.md#parameter-classification). Configuration-based creation (`Feature("placeholder", Options(context={...}))` instead of a chained name) is shown in [Feature Group Matching](feature-group-matching.md#matching-examples).
 
 ## FeatureChainParserMixin
 
@@ -208,6 +160,8 @@ class TimeWindowFeatureGroup(TimeReferenceMixin, FeatureChainParserMixin, Operat
         return sources | {Feature(self.get_reference_time_column(options))}
 ```
 
+The mixin's `input_features` handles both forms: an owned name supplies its sources (an agreeing `in_features` keeps its options and scope), otherwise `in_features` does. Custom code checks source counts with `validate_in_feature_count` (raises) or `in_feature_count_reason` (returns the message or None).
+
 #### 3. Custom `match_feature_group_criteria()` Method
 
 Override for the rules a `PROPERTY_MAPPING` spec cannot express, then delegate. Conditional
@@ -224,6 +178,10 @@ class SklearnPipelineFeatureGroup(FeatureChainParserMixin, OperationFeatureGroup
 
         return super().match_feature_group_criteria(feature_name, options, data_access_collection)
 ```
+
+`match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception; the engine contains it as a `match hook` near-miss for that candidate, but the rejection reason is the more useful one. Containment covers plugin raises only: a framework-owned raise, such as a forwarded option value contradicting the feature name, still aborts the whole resolution.
+
+`match_parser_criteria` does not run `match_guard`, the in_features count or name agreement; a widening override keeps the value and guard checks with `cls.passes_option_declarations(options)`.
 
 #### 4. Operation Resolution with `_resolve_operation()`
 
@@ -243,167 +201,13 @@ class AggregatedFeatureGroup(FeatureChainParserMixin, FeatureGroup):
 
 The three-arg form `cls._resolve_operation(feature_name, options, config_key)` is also supported for contexts where the name and options are already separate (e.g., `match_feature_group_criteria`).
 
+In `calculate_feature`, read every value through the mixin helpers (`_resolve_operation`, `_extract_single_source_feature`) so the name stays authoritative when it owns the feature. Multi-source groups use `_extract_validated_source_features`, which enforces `MIN_IN_FEATURES` / `MAX_IN_FEATURES` and rejects empty operands on a direct call.
+
 #### 5. Whole-Value Validation with `match_guard`
 
-Give a spec a `match_guard` callable to validate the shape of the raw option value. The mixin calls it after basic matching succeeds, and a falsy return makes `match_feature_group_criteria` return False (a non-match, not an error).
-
-Reach for `match_guard` when the constraint is about the value as a whole (a list of strings, a dict, an ordering). Reach for `element_validator` with `strict_validation=True` when the constraint is about each element on its own.
-
-```py
-def _is_list_of_strings(value):
-    return isinstance(value, list) and all(isinstance(item, str) for item in value)
-
-class GroupAggregation(FeatureChainParserMixin, FeatureGroup):
-    PROPERTY_MAPPING = {
-        "partition_by": PropertySpec(
-            "Columns to partition by",
-            match_guard=_is_list_of_strings,
-            expected="a list of strings",
-        ),
-    }
-```
-
-`expected` names what the guard accepts, so a rejection is reported in the resolution-failure output instead of staying a silent non-match.
-
-The guard is only called when the option is present (not None). Validators must be pure functions, since they may be called several times during resolution. If the guard raises, the value counts as rejected (match returns False), unless the raise is marked with `escalate_match_abort`.
+Give a spec a `match_guard` callable (with an `expected` phrase to report the rejection) to validate the shape of the raw option value; `element_validator` with `strict_validation=True` judges each element instead. The guard runs only when the option is present (not None, unless the spec sets `allow_explicit_none=True`), and a falsy return is a non-match, not an error. A guard that raises counts as a rejection too, unless the raise is marked with `escalate_match_abort`. Validators must be pure, since they may be called several times during resolution.
 
 The full model, which invariant fires at which moment, the precedence between the two callables, and what a validator receives for each container type, lives in one place: [PROPERTY_MAPPING Configuration](property-mapping.md).
-
-## Modern Implementation in Feature Groups
-
-### 1. Define PROPERTY_MAPPING Configuration
-
-The modern approach uses `PROPERTY_MAPPING` to define parameter validation and classification:
-
-```py
-from mloda.provider import FeatureChainParserMixin, FeatureGroup
-from mloda.user import FeatureName
-from mloda.provider import DefaultOptionKeys, PropertySpec
-
-class MyFeatureGroup(FeatureChainParserMixin, FeatureGroup):
-    PREFIX_PATTERN = r"__(?P<operation_type>[a-zA-Z_]+)_operation$"
-    MAX_IN_FEATURES = 1
-
-    PROPERTY_MAPPING = {
-        # Feature-specific parameter
-        "operation_type": PropertySpec(
-            "Operation to apply",
-            allowed_values={
-                "sum": "Sum aggregation",
-                "avg": "Average aggregation",
-                "max": "Maximum aggregation",
-            },
-            context=True,  # Context parameter (the default)
-            strict_validation=True,  # Strict validation
-        ),
-        # Source feature parameter
-        DefaultOptionKeys.in_features: PropertySpec(
-            "Source feature for the operation",
-            strict_validation=False,  # Flexible validation
-        ),
-    }
-```
-
-### 2. Update match_feature_group_criteria
-
-`FeatureChainParserMixin` already implements this; override it only to add your own checks, and reach the parser through `cls.match_parser_criteria`:
-
-```py
-@classmethod
-def match_feature_group_criteria(cls, feature_name, options, data_access_collection=None):
-    return cls.match_parser_criteria(feature_name, options)
-```
-
-`match_parser_criteria` calls the parser with the class's `PROPERTY_MAPPING` and patterns and turns a rejected option value into a non-match. Calling `FeatureChainParser` directly from a match hook lets that rejection escape as an exception; the engine contains it as a `match hook` near-miss for that candidate, but the rejection reason is the more useful one. Containment covers plugin raises only: a framework-owned raise, such as a forwarded option value contradicting the feature name, still aborts the whole resolution.
-
-`match_parser_criteria` does not run `match_guard`, the in_features count or name agreement; a widening override keeps the value and guard checks with `cls.passes_option_declarations(options)`.
-
-### 3. Modernize input_features Method
-
-The mixin's `input_features` already handles both forms: an owned name supplies its sources (an agreeing `in_features` keeps its options and scope), otherwise `in_features` does. Override it only to add extras:
-
-```py
-def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-    sources = super().input_features(options, feature_name) or set()
-    return sources | {Feature("reference_time")}
-```
-
-Custom code checks source counts with `validate_in_feature_count` (raises) or `in_feature_count_reason` (returns the message or None).
-
-### 4. Update calculate_feature Method
-
-Read each value through the mixin helpers, so the name stays authoritative when it owns the feature:
-
-```py
-@classmethod
-def calculate_feature(cls, data, features):
-    for feature in features.features:
-        operation_type = cls._resolve_operation(feature, "operation_type")
-        in_feature_name = cls._extract_single_source_feature(feature)
-
-        # Process using extracted values
-        # ... implementation logic
-```
-
-Multi-source groups use `_extract_validated_source_features`, which enforces `MIN_IN_FEATURES` / `MAX_IN_FEATURES` and rejects empty operands on a direct call.
-
-### 5. Advanced PROPERTY_MAPPING Features
-
-#### Element Validators
-
-For per-element rules that a fixed value list cannot express:
-
-```py
-PROPERTY_MAPPING = {
-    "dimension": PropertySpec(
-        "Number of dimensions for reduction",
-        strict_validation=True,
-        element_validator=lambda x: isinstance(x, int) and x > 0,
-    ),
-}
-```
-
-#### Default Values
-
-Specify default values for optional parameters:
-
-```py
-PROPERTY_MAPPING = {
-    "window_size": PropertySpec(
-        "Rolling window length in days",
-        allowed_values={"7": "7-day window", "30": "30-day window"},
-        default="7",  # Default value
-        strict_validation=True,
-    ),
-}
-```
-
-Under strict validation a declared default must itself be an accepted value; that is
-checked when the `PropertySpec` is constructed. Omitting `default` makes the key required;
-`default=None` makes it optional with no value to apply. See
-[Optional keys](property-mapping.md#optional-keys).
-
-#### Group vs Context Classification
-
-There is no `group` field: a group parameter is `context=False`.
-
-```py
-PROPERTY_MAPPING = {
-    # Group parameter - affects Feature Group resolution
-    "data_source": PropertySpec(
-        "Data source to read from",
-        allowed_values={"production": "Production data", "staging": "Staging data"},
-        context=False,  # Group parameter
-        strict_validation=True,
-    ),
-    # Context parameter - doesn't affect resolution
-    "algorithm_type": PropertySpec(
-        "Clustering algorithm",
-        context=True,  # Context parameter (the default)
-        strict_validation=False,  # Flexible validation
-    ),
-}
-```
 
 ## Forwarding Options to Input Features
 
@@ -556,72 +360,4 @@ merge directives identical across parents when you want them to share the comput
 
 ## Multiple Result Columns with ~ Pattern
 
-Some feature groups produce multiple result columns from a single input feature. mloda provides utilities to work with these patterns seamlessly.
-
-### Producer Side: Creating Multi-Column Outputs
-
-Use `apply_naming_convention()` to create properly named columns:
-
-```py
-from mloda.provider import FeatureGroup, FeatureSet
-
-class MultiColumnProducer(FeatureGroup):
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Compute results (e.g., from sklearn OneHotEncoder)
-        result = encoder.transform(data)  # Returns 2D numpy array (n_samples, n_features)
-
-        # Automatically apply naming convention
-        feature_name = str(features.get_name_of_one_feature())
-        named_columns = cls.apply_naming_convention(result, feature_name)
-        # Returns: {"category__onehot_encoded~0": data, "~1": data, "~2": data}
-
-        return named_columns
-```
-
-### Consumer Side: Discovering Multi-Column Features
-
-Use `resolve_multi_column_feature()` to automatically discover columns:
-
-```py
-class MultiColumnConsumer(FeatureGroup):
-    def input_features(self, options: Options, feature_name: FeatureName) -> set[Feature] | None:
-        # Request base feature without ~N suffix
-        return {Feature("category__onehot_encoded")}
-
-    @classmethod
-    def calculate_feature(cls, data: Any, features: FeatureSet) -> Any:
-        # Automatically discover all matching columns
-        columns = cls.resolve_multi_column_feature(
-            "category__onehot_encoded",
-            set(data.columns)
-        )
-        # Returns: ["category__onehot_encoded~0", "~1", "~2"]
-
-        # Process all discovered columns
-        result = sum(data[col] for col in columns)
-
-        feature_name = str(features.get_name_of_one_feature())
-        return {feature_name: result}
-```
-
-### Manual Column Access (Legacy)
-
-For backwards compatibility, you can still access specific columns:
-
-```python
-# Manual specification of specific columns
-base_feature = "category__onehot_encoded"  # Creates all columns
-specific_column = "category__onehot_encoded~0"  # Access first column
-another_column = "category__onehot_encoded~1"  # Access second column
-```
-
-**Recommended**: Use automatic discovery (`resolve_multi_column_feature`) instead of manual enumeration for cleaner, more maintainable code.
-
-## Benefits
-
-- **Consistent Naming**: Enforces naming conventions across feature groups
-- **Composability**: Enables building complex features through chaining
-- **Configuration-Based Creation**: Simplifies feature creation in client code
-- **Validation**: Ensures feature names follow expected patterns
-- **Multi-Column Support**: Handle transformations that produce multiple result columns
+A group that produces several columns from one input names them `feature~N` with `apply_naming_convention()` and consumers discover them with `resolve_multi_column_feature()`; see [Multiple Result Columns](multiple_result_columns.md).

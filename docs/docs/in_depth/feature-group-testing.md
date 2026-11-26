@@ -49,9 +49,6 @@ An operation group's serving Implementation must be imported (or plugins loaded)
 
 ### 1. Feature Name Pattern Matching
 
-Test that your feature group correctly identifies feature names it should handle.
-
-**Example:**
 ```python
 from mloda_plugins.feature_group.experimental.clustering.base import ClusteringFeatureGroup
 from mloda.user import Options
@@ -65,9 +62,6 @@ A bare direct call records nothing; wrap one call in `collect_match_rejections()
 
 ### 2. Input Feature Extraction
 
-Test that your feature group correctly extracts source features from feature names.
-
-**Example:**
 ```python
 from mloda.user import Feature, FeatureName, Options
 from mloda_plugins.feature_group.experimental.aggregated_feature_group.base import AggregatedFeatureGroup
@@ -81,9 +75,6 @@ assert Feature("sales") in input_features
 
 ### 3. Calculation Logic
 
-Test that your feature group correctly transforms input data into output features.
-
-**Example:**
 ```python
 import pandas as pd
 from mloda.user import Feature
@@ -101,9 +92,6 @@ assert "sales__sum_aggr" in result.columns
 
 ### 4. Configuration-Based Feature Creation
 
-Test that your feature group correctly parses features from configuration options.
-
-**Example:**
 ```python
 from mloda.provider import collect_match_rejections
 from mloda.user import Options
@@ -128,7 +116,6 @@ assert "not_an_aggregation" in reasons["AggregatedFeatureGroup"].reason
 
 Test that your feature group works correctly with the mloda API.
 
-**Example:**
 ```python
 from mloda.user import mloda
 from mloda.user.pandas import PandasDataFrame
@@ -146,7 +133,6 @@ assert "sales__sum_aggr" in result[0].columns
 
 When testing a FeatureGroup that depends on another FeatureGroup, you can inject mock data by combining `disabled_feature_groups` with `api_data`:
 
-**Example:**
 ```python
 from typing import Any
 
@@ -195,8 +181,3 @@ results = mloda.run_all(
 
 assert "hand_score" in results[0].columns
 ```
-
-This pattern is useful when:
-- Testing derived features without running expensive upstream computations
-- Providing controlled test data for reproducible tests
-- Isolating the feature under test from its dependencies

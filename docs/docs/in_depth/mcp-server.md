@@ -76,11 +76,11 @@ numbers, booleans, lists or tables (no TOML dates or times), and `in_features` i
 
 `[mcp.credentials.<handle>]` registers a credential for groups that read it with `read_credential` and for database
 sources. The table holds environment variable names and file paths, never values. Startup fails, naming the handle and
-the field, if a variable is unset, empty or blank or a file is missing, empty or blank. A field value must be an
+the field (not the variable), if a variable is unset, empty or blank or a file is missing, empty or blank. A field value must be an
 environment variable name (letters, digits and `_`, not starting with a digit); a name with `.` or `-` fails
 startup, while an underscore-only token such as `sk_live_abc` still passes the rule. An empty field name is refused.
 Handle names are free-form (for example `pii-hmac-key`), non-empty, without control characters, and may not start with
-`_auto_` or equal a source alias. The unset or blank error names the handle and field, not the variable. Secret files
+`_auto_` or equal a source alias. Secret files
 are read again for every request, so a rotated file takes effect without a restart; an environment variable needs a
 restart. A group declares its handle option with `credential_handle_spec`; set it in
 `[mcp.options]`.
@@ -148,13 +148,14 @@ Credentials a group reads at run time with `read_credential` stay here too (see 
   result, and a request cannot set data-access options (such as `data_access_handle` or `connection_handle`).
 - A request may set only the option keys listed in `allow_options` (default: none). Any other key in `options`,
   `group_options` or `context_options`, nested `in_features` configs included, is refused as `policy_denied` by
-  JSON pointer, never by value. Data-access keys stay refused even when listed. Options encoded in a chained feature
+  JSON pointer, never by value. Options encoded in a chained feature
   name are not covered. `mloda explain` and `mloda run` are local and not restricted. `mloda_describe_feature` shows
   `caller_settable` for each option and refuses option keys not in `allow_options`.
 - A plugin marks a key it never wants from a caller (a base URL, an API key) with
   `PropertySpec(..., caller_settable=False)`. MCP requests and `mloda_describe_feature` refuse that key as
   `policy_denied` even when `allow_options` lists it, and describe shows `caller_settable: false`. The match is by key
-  name across all installed plugins. A declared credential handle option is always refused this way. A planned
+  name across all installed plugins. A declared credential handle option is always refused this way, and data-access
+  keys stay refused even when `allow_options` lists them. A planned
   feature name that binds the key through the plugin's name pattern is refused too, even when `[mcp.options]` sets
   it, at `/features/<i>` for a requested name and `/features` for a planned one. `[mcp.options]` defaults and the
   local CLI may still set it.
@@ -180,8 +181,6 @@ Credentials a group reads at run time with `read_credential` stay here too (see 
 `default_classification` replaces `unclassified` for every leaf column without its own entry, including columns a
 FeatureGroup loads itself; derived features still take the strictest input. A permissive label such as `public` exposes
 all of them in the preview, so prefer listing columns in `[mcp.classification]`.
-
-Upgrade note: MCP callers that set options are refused until you list the keys in `allow_options`.
 
 ## Local HTTP
 

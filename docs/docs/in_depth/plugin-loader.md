@@ -38,22 +38,6 @@ Lists loaded plugin modules, optionally filtered by category.
 ### `display_plugin_graph(plugin_category: str | None)`
 Shows plugin dependencies as a graph.
 
-## Example
-
-```python
-# Create loader and load plugins
-loader = PluginLoader()
-loader.load_all_plugins()
-
-# List loaded modules
-modules = loader.list_loaded_modules()
-
-# Show dependencies
-graph = loader.display_plugin_graph()
-```
-
-Plugins are automatically discovered from `.py` files in these directories.
-
 ## Entry Points
 
 Separately installed packages publish plugins through three entry-point groups, one per plugin base type:
@@ -138,5 +122,5 @@ fg_keys = loader.load_entry_points(group="mloda.feature_groups")
 - **Reusable directly.** The traceback-frame attribution above is importable directly: `traceback_blames_root(exc, root)` from `mloda.provider` or `mloda.steward`, for downstream packages building their own optional-dependency guards. Callers must exclude their own module's root from the roots they pass in, the same way `load_entry_points` excludes the entry point's own module, so a namespace collision can't misattribute the caller's own bug to that root.
 - **Own-package failures raise.** A declared root that contains the entry point's own module (`mloda` or `mloda.community` for a `mloda.community.foo` plugin) is never eligible for name or traceback attribution, so a genuine failure in the plugin's own code still raises even if it shares a name with a declared optional root.
 - **Same top-level package.** A missing module under the entry point's own top-level package re-raises, unless its name sits under an eligible declared root (a `mloda.community` plugin declaring `mloda.enterprise`); traceback attribution alone does not rescue it. When the missing module is the entry point's own module or a parent package (files gone, metadata left), the error names the entry point, distribution and module, and suggests `pip install --force-reinstall <distribution>`.
-- **Policies apply, after import.** A registration denied by an installed [plugin policy](plugin_registry.md#governance) raises inside `register()`; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration only, not import: the manifest module is imported before the policy applies, so installing a package implies trusting its import side effects.
+- **Policies apply, after import.** A registration denied by an installed [plugin policy](plugin_registry.md#governance) raises inside `register()`; the loader catches the denial, skips the class, leaves its key out of the returned list, and logs one warning per denied key per registry instance. The policy gates registration, not import (see [Registration-Time Enforcement](plugin_registry.md#registration-time-enforcement)).
 - **Discovery is cached per process.** An in-place edit of an existing `entry_points.txt` needs `all(force_reload=True)` or `reset_cache()`. The plugin module list is cached too, so a plugin file added to the plugin package at runtime needs the same.

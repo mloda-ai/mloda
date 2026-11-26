@@ -14,8 +14,7 @@ Feature groups specify which compute frameworks they support through the `comput
 @classmethod
 def compute_framework_rule(cls) -> set[type[ComputeFramework]]:
     """Define the compute frameworks this feature group supports."""
-    return {PandasDataFrame}  # Support only Pandas
-    # Or return True to support all available compute frameworks
+    return {PandasDataFrame}  # Support only Pandas; the default None supports all available frameworks
 ```
 
 ### Declaring an Operation Unsupported on a Framework
@@ -53,33 +52,9 @@ Use resolve_feature(name, options=...) to debug feature resolution.
 For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
-The rejected framework is named as a near-miss with its reason rather than
-vanishing into a generic "unknown feature" message. Prefer this hook over
-raising a generic error from inside `calculate_feature`: the rejection happens
-during planning rather than at compute time, and the message is built for you.
+Prefer this hook over raising from `calculate_feature`: it rejects during planning, not at compute time, with a built message.
 
-The debug inspector `resolve_feature(name)` reflects the hook too, because it
-runs the **same matcher over the same candidate universe as the engine** (it
-delegates to `IdentifyFeatureGroupClass`). Its `ResolvedFeature` result carries
-`supported_compute_frameworks` and `unsupported_compute_frameworks` (evaluated
-under default options unless you pass `options=`, see
-[Discover Plugins](discover-plugins.md)).
-
-Two distinct gaps both resolve to `feature_group=None` rather than appearing
-runnable:
-
-- **Unsupported on every framework.** The feature matches a group, but
-  `supports_compute_framework` rejects every installed framework. Resolution
-  fails with the capability error above.
-- **Uninstalled framework.** The only framework a matching group declares is not
-  installed (its backend library is absent, so `is_available()` is `False`). The
-  candidate universe drops unavailable frameworks before matching, so the group
-  maps to an empty framework set and resolution fails closed with the ordinary
-  `No feature groups found for feature name: '<name>'.` error. It does **not**
-  read as runnable on a framework you cannot actually run.
-- **Install hint.** When a user names a framework in `compute_frameworks` or `output_framework`,
-  or pins it on a requested feature or an input feature, and it is unavailable, the error shows its `INSTALL_HINT` (for example
-  `pip install "my-plugin[backend]"`). Subclasses inherit it.
+`resolve_feature(name)` reflects the hook too: its `ResolvedFeature` carries `supported_compute_frameworks` and `unsupported_compute_frameworks` (evaluated under default options unless you pass `options=`, see [Discover Plugins](discover-plugins.md)). A group whose frameworks are all unsupported or uninstalled resolves to `feature_group=None` (see [Compute Frameworks](../chapter1/compute-frameworks.md) for the uninstalled-framework error and `INSTALL_HINT`). An unavailable `output_framework` raises `ValueError` with the install hint.
 
 ### Declaring capability per subtype
 
@@ -141,9 +116,7 @@ matrix is its implementations' `supported` intersected with the group's
 implementations serve; `accepts` narrows features at match time without
 showing there. `resolve_feature(name, options=...)` gives the exact answer.
 
-**The data user** sees the outcome on `resolve_feature(name, options=...)`:
-`subtype` (e.g. `ntile_2`) and `subtype_family` (`ntile`, parametric
-instances only).
+**The data user** reads `subtype` and `subtype_family` on `resolve_feature(name, options=...)` (see [Discover Plugins](discover-plugins.md#resolving-feature-names)).
 
 ### Empty Results
 
@@ -243,20 +216,7 @@ objects, since `len()` on either runs a real `COUNT(*)` query rather than readin
 
 ### Timezone and unit validation (merge and filter engines)
 
-A custom compute framework's merge and filter engines can opt into the
-[comparison contract](comparison-contract.md), which rejects incompatible
-timezone/unit combinations in equi-joins, as-of joins, and datetime filter bounds.
-The guard is **opt-in**: set `provides_column_semantics = True` on your
-`BaseMergeEngine` / `BaseFilterEngine` subclass and implement
-`_column_semantics(data, column)` to report the column's native semantics. Leave the
-flag at its default `False` (for a framework with no temporal intent) and the guard
-is skipped entirely, so you are never forced to implement the hook. An engine that
-opts in but forgets the hook raises a clear error rather than silently skipping
-validation. As-of joins always require `_column_semantics` regardless of the flag,
-since ordered time columns are intrinsic to the operation.
-
-What a framework does with the zone of a timezone-aware column when data moves in or out is in the
-[time zone computation rule](timezone-computation.md#compute-frameworks).
+A custom compute framework's merge and filter engines can opt into the [comparison contract](comparison-contract.md#per-engine-capability) by setting `provides_column_semantics = True` and implementing `_column_semantics(data, column)`. What a framework does with the zone of a timezone-aware column when data moves in or out is in the [time zone computation rule](timezone-computation.md#compute-frameworks).
 
 ### Operation Groups: one group, one Implementation per framework
 
@@ -293,7 +253,7 @@ When several frameworks can run a step, the choice order is: frameworks the step
 
 - `prefers a matching version`: a divergent implementation was skipped although it would otherwise have won.
 - `reads in place`: a source read from a connection in the collection costs one conversion when served off a framework that accepts that connection, so the work stays in the database ahead of list order.
-- `loads natively`: without a `compute_frameworks` list, a source whose group declares `neutral_type` pays one conversion off a framework that takes that type (or serves the group through an Implementation); a step such a source pulls onto its framework reports it too. `ApiDataFG` is a stock source declaring it.
+- `loads natively`: on a run without a `compute_frameworks` list, a source group declaring `neutral_type` (the stock `ApiDataFG`) pulls its step onto a framework that takes that type as is or serves the group through an Implementation (see [Framework Selection Process](#framework-selection-process)).
 - `<reason>; runs a version that differs: skips NaN in sum`: the step runs a divergent implementation (only option, pinned, or no matching alternative). A reasonless `NOT_IMPLEMENTED` record reads `not implemented`.
 
 ### Pinning an implementation
@@ -314,17 +274,14 @@ An unknown name, a name shared by two loaded classes, an implementation that is 
 - The per-framework time window, missing value, text cleaning, geo distance and sklearn scaling, encoding and pipeline classes are replaced by `TimeWindowFeatureGroup` (`PandasTimeWindow`, `PyArrowTimeWindow`), `MissingValueFeatureGroup` (`PandasMissingValueImputation`, `PyArrowMissingValueImputation`, `PythonDictMissingValueImputation`), `TextCleaningFeatureGroup` (`PandasTextCleaning`, `PythonDictTextCleaning`), `GeoDistanceFeatureGroup` (`PandasGeoDistance`), `ScalingFeatureGroup` (`PandasScaling`), `EncodingFeatureGroup` (`PandasEncoding`) and `SklearnPipelineFeatureGroup` (`PandasSklearnPipeline`). The replaced sklearn classes are `PandasScalingFeatureGroup`, `PandasEncodingFeatureGroup` and `PandasSklearnPipelineFeatureGroup`. Artifact declaration, save and load stay on the group; an `Implementation` has no artifact hooks and reaches the artifact through the `FeatureSet`.
 - `PandasClusteringFeatureGroup`, `PandasDimensionalityReductionFeatureGroup`, `PandasNodeCentralityFeatureGroup` and `PandasForecastingFeatureGroup` are replaced by `ClusteringFeatureGroup` (`PandasClustering`), `DimensionalityReductionFeatureGroup` (`PandasDimensionalityReduction`), `NodeCentralityFeatureGroup` (`PandasNodeCentrality`) and `ForecastingFeatureGroup` (`PandasForecasting`). Names, options and results are unchanged, and forecasting artifacts saved before the move still load.
 - A subclass of one of these group bases that implemented the abstract methods for another framework now gets no framework: write an `Implementation[<group>]` for that framework instead.
-- Implementations are found by import: import the implementation modules or call `PluginLoader.all()`.
 - An allow or deny list that names an old class must name the group or the implementation instead.
-- Plan locks recorded before the move no longer match.
 - A subclass of an old per-framework class must subclass the group (or the implementation) instead.
 - Aggregations and time windows treat NaN like null on every framework: skipped, and not counted by `count`; time window first and last keep it.
-- Time window: a sum over no values gives 0 on Pandas and PyArrow, like aggregations (single-column windows used to give NaN on Pandas and null on PyArrow, and PyArrow multi-column rows NaN).
+- Time window: a sum over no values gives 0 on Pandas and PyArrow, like aggregations.
 - PythonDict text cleaning turns NaN into an empty string, like Pandas.
 - PyArrow and PythonDict imputation treat NaN as missing (skipped in statistics and filled) and break `mode` ties by the smallest value, like Pandas; string ties change too.
-- Grouped imputation leaves rows with a null or NaN group key out of every group: statistics fill them from the column, `ffill`/`bfill` leave them. PythonDict used to group those keys, and Pandas `ffill`/`bfill` erased their values. PythonDict now also treats NaT, `pd.NA`, numpy and Decimal NaN as missing, in keys and values.
+- Grouped imputation leaves rows with a null or NaN group key out of every group: statistics fill them from the column, `ffill`/`bfill` leave them. PythonDict also treats NaT, `pd.NA`, numpy and Decimal NaN as missing, in keys and values.
 - PyArrow `std` and `var` windows use the sample statistic like Pandas, so a one-row window is null for a single column and NaN for a multi-column feature.
-- `feature_group="<old per-framework class>"` becomes `implementation="<implementation>"`, or `compute_framework=...`, for every moved family.
 - A steward disables one implementation with `PluginCollector.add_disabled_implementation_classes`.
 - A provider overrides a step in one of three places. On an implementation subclass (the most derived implementation for a group and framework serves it): the computation (for example `_perform_aggregation`, `_perform_window_operation`, `_perform_imputation`, `_apply_operation`, `_calculate_distance`, `_extract_training_data`, `_apply_scaler`, `_apply_encoder`, `_apply_pipeline`, `_perform_clustering`, `_perform_reduction`, `_calculate_centrality`, `_perform_forecasting`), `_add_result_to_data` (the loop's `add_column`), and `calculate` for any other callable it passes, such as `column_semantics`. On a `ComputeFramework` subclass: `extract_column_names` (the `columns` callable of `aggregate`, `window`, `impute`, `cluster` and `forecast`, the loops that resolve `~` multi-column sources), seen only by runs on that framework. On a group subclass: the loop (`aggregate`, `window`, `impute`, `clean`, `measure`, `scale`, `encode`, `run_pipeline`, `cluster`, `reduce`, `centrality`, `forecast`). Core checks every declared input before `calculate_feature`, so the loops do not check source columns themselves.
 
@@ -358,13 +315,7 @@ A single returned column (a list or Series) follows the same rule: on such a fra
 
 ## Data Transformation
 
-When data needs to move between compute frameworks:
-
-1. The `transform` method converts data between frameworks
-2. Each framework defines how to transform data to and from other frameworks
-3. The system automatically handles these transformations when needed
-
-For more details on how data transformation works between compute frameworks, see [Framework Transformers](framework-transformers.md).
+The `transform` method converts data between frameworks through the registered transformers; see [Framework Transformers](framework-transformers.md).
 
 ## Framework Notes
 
@@ -373,7 +324,7 @@ For more details on how data transformation works between compute frameworks, se
 - **Spark**: requires PySpark 4.0+ and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 
-A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these frameworks at setup; a run left with no usable framework, or a feature pinned to a dropped one, raises. Request `{SYNC, MULTIPROCESSING}` or `{THREADING, MULTIPROCESSING}` to combine them with worker-dispatched frameworks.
+A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these frameworks at setup; a run left with no usable framework, a feature pinned to a dropped one, or a group that can run only on dropped frameworks fails at resolution. Request `{SYNC, MULTIPROCESSING}` or `{THREADING, MULTIPROCESSING}` to combine them with worker-dispatched frameworks.
 
 ## SQL Relation Helpers (DuckDB / SQLite)
 
@@ -448,7 +399,7 @@ Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `
 
 A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on `RunAllSuite` from `mloda.testing.compute_framework.run_all_suite`, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares `sync_only_reason` on its adapter. Each case is a `PolicySuccess` or a `PolicyRaises`. `EmptyResultRunAllSuite` is the worked example, and a host only sets `adapter_class`.
 
-Drive the policy through `run_all` rather than testing one enforcement surface: the retired `allow_empty_result()` flag had three, and the one in `DataLifecycleManager.get_result_data` shipped broken while unit tests of the other two passed, and only the full `run_all` on every framework and mode caught it. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.
+Drive the policy through `run_all` rather than testing one enforcement surface. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.
 
 ### Writing a FrameworkAdapter
 
@@ -472,20 +423,13 @@ class MyFrameworkAdapter(FrameworkAdapter):
     def from_arrow(self, table: Any) -> Any:
         return MyFramework.from_arrow(table)
 
-    def column_names(self, result: Any) -> list[str]:
-        return list(result.columns)
-
-    def row_count(self, result: Any) -> int:
-        return len(result)
-
-    def column_values(self, result: Any, column: str) -> list[Any]:
-        return list(result[column])
-
     def column_type(self, result: Any, column: str) -> Any:
-        return None
+        return None  # untyped framework
 
     def lost_type(self, result: Any, column: str) -> bool:
         return False
+
+    # column_names, row_count and column_values follow the same shape.
 
 
 class TestMyFrameworkEmptyResult(EmptyResultRunAllSuite):

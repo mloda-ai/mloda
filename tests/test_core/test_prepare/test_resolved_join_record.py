@@ -2112,8 +2112,8 @@ def test_a_right_joins_declared_left_side_is_not_double_counted_as_a_right_side_
     assert join_steps[0].swap_merge_sides is False
 
 
-BASE_JOINS = 100
-MAX_CALL_RATIO_FOR_DOUBLED_JOINS = 3
+BASE_JOINS = 50
+MAX_CALL_RATIO_FOR_DOUBLED_JOINS = 2.5
 PAIR_SHAPES = ("cross_framework", "same_framework")
 
 

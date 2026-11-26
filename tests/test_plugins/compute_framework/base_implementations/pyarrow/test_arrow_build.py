@@ -67,6 +67,10 @@ def _utc(values: list[Any]) -> list[datetime | None]:
 def _utc_nested(value: Any) -> Any:
     if isinstance(value, (list, tuple)):
         return [_utc_nested(v) for v in value]
+    if isinstance(value, dict):
+        return {k: _utc_nested(v) for k, v in value.items()}
+    if isinstance(value, (int, str)):
+        return value
     return _utc([value])[0]
 
 
@@ -112,6 +116,35 @@ class TestArrowBuild:
                 False,
             ),
             ([[NOON_NY, None]], pa.list_(pa.timestamp("us", tz="Asia/Tokyo")), True),
+            (
+                [{"stamp": NOON_NY, "n": 1}, None, {"stamp": LATER_NY, "n": 2}],
+                pa.struct([("stamp", _NY_TYPE), ("n", pa.int64())]),
+                False,
+            ),
+            ([None, {"stamp": NOON_NY}], pa.struct([("stamp", _NY_TYPE)]), False),
+            (
+                [{"stamp": NOON_NY}, {"stamp": None}, {"stamp": pd.NaT}, {"stamp": _NP_NAT}],
+                pa.struct([("stamp", _NY_TYPE)]),
+                False,
+            ),
+            (
+                [{"stamp": NOON_NY, "other": None}],
+                pa.struct([("stamp", _NY_TYPE), ("other", pa.null())]),
+                False,
+            ),
+            (
+                [{"stamp": NOON_NY, "other": datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA)}],
+                pa.struct([("stamp", _NY_TYPE), ("other", pa.timestamp("us", tz="+05:30"))]),
+                False,
+            ),
+            ([[{"stamp": NOON_NY}, {"stamp": None}]], pa.list_(pa.struct([("stamp", _NY_TYPE)])), False),
+            ([{"stamps": [NOON_NY, None]}], pa.struct([("stamps", pa.list_(_NY_TYPE))]), False),
+            ([{"s": {"stamp": NOON_NY}}], pa.struct([("s", pa.struct([("stamp", _NY_TYPE)]))]), False),
+            (
+                [{"stamp": NOON_NY}, {"stamp": datetime(2023, 3, 11, 12, 0, tzinfo=KOLKATA)}],
+                pa.struct([("stamp", pa.timestamp("us", tz="Asia/Tokyo"))]),
+                True,
+            ),
         ],
         ids=[
             "none_gap",
@@ -123,12 +156,27 @@ class TestArrowBuild:
             "tuple",
             "offset",
             "typed",
+            "struct_sibling_and_none_row",
+            "struct_leading_none",
+            "struct_field_gaps",
+            "struct_sibling_all_gaps",
+            "struct_two_zones",
+            "list_of_struct",
+            "struct_of_list",
+            "struct_in_struct",
+            "struct_typed_mixed_zones",
         ],
     )
     def test_nested_array_keeps_instants_and_zone(self, values: Any, want_type: pa.DataType, explicit: bool) -> None:
         arr = _builders().arrow_array(values, type=want_type) if explicit else _builders().arrow_array(values)
         assert arr.type == want_type
         assert _utc_nested(arr.to_pylist()) == _utc_nested(values)
+
+    def test_struct_missing_key_reads_back_as_null(self) -> None:
+        arr = _builders().arrow_array([{"stamp": NOON_NY, "n": 1}, {"n": 2}])
+        assert arr.type == pa.struct([("stamp", _NY_TYPE), ("n", pa.int64())])
+        want = [{"stamp": NOON_NY, "n": 1}, {"stamp": None, "n": 2}]
+        assert _utc_nested(arr.to_pylist()) == _utc_nested(want)
 
     @pytest.mark.parametrize(
         "values", [[[NOON_NY], [[NOON_NY]]], [[NOON_NY], NOON_NY]], ids=["ragged_depth", "scalar_and_list"]
@@ -145,18 +193,60 @@ class TestArrowBuild:
         assert _utc(arr.to_pylist()) == _utc(values)
 
     @pytest.mark.parametrize(
-        "values, target",
+        "values, target, field",
         [
-            ([_NAIVE, _UTC_NOON], pa.timestamp("us", tz="UTC")),
-            ([[_NAIVE, _UTC_NOON]], pa.list_(pa.timestamp("us", tz="UTC"))),
+            ([_NAIVE, _UTC_NOON], pa.timestamp("us", tz="UTC"), None),
+            ([[_NAIVE, _UTC_NOON]], pa.list_(pa.timestamp("us", tz="UTC")), None),
+            (
+                [{"stamp": _NAIVE}, {"stamp": _UTC_NOON}],
+                pa.struct([("stamp", pa.timestamp("us", tz="UTC"))]),
+                "field 'stamp'",
+            ),
         ],
-        ids=["flat", "nested"],
+        ids=["flat", "nested", "struct"],
     )
-    def test_explicit_type_rejects_naive_aware_mix(self, values: list[Any], target: pa.DataType) -> None:
+    def test_explicit_type_rejects_naive_aware_mix(
+        self, values: list[Any], target: pa.DataType, field: str | None
+    ) -> None:
         with pytest.raises(ValueError) as err:
             _builders().arrow_array(values, type=target, column="t")
-        for text in ["t", "naive", "aware"]:
+        for text in ["t", "naive", "aware", *([field] if field else [])]:
             assert text in str(err.value)
+
+    @pytest.mark.parametrize("kind", ["mixed", "keyless", "custom", "aware_naive", "naive_aware"])
+    @pytest.mark.parametrize(
+        "shape, column",
+        [
+            ("struct", "zoned"),
+            ("struct", None),
+            ("list_of_struct", "zoned"),
+            ("struct_of_list", "zoned"),
+            ("struct_in_struct", "zoned"),
+        ],
+        ids=["struct", "struct_no_column", "list_of_struct", "struct_of_list", "struct_in_struct"],
+    )
+    def test_struct_field_bad_zone_raises_naming_column_and_field(
+        self, shape: str, column: str | None, kind: str
+    ) -> None:
+        v0, v1 = bad_zone_values(kind)[0]
+        texts = bad_zone_values(kind)[1]
+        values = {
+            "struct": [{"stamp": v0}, {"stamp": v1}],
+            "list_of_struct": [[{"stamp": v0}, {"stamp": v1}]],
+            "struct_of_list": [{"stamp": [v0, v1]}],
+            "struct_in_struct": [{"s": {"stamp": v0}}, {"s": {"stamp": v1}}],
+        }[shape]
+        field = "field 's.stamp'" if shape == "struct_in_struct" else "field 'stamp'"
+        with pytest.raises(ValueError) as err:
+            _builders().arrow_array(values, column=column)
+        message = str(err.value)
+        for text in texts:
+            assert text in message
+        assert field in message.lower()
+        if column is None:
+            assert "column" not in message.lower()
+        else:
+            assert column in message
 
     def test_table_keeps_instants_and_zone(self) -> None:
         table = _builders().arrow_table({"t": [NOON_NY, LATER_NY], "n": [1, 2]})
@@ -183,8 +273,20 @@ class TestArrowBuildUnchanged:
             ["a", None],
             [],
             [None, None],
+            [{}, None],
+            [{"a": 1}, {"b": "x"}],
         ],
-        ids=["naive", "nested_naive", "numpy_ns_nat", "ints", "strings", "empty", "all_none"],
+        ids=[
+            "naive",
+            "nested_naive",
+            "numpy_ns_nat",
+            "ints",
+            "strings",
+            "empty",
+            "all_none",
+            "empty_dict",
+            "dict_rows_union_keys",
+        ],
     )
     @ENV_VALUES
     @pytest.mark.usefixtures("ignore_timezone_env")
@@ -218,6 +320,11 @@ class TestArrowBuildUnchanged:
             ([{"a": _NAIVE}, {"a": _NP_NAT}], [{"a": _NAIVE}, {"a": None}], [_STRUCT_TS]),
             ([{"a": [_NAIVE, pd.NaT]}], [{"a": [_NAIVE, None]}], [pa.struct([("a", pa.list_(pa.timestamp("us")))])]),
             ([[{"a": _NAIVE}, {"a": pd.NaT}]], [[{"a": _NAIVE}, {"a": None}]], [pa.list_(_STRUCT_TS)]),
+            (
+                [{1: _NAIVE}, {2: pd.NaT}],
+                [{1: _NAIVE}, {2: None}],
+                [pa.map_(pa.int64(), pa.timestamp("us"))],
+            ),
         ],
         ids=[
             "naive_nat",
@@ -237,6 +344,7 @@ class TestArrowBuildUnchanged:
             "struct_np_nat",
             "list_in_struct_nat",
             "struct_in_list_nat",
+            "map_int_keys",
         ],
     )
     def test_nat_list_matches_none_substituted(

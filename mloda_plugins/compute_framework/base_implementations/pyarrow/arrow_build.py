@@ -107,23 +107,39 @@ def _leaves(values: Any) -> Iterator[Any]:
             yield v
 
 
+def _field_leaves(values: Any, path: tuple[Any, ...] = ()) -> Iterator[tuple[tuple[Any, ...], Any]]:
+    """Lazy (path, leaf) pairs of non-gap leaves; a dict value extends the path with its key."""
+    for v in values:
+        if isinstance(v, (list, tuple)):
+            yield from _field_leaves(v, path)
+        elif isinstance(v, dict):
+            for key, item in v.items():
+                yield from _field_leaves([item], (*path, key))
+        elif not is_gap(v):
+            yield path, v
+
+
 def utc_copy(values: Any) -> Any:
     if isinstance(values, (list, tuple)):
         return [utc_copy(v) for v in values]
+    if isinstance(values, dict):
+        return {k: utc_copy(v) for k, v in values.items()}
     if is_gap(values):
         return None
     return values.astimezone(UTC) if isinstance(values, datetime) else values
 
 
-def _with_zone(dtype: pa.DataType, zone: str) -> pa.DataType:
+def _with_zone(dtype: pa.DataType, zones: dict[tuple[str, ...], str], path: tuple[str, ...] = ()) -> pa.DataType:
     if pa.types.is_timestamp(dtype):
-        return pa.timestamp(dtype.unit, tz=zone)
+        return pa.timestamp(dtype.unit, tz=zones[path]) if path in zones else dtype
     if pa.types.is_list(dtype):
-        return pa.list_(_with_zone(dtype.value_type, zone))
+        return pa.list_(_with_zone(dtype.value_type, zones, path))
+    if pa.types.is_struct(dtype):
+        return pa.struct([pa.field(f.name, _with_zone(f.type, zones, (*path, f.name))) for f in dtype])
     return dtype
 
 
-def _aware_values(values: Any, column: str | None = None) -> list[datetime] | None:
+def _aware_values(values: Any, column: str | None = None, field: str | None = None) -> list[datetime] | None:
     """The non-gap values if all are aware datetimes, None if not datetimes; raises on a naive/aware mix."""
     present = []
     has_naive = has_aware = False
@@ -140,17 +156,22 @@ def _aware_values(values: Any, column: str | None = None) -> list[datetime] | No
     if not has_aware:
         return None
     if has_naive:
-        subject = "Values mix" if column is None else f"Column {column!r} mixes"
+        if field is None:
+            subject = "Values mix" if column is None else f"Column {column!r} mixes"
+        else:
+            subject = f"Field {field!r} mixes" if column is None else f"Column {column!r} field {field!r} mixes"
         raise ValueError(f"{subject} naive and aware datetimes; make them all naive or all aware.")
     return present
 
 
-def aware_zone(values: Any, column: str | None = None) -> str | None:
+def aware_zone(values: Any, column: str | None = None, field: str | None = None) -> str | None:
     """Return the single zone name of aware datetimes, else None; raise on mixed or unnameable zones."""
-    present = _aware_values(values, column)
+    present = _aware_values(values, column, field)
     if present is None:
         return None
     where = "" if column is None else f" in column {column!r}"
+    if field is not None:
+        where += f" field {field!r}" if column is not None else f" in field {field!r}"
     zones: list[tzinfo] = []
     for v in present:
         if v.tzinfo not in zones:
@@ -174,13 +195,20 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         if aware:
             utc_values = [None if is_gap(v) else v.astimezone(UTC) for v in values]
             return pa.array(utc_values, type=type)
-        leaves = nested_leaves(values)
-        if leaves is not None and type is not None and _aware_values(leaves, column) is not None:
-            return pa.array(utc_copy(values), type=type)
-        zone = None if leaves is None or type is not None else aware_zone(leaves, column)
-        if zone is not None:
-            arr = pa.array(utc_copy(values))
-            return arr.cast(_with_zone(arr.type, zone))
+        first = next((v for v in values if not is_gap(v)), None)
+        if isinstance(first, (list, tuple, dict)):
+            groups: dict[tuple[str, ...], list[Any]] = {}
+            for path, leaf in _field_leaves(values):
+                groups.setdefault(path, []).append(leaf)
+            fields = {path: ".".join(map(str, path)) if path else None for path in groups}
+            if type is not None:
+                if any(_aware_values(groups[p], column, fields[p]) is not None for p in groups):
+                    return pa.array(utc_copy(values), type=type)
+            else:
+                zones = {p: z for p in groups if (z := aware_zone(groups[p], column, fields[p])) is not None}
+                if zones:
+                    arr = pa.array(utc_copy(values))
+                    return arr.cast(_with_zone(arr.type, zones))
         if has_gap(values):
             values = null_gaps(values)
     return pa.array(values, type=type)

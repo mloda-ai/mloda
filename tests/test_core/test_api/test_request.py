@@ -85,29 +85,33 @@ class TestmlodaAPI:
             assert api_feature.options.get("k") is shared_value
 
     def test_copy_features_false_accepts_a_generator_of_features(self) -> None:
-        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan"):
+        with patch("mloda.core.core.engine.Engine.create_setup_execution_plan") as plan_mock:
             originals = [Feature(f"gen_{i}") for i in range(2)]
             api_request = mlodaAPI((o for o in originals), copy_features=False)  # type: ignore[arg-type]
             assert [str(f.name) for f in api_request.features] == ["gen_0", "gen_1"]
             plan_objects = list(api_request.features)
-            assert mlodaAPI._request_aliases(originals, plan_objects, False) == list(zip(originals, plan_objects))
+            assert plan_mock.call_args.args[1] == list(zip(originals, plan_objects))
 
     def test_copy_features_false_features_object_does_not_share_bookkeeping(self) -> None:
         original = Features([Feature("bk_feature")])
         copied = mlodaAPI._shallow_copy_features(original)
         assert copied.parent_uuids is not original.parent_uuids
 
-    @pytest.mark.parametrize("shape", ["list", "generator", "features"])
+    @pytest.mark.parametrize("shape", ["list", "mixed", "features"])
     @pytest.mark.parametrize("copy_features", [True, False])
     def test_api_seeds_only_aliases_for_the_callers_objects(self, copy_features: bool, shape: str) -> None:
         original = Feature("seed_map_feature", options={"k": "v"})
         plan_object = original.copy_for_plan()
         request: Any = {
             "list": [original],
-            "generator": (o for o in [original]),
+            "mixed": ["mixed_str_feature", original],
             "features": Features([original]),
         }[shape]
-        planned: Any = Features([plan_object]) if shape == "features" else [plan_object]
+        planned: Any = {
+            "list": [plan_object],
+            "mixed": ["mixed_str_feature", plan_object],
+            "features": Features([plan_object]),
+        }[shape]
         aliases = mlodaAPI._request_aliases(request, planned, copy_features)
         assert aliases == ([] if copy_features else [(original, plan_object)])
 

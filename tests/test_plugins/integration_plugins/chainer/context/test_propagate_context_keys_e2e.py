@@ -350,6 +350,30 @@ class TestPropagateContextKeysE2E:
         if "z" in order:
             assert find_column(result, f"{prefix}_z") == [200, 400, 600, 800, 1000]
 
+    @pytest.mark.parametrize("copy_features", [True, False])
+    @pytest.mark.parametrize("order", ["xy", "yx"])
+    def test_requests_naming_each_other_in_non_input_options_plan_and_compute(
+        self, order: str, copy_features: bool
+    ) -> None:
+        prefix = f"mutual_{order}_{int(copy_features)}"
+        by_letter = {
+            letter: Feature(
+                name=f"{prefix}_{letter}",
+                options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": ident}),
+            )
+            for letter, ident in (("x", "identifier1"), ("y", "identifier2"))
+        }
+        by_letter["x"].options.add_to_context("meta", by_letter["y"])
+        by_letter["y"].options.add_to_context("meta", by_letter["x"])
+        result = mloda.run_all(
+            [*[by_letter[letter] for letter in order], "Sales"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=self.plugin_collector,
+            copy_features=copy_features,
+        )
+        assert find_column(result, f"{prefix}_x") == [200, 400, 600, 800, 1000]
+        assert len(find_column(result, f"{prefix}_y")) == 5
+
     @staticmethod
     def _two_consumer_requests(prefix: str, order: str) -> list[Feature | str]:
         """c pushes env into b; d forwards group option grp=1 and pushes nothing."""
@@ -763,3 +787,40 @@ class TestPropagateContextKeysE2E:
         result = self._run_env_root([consumers[name] for name in order])
         assert find_column(result, f"cer_a_{order}") == [4, 8, 12]
         assert find_column(result, f"cer_b_{order}") == [3040, 3080, 3120]
+
+
+class _CyclicList(list[Any]):
+    pass
+
+
+class _CyclicDict(dict[str, Any]):
+    pass
+
+
+class TestCyclicOptionsInRequestOrderWalk:
+    @pytest.mark.parametrize("container", ["list", "dict"])
+    def test_request_with_a_cyclic_option_value_plans_without_recursion(self, container: str) -> None:
+        # Subclasses keep stable_text (exact-type checks) off the cycle, so only the order walk meets it.
+        cyclic: Any = _CyclicList() if container == "list" else _CyclicDict()
+        if container == "list":
+            cyclic.append(cyclic)
+        else:
+            cyclic["self"] = cyclic
+        feat_b = Feature(
+            name=f"cyc_walk_b_{container}",
+            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1", "cyc": cyclic}),
+        )
+        feat_c = Feature(
+            name=f"cyc_walk_c_{container}",
+            options=Options(context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2"}),
+        )
+
+        session = mloda.prepare(
+            [feat_b, feat_c, "Sales"],
+            compute_frameworks=[PandasDataFrame],
+            plugin_collector=PluginCollector.enabled_feature_groups(
+                {PropagateContextFeatureGroupTest, ChainerContextParserTestDataCreator}
+            ),
+        )
+
+        assert session.engine is not None

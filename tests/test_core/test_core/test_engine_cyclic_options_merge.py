@@ -19,15 +19,6 @@ from mloda.core.abstract_plugins.components.feature import Feature
 from mloda.core.abstract_plugins.components.options import Options
 from mloda.core.abstract_plugins.feature_group import FeatureGroup
 from mloda.core.core.engine import Engine
-from mloda.provider import DefaultOptionKeys
-from mloda.user import PluginCollector, mloda
-from mloda_plugins.compute_framework.base_implementations.pandas.dataframe import PandasDataFrame
-from tests.test_plugins.integration_plugins.chainer.context.test_chained_optional_features import (
-    ChainerContextParserTestDataCreator,
-)
-from tests.test_plugins.integration_plugins.chainer.propagate_context_feature import (
-    PropagateContextFeatureGroupTest,
-)
 
 
 def _self_referential_list() -> list[Any]:
@@ -275,40 +266,3 @@ class TestLinkKeyOnlyMerge:
         expected = existing_options if survivor_has_entry else host_options
         assert list(engine._declared_options_by_uuid) == [existing.uuid]
         assert engine._declared_options_by_uuid[existing.uuid] is expected
-
-
-class _CyclicList(list[Any]):
-    pass
-
-
-class _CyclicDict(dict[str, Any]):
-    pass
-
-
-class TestCyclicOptionsInRequestOrderWalk:
-    @pytest.mark.parametrize("container", ["list", "dict"])
-    def test_request_with_a_cyclic_option_value_plans_without_recursion(self, container: str) -> None:
-        # Subclasses keep stable_text (exact-type checks) off the cycle, so only the order walk meets it.
-        cyclic: Any = _CyclicList() if container == "list" else _CyclicDict()
-        if container == "list":
-            cyclic.append(cyclic)
-        else:
-            cyclic["self"] = cyclic
-        feat_b = Feature(
-            name=f"cyc_walk_b_{container}",
-            options=Options(context={DefaultOptionKeys.in_features: "Sales", "ident": "identifier1", "cyc": cyclic}),
-        )
-        feat_c = Feature(
-            name=f"cyc_walk_c_{container}",
-            options=Options(context={DefaultOptionKeys.in_features: feat_b, "ident": "identifier2"}),
-        )
-
-        session = mloda.prepare(
-            [feat_b, feat_c, "Sales"],
-            compute_frameworks=[PandasDataFrame],
-            plugin_collector=PluginCollector.enabled_feature_groups(
-                {PropagateContextFeatureGroupTest, ChainerContextParserTestDataCreator}
-            ),
-        )
-
-        assert session.engine is not None

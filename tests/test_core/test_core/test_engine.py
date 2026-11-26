@@ -266,8 +266,7 @@ class TestPlanInput:
 
     def test_later_reach_takes_forwarding_directives_from_the_returned_entry(self) -> None:
         plan_object = Feature("plan_input_y")
-        alias = Feature("plan_input_y")
-        engine = _plan_input_engine(plan_object, alias)
+        engine = _plan_input_engine(plan_object, None)
         assert engine._plan_input(plan_object) is plan_object
         entry = Feature(
             "plan_input_y",

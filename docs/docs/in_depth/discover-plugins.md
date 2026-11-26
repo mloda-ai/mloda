@@ -33,12 +33,7 @@ resolves. The remaining differences are presentation-only: `resolve_feature`
 never raises (matching failures land in `result.error`, not an exception), and
 it returns a structured `ResolvedFeature` instead of a plan.
 
-This covers a broken framework declaration too: a plugin that raises while
-declaring its frameworks (`compute_framework_rule` /
-`compute_framework_definition`) aborts the environment build on both paths. A run
-raises that failure; `resolve_feature` reports the same failure in `result.error`
-with no candidates, because the build never reaches matching. The difference stays
-presentation-only.
+A broken framework declaration or a redefinition conflict also fails `resolve_feature` the way it fails a run (see [Broken framework declarations](#broken-framework-declarations)).
 
 Its candidate universe is a **standalone default**, not a replay of a specific
 run: it defaults to every installed compute framework unless you narrow it (see
@@ -77,22 +72,8 @@ Matching and the compute framework split both run under the options you pass.
 A FeatureGroup whose `match_feature_group_criteria` or
 `supports_compute_framework` reads an option therefore only resolves when you
 supply it. Without `options` the evaluation uses empty `Options`, and such a
-group reports no candidates:
-
-```python
-from mloda.steward import resolve_feature
-from mloda.user import Options, PluginLoader
-
-PluginLoader.all()
-
-# The group-by aggregation FeatureGroups in mloda-registry match only when partition_by is set.
-result = resolve_feature("sales__sum_aggr", options=Options(group={"partition_by": ["customer_id"]}))
-print(result.feature_group, result.supported_compute_frameworks)
-```
-
-Every argument after `feature` (`options`, `plugin_collector`, `feature_group`,
-`links`, `data_access_collection`, `compute_frameworks`) is keyword-only, so
-pass them by name.
+group reports no candidates, as the group-by aggregation FeatureGroups in
+mloda-registry do without `partition_by`.
 
 ### Scoping to a Feature Group
 
@@ -183,7 +164,7 @@ from mloda.steward import get_extender_docs
 extenders = get_extender_docs()
 
 # Filter by wrapped function type
-extenders = get_extender_docs(wraps="formula")
+extenders = get_extender_docs(wraps="feature_group_calculate_feature")
 ```
 
 ## Graceful Degradation Policy
@@ -199,7 +180,7 @@ Every failure a plugin can cause falls into one of three tiers:
 - **Annotate.** A single descriptive field cannot be read, but the class is still
   a valid catalog entry. The entry is listed with a sentinel value and discovery
   continues. Examples: `get_feature_group_docs` reports `version="unavailable"`
-  when source introspection fails (`_safe_version`); `get_compute_framework_docs`
+  when source introspection fails; `get_compute_framework_docs`
   reports `expected_data_framework="unavailable"`, `has_merge_engine=False`,
   `has_filter_engine=False`, and `is_available=False` when the corresponding call
   raises; `get_extender_docs` reports `wraps=[]` when the extender cannot be
@@ -212,40 +193,27 @@ Every failure a plugin can cause falls into one of three tiers:
   `compute_framework_subclasses()`). A group or framework whose
   `__init_subclass__` chain never reaches the root's `__init_subclass__`
   is not recorded either, so it is absent as well. Redefinition duplicates are
-  collapsed rather than listed twice (see below).
+  collapsed rather than listed twice (see [Broken framework declarations](#broken-framework-declarations)).
 - **Propagate.** Errors that are not a single plugin's introspection fault are
   left to surface: bad arguments to the discovery function itself, and failures
   in mloda's own catalog machinery. These are bugs to fix, not conditions to
   paper over.
 
-### Redefinition conflicts
-
-When the same `(module, qualname)` FeatureGroup is defined more than once with
-differing source (typical in notebooks and reload-heavy sessions), the catalog
-and resolution paths intentionally differ:
-
-- **`get_*_docs` degrade.** Documentation is a best-effort read-only view, so a
-  conflict collapses to the most recently defined (live) class and listing
-  continues. There is nothing to execute, so ambiguity is harmless.
-- **`resolve_feature` fails closed.** Resolution feeds execution, so the
-  conflict fails closed like any other environment-build failure: it returns
-  `feature_group=None` with the conflict described in `error` and no
-  candidates. The failure is projected from the build error itself, which names
-  the conflicting classes in the message, and no matching runs.
-
 ### Broken framework declarations
 
-When a FeatureGroup raises while declaring its frameworks
-(`compute_framework_rule` / `compute_framework_definition`), the catalog and
-resolution paths again differ:
+A FeatureGroup that raises while declaring its frameworks (`compute_framework_rule` /
+`compute_framework_definition`), and the same `(module, qualname)` FeatureGroup defined
+more than once with differing source (typical in notebooks and reload-heavy sessions),
+split the same way between the catalog and resolution paths:
 
-- **`get_*_docs` degrade.** Listing is a read-only view, so the class stays a
-  catalog entry with `compute_frameworks=[]`. This is the annotate tier's
-  `safe_field` guard on that one field.
+- **`get_*_docs` degrade.** Listing is a best-effort read-only view: a broken declaration
+  leaves the class a catalog entry with `compute_frameworks=[]`, and a redefinition conflict
+  collapses to the most recently defined (live) class.
 - **`resolve_feature` fails closed.** Resolution feeds execution, so it builds its
-  environment the way a run does: the broken declaration aborts the build. It
-  returns `feature_group=None` with the provider's failure in `error` and no
-  candidates, the same failure a run raises.
+  environment the way a run does and the failure aborts the build. It returns
+  `feature_group=None` with the failure in `error` (for a conflict, the build error naming
+  the conflicting classes) and no candidates, the same failure a run raises. The difference
+  is presentation-only: the run raises, `resolve_feature` reports.
 
 Failing closed is process-wide, not group-local: the build declares every
 FeatureGroup's frameworks, so one broken plugin fails *every* resolution and run,
@@ -268,37 +236,14 @@ Strict mode is the other filter: an unregistered broken plugin is dropped before
 its declaration is read. Both apply identically to a run, so a scope that rescues
 `resolve_feature` rescues the run too.
 
-### Shared helper
+### Per-field fallbacks
 
-The annotate tier is a single shared helper,
-`safe_field(read, fallback, catching=(Exception,), field="", warn_once_for=None)` in
-`mloda.core.abstract_plugins.components.utils`: it calls the `read` thunk and
-returns `fallback` if the read raises one of `catching`, so a catalog function or
-info field reaches for one helper instead of re-deriving a `try/except`.
-
-Fallbacks are base-class-derived rather than sentinels, so a degraded entry stays
-usable: a broken `description()` falls back to the class docstring (or `__name__`),
-which keeps it findable via `search=`, and a broken `prefix()` to `"<__name__>_"`.
-The reads that feed a filter (`get_class_name()`, `description()`, `version()`)
-also reject a non-str return, so a wrong type degrades too instead of sinking the
-call at the filter.
-
-Logging is opt-in via `field`: the labelled `get_feature_group_docs` reads warn on
-swallow, where a raise does mean a broken plugin (`_safe_version` included, via
-`warn_once_for` so a broken class warns once, not once per catalog walk). The
-unlabelled guards stay silent because degrading there is by design (the source-hash
-read in `accessible_plugins.py`, an availability probe without its optional backend,
-Iceberg's deliberate `NotImplementedError` from `merge_engine()`). A hot call site
-can also pass `warn_once_for` (a key, typically the plugin class) to dedup that
-WARNING to once per key instead of once per call.
-
-`get_compute_framework_docs` uses the default broad `catching` (any failure
-degrades the field), while the narrower named guards `_safe_version` (in
-`plugin_docs.py`) and `_safe_class_source_hash` (one layer down in
-`accessible_plugins.py`) pass the shared `SOURCE_INTROSPECTION_ERRORS` constant
-(from `base_feature_group_version.py`) so anything else still propagates. The helper is
-deliberately per-field (annotate the entry) rather than per-class (skip the whole
-entry), because the catalog's job is to list a degraded class, not hide it.
+The annotate tier is per field, not per class: a degraded entry is listed, not hidden. Fallbacks are
+base-class-derived, so it stays usable: a broken `description()` falls back to the class docstring (or
+`__name__`) and stays findable via `search=`, and a broken `prefix()` falls back to `"<__name__>_"`. The
+reads that feed a filter (`get_class_name()`, `description()`, `version()`) also degrade on a non-str return.
+The labelled `get_feature_group_docs` reads log a warning when they swallow a failure (once per broken class);
+the unlabelled guards stay silent because degrading there is by design.
 
 ## Related Documentation
 

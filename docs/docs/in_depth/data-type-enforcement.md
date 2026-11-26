@@ -208,33 +208,19 @@ When a feature is requested with a type and also needed without a type as anothe
 mloda can reuse the typed request. For example, a direct `Feature.int64_of("amount")` can satisfy an
 input declared as `Feature("amount")`. Otherwise-identical requests produce the column once, retain
 the declared type for runtime validation, and keep the consumer connected regardless of request order.
-Previously, this pair produced two planned features and could fail with duplicate columns in append-style groups.
 Reuse requires completed input resolution: a column injected for a filter or index does not suppress
 the dependency resolution of a later typed request.
-When several typed requests are already present when the untyped input is resolved, mloda reuses the one
-whose data type name sorts first (for example `INT32` before `INT64`), so the choice does not depend on set order.
 
-The other identity constraints still apply, including options, context, domain, compute frameworks,
-implementation and data source. Two different explicit types remain separate, as does a typed input
-paired with an untyped direct request. A typed request on a strictly narrower compute framework set,
-such as one pinned to a single framework, also serves an untyped input copy of the same feature on a
-wider set when it is the only narrowest such request, so the feature is computed once.
-Likewise, an untyped input copy on a strictly narrower set serves a typed request on a wider set and takes its
-type when it is the only narrowest such copy. When typed requests of different types compete for one input copy,
-the type whose name sorts first takes it and the other request stays separate.
-Ordinary `Feature` equality and hashing remain type-sensitive.
+The other identity constraints still apply (options, context, domain, compute frameworks, implementation,
+data source). Two different explicit types stay separate, and so does a typed input with an untyped direct
+request. Across framework sets, the one copy on the strictly narrowest set serves the wider copies, typed or
+not, and the shared copy keeps the declared type. When typed requests of different types compete, the type
+whose name sorts first wins (for example `INT32` before `INT64`). Feature equality and hashing remain
+type-sensitive.
 
 ## Database Type Awareness
 
-When reading from databases (e.g., SQLite), declared types are used to build the PyArrow schema:
-
-```python
-# Declared type is used for schema, not inferred from data
-feature = Feature.int64_of(
-    "user_id",
-    options={"sqlite": "/path/to/db.sqlite"}
-)
-```
+When reading from databases such as SQLite, declared types build the PyArrow schema (`DataType.to_arrow_type`) instead of being inferred from data.
 
 ## Error Handling
 

@@ -31,21 +31,7 @@ assert AdHocFeatureGroup not in list_registered(FeatureGroup)
 
 ## Contract Tests over Registered Plugins
 
-`list_registered()` returns the classes of one plugin base type, sorted by registry key. That makes project-wide contract tests a simple loop: load your plugins, then assert a property on every registered class.
-
-```python
-from mloda.provider import FeatureGroup
-from mloda.user import PluginLoader, list_registered
-
-PluginLoader.all()
-
-for fg in list_registered(FeatureGroup):
-    name = fg.get_class_name()
-    assert isinstance(name, str)
-    assert name
-```
-
-Replace the assertion with whatever your project requires of every plugin: a docstring, a naming convention, a version scheme.
+`list_registered()` returns the classes of one plugin base type, sorted by registry key, so a project-wide contract test is a loop: `PluginLoader.all()`, then assert a property (a docstring, a naming convention) on every `list_registered(FeatureGroup)` class.
 
 ## Manual Registration (Notebooks, Third-Party Packages)
 
@@ -60,20 +46,16 @@ class MyFeatureGroup(FeatureGroup):
     """First definition."""
 
 key = register_plugin(MyFeatureGroup)
-assert PluginRegistry.default().get(key) is MyFeatureGroup
 
 class MyFeatureGroup(FeatureGroup):
-    """Edited and re-run, as in a notebook cell: a new class under the same key."""
+    """Edited and re-run: a new class under the same key."""
 
 try:
     register_plugin(MyFeatureGroup)
-    raise AssertionError("expected a collision")
 except PluginRegistryCollisionError:
-    pass
+    register_plugin(MyFeatureGroup, replace=True)
 
-register_plugin(MyFeatureGroup, replace=True)
 assert PluginRegistry.default().get(key) is MyFeatureGroup
-
 PluginRegistry.default().unregister(key)
 ```
 
@@ -107,7 +89,7 @@ An explicit `set_strict_mode()` overrides the environment variable; invalid valu
 
 Three behavioral notes:
 
-- Strict mode governs engine resolution only. The catalog APIs (`get_*_docs()`, `list_registered()`) never consult strict mode: the docs functions keep walking all subclasses unless you pass `registered_only=True`, so in strict mode the catalog can show plugins the engine will not resolve. Pass `registered_only=True` to keep catalog and engine views consistent.
+- Strict mode governs engine resolution only: the catalog APIs never consult it, so the catalog can show plugins the engine will not resolve. Pass `registered_only=True` to keep the two views consistent.
 - In `"warn"` mode, each unregistered class is reported once per process, not once per run, so long-running services do not repeat identical warnings forever.
 - In `"strict"` mode, FeatureGroups explicitly enabled on the `PluginCollector` but missing from the registry are dropped with a warning naming them; if strict filtering removes every FeatureGroup, the run fails with an error that points to `register_plugin()` and the environment variable.
 
@@ -122,7 +104,7 @@ Recommended rollout for deployments: stay on `"off"`, switch CI or staging to `"
 
 ## Governance
 
-Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Data sources are source FeatureGroups, so plugin policy enforcement for them holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve. Implementations are governed by module like other plugins. Under strict mode with a policy, a denied plugin never serves data; importing a denied package still runs its module code, because the loader imports before the policy check.
+Stewards can install a `PluginPolicy` on a registry to control what may register. All governance symbols (`PluginPolicy`, `ApprovalStatus`, `PluginPolicyViolationError`, `PluginRegistry`) are exported from `mloda.steward`. Data sources are source FeatureGroups, so plugin policy enforcement for them holds under strict mode with an allowlist policy; outside strict mode a policy-denied group can still serve. Implementations are governed by module like other plugins. Under strict mode with a policy, a denied plugin never serves data.
 
 ### Plugin Policy
 
@@ -130,7 +112,7 @@ Stewards can install a `PluginPolicy` on a registry to control what may register
 
 Module-prefix matching is boundary-aware on both the denied and allowed sides: the prefix `"acme.plugins"` matches the module `acme.plugins` itself and submodules such as `acme.plugins.churn`, but never a sibling like `acme.plugins_evil`. The trailing-dot form `"acme.plugins."` matches submodules only. For `allowed_module_prefixes`, `None` (the default) leaves modules unrestricted, while the empty tuple `()` denies everything that is not in `allowed_keys`.
 
-Enforcement is uniform across provenance: a denied `register()` raises `PluginPolicyViolationError` naming the would-be key, whether the source is manual, loader, or entry-point. The discovery funnels (the loader's module scans and entry-point loading) catch that denial themselves: they skip the denied class, leave it out of their returned keys, and log one warning per denied key per registry instance, so an installed policy never breaks `PluginLoader.all()`.
+A denied `register()` raises `PluginPolicyViolationError` naming the would-be key, whatever the provenance. The discovery funnels (the loader's module scans and entry-point loading) catch that denial themselves: they skip the denied class, leave it out of their returned keys, and log one warning per denied key per registry instance, so an installed policy never breaks `PluginLoader.all()`.
 
 ```python
 from mloda.provider import FeatureGroup
@@ -173,11 +155,9 @@ entry = registry.get_entry(key)
 assert entry.owner == "data-platform"
 assert entry.approval is ApprovalStatus.APPROVED
 
-# Enforcement is registration-time only: rejecting later does not evict the entry.
 registry.set_approval(key, "rejected")
 assert registry.get(key) is ReviewedFeatureGroup
 
-# The steward removes it explicitly.
 registry.unregister(key)
 assert registry.get(key) is None
 ```

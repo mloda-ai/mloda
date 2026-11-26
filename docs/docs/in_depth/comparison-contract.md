@@ -22,8 +22,7 @@ timezone-aware column (which clock applies, daylight saving lengths, the zone of
   the `_column_semantics(data, column)` hook.
 - `ComparisonContract.validate(semantics, column)` checks a single column against the required
   dimensions. `require_compatible(left, right, ...)` checks two columns are comparable, using a
-  **strict timezone model**: mixing timezone-aware and timezone-naive temporal columns is an error,
-  and known time units must match.
+  **strict timezone model**: mixing timezone-aware and timezone-naive temporal columns is an error.
 
 ## Where it is applied
 
@@ -44,7 +43,8 @@ filter-engine hook: an engine enables the timezone/unit guard by setting `provid
 True` and implementing the hook. Engines that leave the flag `False` (for example a time-agnostic
 custom ComputeFramework) skip the guard entirely and are never forced to implement it. An engine that
 opts in but forgets to implement the hook raises a clear error rather than silently skipping
-validation. All built-in backends below opt in.
+validation. As-of joins always require `_column_semantics` regardless of the flag, since ordered
+time columns are intrinsic to the operation. All built-in backends below opt in.
 
 | Backend | ordered / temporal / numeric | timezone-awareness | zone (`tz`) | time unit |
 |---------|:---:|:---:|:---:|:---:|

@@ -6,93 +6,23 @@ Framework transformers are a key component of mloda's compute framework system, 
 
 ## Core Components
 
-### BaseTransformer
+`BaseTransformer` is the abstract interface for converting data between two compute frameworks. `ComputeFrameworkTransformer` keeps the registry of transformers and finds the one for a framework pair. It auto-loads transformer files from the `compute_framework` group on first use; pandas, polars, duckdb, iceberg and spark ones load once that library is imported.
 
-The `BaseTransformer` is an abstract base class that defines the interface for transforming data between different compute frameworks. It provides the foundation for all framework transformers in the system.
+### Built-in transformers
 
-```python
-class BaseTransformer:
-    """
-    Abstract base class for transforming data between different compute frameworks.
-    """
-```
+| Transformer | Frameworks | Direction | Connection |
+| --- | --- | --- | --- |
+| `PandasPyArrowTransformer` | Pandas DataFrame, PyArrow Table | two-way | no |
+| `PolarsPyArrowTransformer` | Polars DataFrame, PyArrow Table | two-way | no |
+| `PolarsLazyPyArrowTransformer` | Polars LazyFrame, PyArrow Table | two-way | no |
+| `PythonDictPyArrowTransformer` | Python dict rows, PyArrow Table | two-way | no |
+| `DuckDBPyArrowTransformer` | DuckDB Relation, PyArrow Table | two-way | required for PyArrow to DuckDB |
+| `SqlitePyArrowTransformer` | SQLite relation, PyArrow Table | two-way | required for PyArrow to SQLite |
+| `SparkPyArrowTransformer` | Spark DataFrame, PyArrow Table | two-way | optional `SparkSession`; otherwise the active session or a new local one |
+| `IcebergPyArrowTransformer` | Iceberg table, PyArrow Table | two-way | optional catalog |
+| `FileSourcePyArrowTransformer`, `FileSourceDictTransformer` | file source, PyArrow Table or Python dicts | one-way | no |
 
-Key features:
-- Defines a consistent interface for all transformers
-- Handles the logic for determining transformation direction
-- Provides methods for checking if required frameworks are available
-- Manages the actual transformation process
-
-### ComputeFrameworkTransformer
-
-The `ComputeFrameworkTransformer` manages the registry of available transformers and provides methods to find the appropriate transformer for a given pair of frameworks.
-
-```python
-class ComputeFrameworkTransformer:
-    """
-    Manages transformations between different compute frameworks.
-    """
-```
-
-Key features:
-- Maintains a registry of available transformers
-- Auto-loads transformer files from the `compute_framework` group on first use; pandas, polars, duckdb, iceberg and spark ones load once that library is imported
-- Provides a lookup mechanism to find the appropriate transformer for any framework pair
-
-### PandasPyArrowTransformer
-
-The `PandasPyArrowTransformer` is a concrete implementation of `BaseTransformer` that handles conversions between Pandas DataFrames and PyArrow Tables.
-
-```py
-class PandasPyArrowTransformer(BaseTransformer):
-    """
-    Transformer for converting between Pandas DataFrame and PyArrow Table.
-    """
-```
-
-Key features:
-- Converts Pandas DataFrames to PyArrow Tables and vice versa
-- Handles metadata properly during transformations
-- Ensures clean conversion by removing framework-specific metadata
-
-### DuckDBPyArrowTransformer
-
-The `DuckDBPyArrowTransformer` is a concrete implementation of `BaseTransformer`, via `SqlBasePyArrowTransformer`, that handles conversions between DuckDB Relations and PyArrow Tables.
-
-```py
-class DuckDBPyArrowTransformer(SqlBasePyArrowTransformer):
-    """
-    Transformer for converting between DuckDB relations and PyArrow Table.
-    """
-```
-
-Key features:
-- Converts DuckDB Relations to PyArrow Tables and vice versa
-- Leverages DuckDB's native PyArrow integration for efficient zero-copy operations
-- Requires a DuckDB connection object for PyArrow → DuckDB transformations
-- Uses DuckDB's `to_arrow_table()` and `from_arrow()` methods for optimal performance
-
-**Important**: The DuckDB transformer requires a connection object when transforming from PyArrow to DuckDB. This is because DuckDB relations must be associated with a specific database connection.
-
-### SparkPyArrowTransformer
-
-The `SparkPyArrowTransformer` is a concrete implementation of `BaseTransformer` that handles conversions between Spark DataFrames and PyArrow Tables.
-
-```py
-class SparkPyArrowTransformer(BaseTransformer):
-    """
-    Transformer for converting between Spark DataFrame and PyArrow Table.
-    """
-```
-
-Key features:
-- Converts Spark DataFrames to PyArrow Tables and vice versa
-- Leverages Spark's native PyArrow integration for efficient conversions
-- Can use a provided SparkSession or auto-create one if needed
-- Handles distributed data processing through Spark's execution engine
-- Requires PySpark 4.0+ and Java 17+ environment
-
-**Note**: The Spark transformer can optionally use a SparkSession connection object. If none is provided, it will attempt to get the active session or create a new local session.
+DuckDB and SQLite share `SqlBasePyArrowTransformer`, which validates the connection object (see [Framework Connection Object](framework-connection-object.md)) because their relations belong to one database connection.
 
 ## How Framework Transformers Work
 
@@ -104,45 +34,7 @@ Key features:
 
 ### Transformation Process
 
-When data needs to be transformed from one framework to another:
-
-1. The system identifies the source and target framework types
-2. It looks up the appropriate transformer in the registry
-3. It determines the direction of transformation (primary to secondary or vice versa)
-4. It calls the appropriate transformation method on the transformer
-5. The transformer converts the data to the target framework format
-
-### Example Flow
-
-```
-Pandas DataFrame → PandasPyArrowTransformer → PyArrow Table
-```
-
-Or in the reverse direction:
-
-```
-PyArrow Table → PandasPyArrowTransformer → Pandas DataFrame
-```
-
-For DuckDB transformations:
-
-```
-DuckDB Relation → DuckDBPyArrowTransformer → PyArrow Table
-```
-
-```
-PyArrow Table → DuckDBPyArrowTransformer → DuckDB Relation (requires connection)
-```
-
-For Spark transformations:
-
-```
-Spark DataFrame → SparkPyArrowTransformer → PyArrow Table
-```
-
-```
-PyArrow Table → SparkPyArrowTransformer → Spark DataFrame (optional SparkSession)
-```
+The system looks up the transformer for the source and target framework types and calls the hook for that direction.
 
 ## Creating Custom Transformers
 
@@ -169,6 +61,15 @@ Example of a two-way transformer:
 
 ```python
 from typing import Any
+
+from mloda.provider import BaseTransformer
+
+
+class CustomFramework: ...  # stand-ins for your two framework types
+
+
+class OtherFramework: ...
+
 
 class CustomTransformer(BaseTransformer):
     @classmethod
@@ -205,38 +106,3 @@ The `ComputeFramework` class uses the transformer system to convert data between
 1. When data needs to be transformed to match the expected framework of a feature group
 2. When data needs to be uploaded to a flight server (always converted to PyArrow Table)
 3. When data is retrieved from a flight server and needs to be converted back
-
-The transformation is handled automatically by the `apply_compute_framework_transformer` method:
-
-```py
-@final
-def apply_compute_framework_transformer(self, data: Any) -> Any:
-    _from_fw = type(data)
-    _to_fw = self.expected_data_framework()
-
-    # Same native type: nothing to transform.
-    if _from_fw == _to_fw:
-        return None
-
-    # A direct transformer always applies.
-    direct = self.transformer.transformer_map.get((_from_fw, _to_fw))
-    if direct is not None:
-        return direct.transform(_from_fw, _to_fw, data, self.framework_connection_object)
-
-    # A multi-hop chain (through pa.Table) is only valid for a descriptor input.
-    if isinstance(data, InputDataDescriptor):
-        return self._materialize_descriptor(data, _from_fw, _to_fw)
-
-    return None
-```
-
-## Benefits of Framework Transformers
-
-- **Decoupling**: Feature groups can be defined independently of specific compute frameworks
-- **Flexibility**: The system can work with multiple data representations
-- **Extensibility**: New frameworks can be added by implementing new transformers
-- **Transparency**: Transformations happen automatically without user intervention
-
-## Conclusion
-
-Framework transformers are a critical part of mloda's flexibility, allowing the system to work with multiple compute frameworks and data representations. By providing a clean interface for data conversion, they enable feature groups to be defined once and used with different technologies, supporting use cases like online/offline computation, testing, and migrations between environments.

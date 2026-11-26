@@ -17,9 +17,9 @@ def assert_runs_linearly(fn: Callable[[str], ResultT], build: Callable[[int], st
     small, large = build(n // GAP), build(n)
     min_small = min_large = min_cpu_large = float("inf")
     ratio = float("inf")
+    # process_time ticks at 15.6 ms on Windows, too coarse for the ratio.
+    clock = time.perf_counter if sys.platform == "win32" else time.process_time
     for _ in range(3):
-        # process_time ticks at 15.6 ms on Windows, too coarse for the ratio.
-        clock = time.perf_counter if sys.platform == "win32" else time.process_time
         start = clock()
         fn(small)
         min_small = min(min_small, clock() - start)

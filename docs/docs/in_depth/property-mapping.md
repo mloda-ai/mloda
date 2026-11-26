@@ -4,7 +4,7 @@
 typed, frozen spec that declares how that option is validated. This page is the single
 source of truth for that model: what a spec may contain, which invariant is checked at
 which moment, what runs against end-user values in what order, and what each failure
-produces.
+produces. Per-invariant test coverage is mapped in `tests/test_core/test_abstract_plugins/test_components/feature_chainer/PROPERTY_MAPPING_TEST_MATRIX.md`.
 
 Two rules carry most of the model:
 
@@ -56,7 +56,6 @@ declaration readable. `PropertySpec` is the lower-level form: it is the type the
 returns and the type the schema is validated against, so reach for it directly when you need
 the class itself (subclassing, `isinstance` checks, or constructing a spec programmatically).
 Both are exported from `mloda.provider`; `property_spec("Arithmetic operation", strict=True, allowed_values=..., default="add")` builds the spec above.
-
 
 The type IS the schema. A raw dict spec is rejected at class definition
 (`... is a dict, not a PropertySpec`), and a field name that does not exist is a plain
@@ -396,7 +395,7 @@ PROPERTY_MAPPING = {
 }
 ```
 
-Features with different group parameters belong to different feature group instances; the same group parameter with different context shares one:
+Features with different group parameters belong to different feature group instances; the same group parameter with different context shares one (unless a context key is forwarded or declared, see [Context propagation](#context-propagation)):
 
 ```python
 from mloda.user import Feature, Options
@@ -434,7 +433,6 @@ A pattern with only positional groups falls back to the legacy rule: the first c
 to the single key whose `allowed_values` already contain it. A positional pattern whose keys share
 a reachable value is rejected at class-definition time, so migrate it to named capture groups.
 
-Ownership, binding and name agreement are defined in [Name Ownership and Agreement](feature-chain-parser.md#name-ownership-and-agreement).
 
 ## Required presence on the string-named path
 
@@ -557,7 +555,7 @@ The enforcement is installed on the class, not on one matcher, so overriding
 `match_feature_group_criteria` does not lose it: the predicates still run after the override
 returns `True`. Nested guards (an override that delegates into an already guarded parent) do
 not stack: only the outermost one evaluates, so the predicates run exactly once per match call.
-The matcher must be a `classmethod`; any other kind is rejected at class definition.
+The matcher must be a `classmethod`; a staticmethod or a descriptor-less matcher is rejected at class definition.
 
 The guard is installed at class definition, so mutating `PROPERTY_MAPPING` or replacing
 `match_feature_group_criteria` after the class body escapes it.
@@ -602,7 +600,6 @@ Fix it with `MIN_IN_FEATURES = 0` if the group is source-less, or declare an `in
 
 Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`, and a non-`PropertySpec` value raises at class definition, naming the class, the key and the remedy. Renames: `validation_function` is `element_validator` (one element per call, not a stringified sequence; a whole-container check moves to `match_guard`), `type_validator` is `match_guard`, a present `default: None` entry is the `default=None` field, and accepted values live under `allowed_values`.
 
-Per-invariant test coverage is mapped in `tests/test_core/test_abstract_plugins/test_components/feature_chainer/PROPERTY_MAPPING_TEST_MATRIX.md`.
 
 ## Runtime parameters
 
@@ -682,7 +679,7 @@ Author-side forwarding (`forward_group_exclude`, an allowlist, `forward_group=Fa
 
 A forwarded or declared key also splits FeatureSets by value, as does a key declared with `Feature(..., split_context_keys=...)` (see [Splitting on hand-set context](feature-chain-parser.md#splitting-on-hand-set-context-with-split_context_keys)). A key delivered via the push or the pull enters the child's `inherited_context_keys`, and features whose value differs (e.g. `env=prod` vs `env=staging`) compute in separate FeatureSets; equal values share one. The split is per-FeatureGroup and by value, not by provenance: once any feature in scope forwards the key, every feature in scope splits on it, including a sibling that set it directly in plain context. A key no feature in scope forwards or declares stays metadata.
 
-Same-named copies that differ in undeclared context keys but read the same inputs on one framework are rejected (this covers root features requested directly more than once and declared option keys the name does not bind); use the same values, `cascade_context_keys`, or a forwarded group option. Such a key (every declared key the name does not bind: all of them when the group has no name patterns, the patterns do not match, or they cannot read the name) splits by value without a marker when a consumer reads one of the copies; `split_context_keys` splits copies that are all direct requests. A source group's keys declared `routing=True` are exempt, since they only pick the source.
+Same-named copies that differ in undeclared context keys but read the same inputs on one framework are rejected (this covers root features requested directly more than once and declared option keys the name does not bind); use the same values, `cascade_context_keys`, or a forwarded group option. A declared key the name does not bind (all of them when the group has no name patterns, the patterns do not match, or they cannot read the name) splits by value without a marker when a consumer reads one of the copies; `split_context_keys` splits copies that are all direct requests. A source group's keys declared `routing=True` are exempt, since they only pick the source.
 
 ### Previewing the forwarded options
 

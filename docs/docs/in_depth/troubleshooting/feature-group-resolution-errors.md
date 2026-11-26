@@ -94,7 +94,7 @@ Each line names a candidate the matcher considered and dropped: the first gate t
 | `declarations` | A consumer's input or a requested feature requires a declared attribute that the candidate does not declare, or declares with another value. | Provide a candidate that declares the attribute the reason names. |
 | `inputs` | A competing candidate matched, but one of its dependencies or a deeper input could not resolve in this run. The reason names the input chain and its failure. | Enable or supply the missing input, correct its options or scope, or address the recorded source refusal. |
 
-A group with a viable input chain can win where an unavailable competitor previously caused an ambiguity. `mloda.diagnose(...)` exposes the same `inputs` eliminations.
+A group with a viable input chain wins over an unavailable competitor instead of raising an ambiguity. `mloda.diagnose(...)` exposes the same `inputs` eliminations.
 
 A chained group that keeps the default `MIN_IN_FEATURES` but declares no `in_features` matches by options only when `in_features` is passed. The option path records no rejection reason (a non-matching candidate cannot be told apart from an unrelated one), so the failure report does not name this cause. The class-definition warning names the fix: set `MIN_IN_FEATURES = 0` or declare `in_features` in `PROPERTY_MAPPING`.
 
@@ -151,7 +151,7 @@ This error occurs when multiple distinct feature groups claim they can handle th
 
 When a feature group and its subclass both match, the subclass wins whenever it can run, even if it supports fewer compute frameworks than its parent. A compute-framework pin the subclass cannot serve eliminates it first, so pinning one of the parent's other frameworks reaches the parent. See [A loaded subclass replaces its parent](#a-loaded-subclass-replaces-its-parent) for what else does and does not keep a subclass out.
 
-If you previously hit this in a notebook because of a redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`), that case is now auto-deduplicated. If this error still appears, two distinct classes (different `(module, qualname)`) both claim the name. For source-backed features this usually means two source groups found the column, for example `CsvFG` in a file and `SqliteFG` in a database. Fix it with `feature_group=` (see below), a pointer such as `options={"CsvFG": path}`, or a `data_access_handle` that names one source.
+A redefined feature group (re-running a cell that defines `class MyFG(FeatureGroup): ...`) is deduplicated, so this error means two distinct classes (different `(module, qualname)`) both claim the name. For source-backed features this usually means two source groups found the column, for example `CsvFG` in a file and `SqliteFG` in a database. Fix it with `feature_group=` (see below), a pointer such as `options={"CsvFG": path}`, or a `data_access_handle` that names one source.
 
 ### Solutions
 

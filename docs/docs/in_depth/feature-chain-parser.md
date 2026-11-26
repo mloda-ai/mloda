@@ -56,7 +56,7 @@ For example:
 
 One resolution, `FeatureChainParserMixin.resolve_feature_name`, returns a `NameResolution` (`owned`, `bindings`, `sources`, `value_for(key)`). Matching, the rejection diagnostic, `input_features`, `_extract_source_features` and `_resolve_operation` all read it.
 
-- **Ownership:** a name owns the feature when its `PREFIX_PATTERN` identifies the group, and an owned name is authoritative for every value it encodes.
+- **Ownership:** a name owns the feature when the group's effective name pattern (`PREFIX_PATTERN` or `SUFFIX_PATTERN`) identifies it, and an owned name is authoritative for every value it encodes.
 - **Binding:** every named capture of an owned name that is a `PROPERTY_MAPPING` key is bound and validated like an option, even when the option is also set; an unsupported value is a recorded match-time rejection. A key's `name_converter` converts the captured text before validation (a raising one is a rejected value). A legacy positional capture binds only a value already in the key's `allowed_values`, unconverted.
 - **Agreement:** a declared option for a key the name binds, and a non-empty `in_features`, must agree with the name (`in_features` must equal the name's direct sources). A contradiction aborts the match with an error; `MLODA_ALLOW_FORWARDED_NAME_MISMATCH=1` downgrades it to a warning. Only own keys are compared: forwarded keys and materialized defaults never conflict here. An agreeing `in_features` supplies the input features, so their options and `feature_group` scope are kept; a downgraded mismatch uses the name's bare sources instead. An override that calls only `match_parser_criteria` skips this check. A plugin that parses a value from the name by hand (one its captures do not bind) runs the option checks (not the `in_features` one) with `cls.validate_hand_parsed_bindings(feature_name, bindings, options)`.
 - **Operands:** every name or config source must be non-empty and the count within `MIN_IN_FEATURES` / `MAX_IN_FEATURES` (name path: recorded rejection; config path: silent non-match).
@@ -205,7 +205,7 @@ In `calculate_feature`, read every value through the mixin helpers (`_resolve_op
 
 #### 5. Whole-Value Validation with `match_guard`
 
-Give a spec a `match_guard` callable (with an `expected` phrase to report the rejection) to validate the shape of the raw option value; `element_validator` with `strict_validation=True` judges each element instead. The guard runs only when the option is present (not None), and a falsy return is a non-match, not an error. A guard that raises counts as a rejection too, unless the raise is marked with `escalate_match_abort`, which overrides that. Validators must be pure, since they may be called several times during resolution.
+Give a spec a `match_guard` callable (with an `expected` phrase to report the rejection) to validate the shape of the raw option value; `element_validator` with `strict_validation=True` judges each element instead. The guard runs only when the option is present (not None, unless the spec sets `allow_explicit_none=True`), and a falsy return is a non-match, not an error. A guard that raises counts as a rejection too, unless the raise is marked with `escalate_match_abort`. Validators must be pure, since they may be called several times during resolution.
 
 The full model, which invariant fires at which moment, the precedence between the two callables, and what a validator receives for each container type, lives in one place: [PROPERTY_MAPPING Configuration](property-mapping.md).
 

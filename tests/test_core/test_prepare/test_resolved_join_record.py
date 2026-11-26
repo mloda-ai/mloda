@@ -1706,6 +1706,7 @@ def test_the_records_sign_the_joins_the_join_steps_sign(build: Callable[[], Any]
     assert join_steps, "the shape must plan at least one JoinStep for the parity to say anything"
     assert len(resolved.records) == len(join_steps)
     assert {record.token for record in resolved.records} == {step.uuid for step in join_steps}
+    assert _without_depends(resolved.signatures()) == _without_depends(joinstep_signatures(join_steps))
 
 
 def test_raise_on_join_plan_divergence_raises_on_a_mutated_step() -> None:
@@ -2051,6 +2052,7 @@ def test_a_real_engine_plan_carries_one_record_per_planned_join_step() -> None:
 
     assert len(join_steps) == 1
     assert len(resolved.records) == len(join_steps)
+    assert _without_depends(resolved.signatures()) == _without_depends(joinstep_signatures(join_steps))
     for record in resolved.records:
         assert record.destination_framework in record.destination.declared_frameworks
 

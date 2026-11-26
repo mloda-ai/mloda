@@ -183,7 +183,7 @@ def aware_zone(values: Any, column: str | None = None, field: str | None = None)
 
 
 def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None = None) -> pa.Array:
-    """Build an array; a list of aware datetimes keeps its instants and its zone."""
+    """Build an array; aware datetimes, flat, in nested lists or in struct fields, keep their instants and zone."""
     if isinstance(values, (list, tuple)):
         if type is None:
             zone = aware_zone(values, column)
@@ -198,11 +198,19 @@ def arrow_array(values: Any, type: pa.DataType | None = None, column: str | None
         first = next((v for v in values if not is_gap(v)), None)
         if isinstance(first, (list, tuple, dict)):
             groups: dict[tuple[str, ...], list[Any]] = {}
+            dead: set[tuple[str, ...]] = set()
             for path, leaf in _field_leaves(values):
-                groups.setdefault(path, []).append(leaf)
+                if path in dead:
+                    continue
+                if isinstance(leaf, datetime):
+                    groups.setdefault(path, []).append(leaf)
+                else:
+                    dead.add(path)
+                    groups.pop(path, None)
             fields = {path: ".".join(map(str, path)) if path else None for path in groups}
             if type is not None:
-                if any(_aware_values(groups[p], column, fields[p]) is not None for p in groups):
+                checked = [_aware_values(groups[p], column, fields[p]) for p in groups]
+                if any(c is not None for c in checked):
                     return pa.array(utc_copy(values), type=type)
             else:
                 zones = {p: z for p in groups if (z := aware_zone(groups[p], column, fields[p])) is not None}

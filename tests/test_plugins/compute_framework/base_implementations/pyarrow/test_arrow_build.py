@@ -202,8 +202,13 @@ class TestArrowBuild:
                 pa.struct([("stamp", pa.timestamp("us", tz="UTC"))]),
                 "field 'stamp'",
             ),
+            (
+                [{"first": _UTC_NOON, "stamp": _NAIVE}, {"first": _UTC_NOON, "stamp": _UTC_NOON}],
+                pa.struct([("first", pa.timestamp("us", tz="UTC")), ("stamp", pa.timestamp("us", tz="UTC"))]),
+                "field 'stamp'",
+            ),
         ],
-        ids=["flat", "nested", "struct"],
+        ids=["flat", "nested", "struct", "struct_aware_sibling_first"],
     )
     def test_explicit_type_rejects_naive_aware_mix(
         self, values: list[Any], target: pa.DataType, field: str | None
@@ -228,8 +233,7 @@ class TestArrowBuild:
     def test_struct_field_bad_zone_raises_naming_column_and_field(
         self, shape: str, column: str | None, kind: str
     ) -> None:
-        v0, v1 = bad_zone_values(kind)[0]
-        texts = bad_zone_values(kind)[1]
+        (v0, v1), texts = bad_zone_values(kind)
         values = {
             "struct": [{"stamp": v0}, {"stamp": v1}],
             "list_of_struct": [[{"stamp": v0}, {"stamp": v1}]],

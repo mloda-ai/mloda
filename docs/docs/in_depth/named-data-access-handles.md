@@ -95,7 +95,6 @@ When a feature group asks the DAC for a resource of a given kind, the resolver a
     - One match: bind it.
     - More than one match: raise `ValueError` listing the candidate handles and telling the user to set `data_access_handle`.
 
-The error shape is the same for every kind.
 
 ```python
 import sqlite3

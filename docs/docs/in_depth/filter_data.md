@@ -367,7 +367,7 @@ return pa.table({
 
 ### Pipeline data flows
 
-The following examples show what happens to data at each stage. All flows use the same input and filter:
+All flows below use the same input and filter:
 
 ```
 Input:

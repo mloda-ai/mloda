@@ -196,7 +196,7 @@ result = session.run(api_data={"RerunCheckRequest": {"RerunCheckScore": [0.1, 0.
 assert len(result[0]) == 3
 ```
 
-Without a `compute_frameworks` list, a set given as a dict of lists runs on `PythonDictFramework` (reason `loads natively`) when the dict framework can serve the group, and consumers that can run there follow, so the result is a dict unless `output_framework` converts it. Sets with other column types (tuples, arrays) keep today's choice. A pandas-style group without `compute_framework_rule` then also runs on dicts: declare the rule or pass `compute_frameworks`.
+Without a `compute_frameworks` list, a set given as a dict of lists runs on `PythonDictFramework` (reason `loads natively`) when the dict framework can serve the group, and consumers that can run there follow, so the result is a dict unless `output_framework` converts it. Sets with other column types (tuples, arrays) keep the default framework choice. A pandas-style group without `compute_framework_rule` also runs on dicts: declare the rule or pass `compute_frameworks`.
 
 The following example shows a simple `api_data` setup.
 

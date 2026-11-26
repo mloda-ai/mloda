@@ -2,31 +2,11 @@
 
 `DataAccessCollection` (DAC) is a registry of data resources keyed by stable string handles. Every consumer that needs to bind one resource uses a single resolution rule that raises on ambiguity rather than letting iteration order decide.
 
-For background, see [issue #443](https://github.com/mloda-ai/mloda/issues/443).
-
 ## The four kinds of resources
 
-A DAC holds resources of four kinds. Each kind has its own keyed dict:
-
-```py
-DataAccessCollection(
-    connections={"warehouse": warehouse_conn, "analytics": analytics_conn},
-    files={"transactions": "/data/tx.parquet", "users": "/data/users.csv"},
-    folders={"raw": "/data/raw/"},
-    credentials={"pg-prod": {"host": "...", "user": "..."}, "snowflake-dev": {...}},
-)
-```
+A DAC holds resources of four kinds, each in its own keyed dict: `connections`, `files`, `folders` and `credentials`, with the mutators `add_connection`, `add_file`, `add_folder` and `add_credentials`.
 
 Handle names are arbitrary strings you choose. They are globally unique across kinds: you cannot register a connection and a file under the same name. Registration raises `ValueError` on duplicates.
-
-Mutators mirror the keyed-dict shape:
-
-```py
-dac.add_connection("warehouse", warehouse_conn)
-dac.add_file("transactions", "/data/tx.parquet")
-dac.add_folder("raw", "/data/raw/")
-dac.add_credentials("pg-prod", {"host": "..."})
-```
 
 A small runnable example, backed by `sqlite3` so it has no external dependencies:
 
@@ -40,24 +20,26 @@ secondary = sqlite3.connect(":memory:")
 dac = DataAccessCollection(
     connections={"primary": primary, "secondary": secondary},
     files={"users": "/tmp/users.csv"},
+    folders={"raw": "/tmp/raw/"},
 )
 
 assert dac.handles() == {
     "primary": "connection",
     "secondary": "connection",
     "users": "file",
+    "raw": "folder",
 }
 ```
 
 ## Accepted input shapes and why each exists
 
-Every kind accepts more than one input shape. Each shape earned its place at a different point in the API's history; pick by intent:
+Every kind accepts more than one input shape; pick by intent:
 
-| Shape | Example | Use when | Why it exists |
-|-------|---------|----------|---------------|
-| Named dict `{handle: value}` | `files={"tx": "/data/tx.csv"}` | Several sources of one kind | Stable handles make resolution deterministic and per-feature addressable via `data_access_handle` ([#443](https://github.com/mloda-ai/mloda/issues/443)) |
-| Bare `set` / `list` | `files={"/data/tx.csv"}` | One source of a kind | Entries get internal auto-handles you never reference; naming a single source was pure boilerplate ([#449](https://github.com/mloda-ai/mloda/pull/449)) |
-| Typed `Credential(...)` | `credentials=Credential(sqlite="/x.db")` | Any credential (recommended) | A credential is itself a dict, so the bare dict shape collides with the named form; the type removes the nesting ambiguity ([#511](https://github.com/mloda-ai/mloda/issues/511)) |
+| Shape | Example | Use when | Why |
+|-------|---------|----------|-----|
+| Named dict `{handle: value}` | `files={"tx": "/data/tx.csv"}` | Several sources of one kind | Stable handles make resolution deterministic and per-feature addressable via `data_access_handle` |
+| Bare `set` / `list` | `files={"/data/tx.csv"}` | One source of a kind | Entries get internal auto-handles you never reference; naming a single source is boilerplate |
+| Typed `Credential(...)` | `credentials=Credential(sqlite="/x.db")` | Any credential (recommended) | A credential is itself a dict, so the bare dict shape collides with the named form; the type removes the nesting ambiguity |
 | `list` of credential dicts | `credentials=[{"host": "h"}]` | Several unnamed credentials | Credentials have no `set` form because dicts are unhashable |
 
 The named/auto split applies to the mutators as well:
@@ -99,18 +81,9 @@ Registered credentials are stored as `RegisteredCredential`, a `dict` subclass, 
 
 Two safety behaviors come with it:
 
-- **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) now raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
+- **Early mis-wrap error.** Passing a bare dict whose values are not mappings (the mis-wrap shape above) raises `ValueError` at construction time, naming the offending handle and showing the three correct alternatives, instead of failing silently later during matcher selection.
 - **Redacted error output.** `repr(Credential(password="hunter2"))` prints `Credential(password='***')`, and the resolver's ambiguity error renders credential candidates with keys visible and values replaced by `***`. Mapping credentials registered through the constructor or `add_credentials` print (print, f-strings, logging, pprint) with values `***`. Copies (`dict(cred)`, `{**cred}`, `.copy()`), `.items()`/`.values()` and `json.dumps` see raw values; `yaml.safe_dump` rejects the subclass, so convert with `dict(cred)` first. Direct assignment into `dac.credentials` stores the value as-is and prints raw; registration copies the caller's dict. A match keeps credentials out of its `repr`, and the caller's own dict stays untouched. Option conflict errors and filter divergence warnings mask mapping values and scrub credential-shaped strings (URI user info, query and fragment, `password=` values) inside nested lists, tuples and sets (mapping keys print as given). A database group's matched options hold a plain-dict pointer as a `RegisteredCredential`, so `str(features.options)` masks it. `str(Options)` masks the reserved reader tuple (a mapping masked, a DSN string scrubbed) and the value under any credential-shaped key (nested too); `data_access_handle` and `connection_handle` print `***` until planning finds the value registered, and a list value always prints `***`; every other option prints as given, including the caller's own `Options` (mloda works on copies) and a pointer forwarded to a consumer, so `Credential(...)` (e.g. `options={"SqliteFG": Credential(sqlite="/x.db")}`) stays the recommended form.
 - **`dac.redact(text)`.** Exact-matches every registered credential string value of 8 or more characters (host, user, path, not just password; shorter values are left to the pattern rules), only from `credentials` (not connections, files, folders), then scrubs the result through `scrub_credentials`. During a run, every string value of 8 or more characters of a registered credential is already masked, raw, stripped of surrounding whitespace and in its `repr` (either quote style) and JSON escaped forms, in raised errors (args including nested strings, instance attributes (str ones, and the strings and keys inside dict, list, tuple and set ones), the str fields of `OSError`, `ImportError`, `SyntaxError`, the `UnicodeError` subclasses and `SystemExit`, an `ExceptionGroup`'s message, notes, refusals, cause and context chain) and in every log record (see [Log record masking](#log-record-masking)); a container attribute holding a registered value is rebuilt as a plain dict, list, tuple or set (others are left untouched), and containers nested deeper than 32 levels are masked whole; a group's message is read-only, so a group holding a registered value in it is raised as a masked copy (its `__init__` is not run, `__slots__` values are lost, a subclass whose `args` omit its own constructor arguments may not unpickle, and a group nested deeper than 32 levels is replaced whole); a masked `UnicodeError.object` or `SyntaxError.text` keeps its original offsets, so `start`, `end` and the caret may no longer line up; bytes, other C-level attributes (such as `AttributeError.obj`), objects held in attributes or nested in their containers (exceptions included), non-dict mappings (such as HTTP header objects) and a value escaped twice (such as `repr(json.dumps(value))`) are not masked. Values under these connection fields are not masked: `host`, `hostname`, `server`, `server_hostname`, `port`, `database`, `db`, `dbname`, `schema`, `catalog`, `warehouse`, `account`, `role`, `project`, `dataset`, `location`, `region`, `bucket`, `container`, `namespace`, `cluster`, `endpoint`, `endpoint_url`, `http_path`, `driver`, `dialect`, `scheme`, `protocol`, `sslmode`, `authenticator`, `application_name`, `client_id`, `tenant_id`, `user`, `username`, `sqlite`, `path`, `file`, `folder`, `table_name`, `table`, `database_name`, `schema_name`, `bucket_name`, `project_id`, `dataset_id` and `file_path`. Keys are compared lowercased with `_` and `-` removed; a credential-shaped key or ancestor key always wins, and unknown keys (including `dsn`, `url`, `conn`) are masked. A plugin keeping a secret under a listed key is a bug. `redact` still masks every value. A credential-shaped value shorter than 8 characters logs a warning at registration naming the handle and key (by stripped length), since it cannot be masked by exact match.
-
-### Why a typed class: four kinds of users
-
-The design serves four user groups that hit credentials differently:
-
-1. **Notebook users** (one data source) write the obvious shape from an example. For them the bare dict either has to work or fail loudly at construction; `Credential(sqlite="/data/x.db")` gives them a form with no nesting decision to get wrong, and the early error catches the legacy shape.
-2. **Production users** (multiple sources) live in the named-handle registry and disambiguate per feature via `data_access_handle`. For them `Credential` keeps the registry values homogeneous, so ambiguity errors and `handles()` introspection stay trustworthy.
-3. **Plugin authors** implement `is_valid_credentials` and previously had to isinstance-juggle whatever leaked through (including bare strings from mis-wrapped input). The framework now normalizes at the boundary: the plugin receives a dict for every mapping credential.
-4. **Ops and data stewards** care about what is in the credential, not its shape. The resolver's ambiguity errors print candidate values, so credential candidates are rendered with redacted values (keys only), keeping passwords out of those messages and the logs that capture them.
 
 ## Resolution rule
 
@@ -121,8 +94,6 @@ When a feature group asks the DAC for a resource of a given kind, the resolver a
     - Zero matches: return `None` (the consumer typically continues looking elsewhere).
     - One match: bind it.
     - More than one match: raise `ValueError` listing the candidate handles and telling the user to set `data_access_handle`.
-
-The error shape is the same for every kind. This is the same contract `ComputeFramework.pick_connection_from_dac` shipped in #442, generalized to every consumer.
 
 ```python
 import sqlite3
@@ -168,7 +139,7 @@ features = [
 mloda.run_all(features, compute_frameworks=["PyArrowTable"], data_access_collection=dac)
 ```
 
-The key works across the file, document, and database source groups on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg today) on an engine-wide basis.
+The key works across the file, document, and database source groups on a per-feature basis, and across every CFW that consumes connections (DuckDB, SQLite, Spark, Iceberg) on an engine-wide basis.
 
 Two features in one session can bind different connections of the same framework, each step getting its own. A `data_access_handle` naming a connection counts as an explicit choice: the step binds that connection eagerly.
 
@@ -199,28 +170,7 @@ dac.handles()
 
 ## Interaction with `column_to_file`
 
-`column_to_file` is a file-specific override that takes precedence over the resolver. Its values may be either a **file handle** (key of the `files` dict) or a **file path** (value of the `files` dict); both are accepted and normalized to handles internally:
-
-```python
-DataAccessCollection(
-    files={"train": "application_train.csv", "bureau": "bureau.csv"},
-    column_to_file={
-        "SK_ID_CURR": "train",
-        "TARGET":     "train",
-        "AMT_CREDIT_SUM": "bureau",
-    },
-)
-```
-
-For columns listed in the map, the resolver short-circuits to the pinned file. For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (wrong source group, missing column), the feature is declined rather than falling back to another file. When no ReadFileFG group owns the pinned file's suffix, this is recorded as an attributable elimination instead of a silent decline.
-
-See [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the full example.
-
-## Why this exists
-
-Before #443, every DAC field was an unkeyed set. When two resources of the same kind were registered, Python's set iteration (`PYTHONHASHSEED`-dependent) decided which one the engine picked. The same pipeline could read the wrong table, wrong file, or wrong credential across processes, with no error and no signal at planning time.
-
-Named handles collapse that bug class to one invariant: *if the registry has more than one entry of the requested kind and the consumer did not pass a handle, raise and list the candidates*. Same rule, same error shape, regardless of field.
+`column_to_file` is a file-specific override that takes precedence over the resolver; its values may be a file handle or a file path (see [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the example and rules). For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (for example a missing column), resolution aborts with an error (unless another group computes the feature) instead of falling back to another file. When no ReadFileFG group owns the pinned file's suffix, the group is declined and this is recorded as an attributable elimination.
 
 ## Declaring a credential handle
 
@@ -244,7 +194,10 @@ The option is a group option (never context), strictly validated, and never sett
 fails, in `prepare()`, `explain()` and `run_all()` alike, with an error naming the option and group (never a credential or unregistered handle value) when:
 
 - the key is set in `Options.context` instead of the group options;
-- a matched group whose required handle is absent (for example one with an overridden matcher), or a required handle key (no default) absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists. A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not). A config-path group refuses a misspelled handle key the same way, when the handle key is the only one missing, a close supplied key exists and no `match_guard` declines the options. On the configuration path, a group missing only its handle key, with none close, while the request sets one of its own required non-handle keys and no `match_guard` declines it, is listed as a near-miss in the "No feature groups found" error;
+- a matched group whose required handle is absent (for example one with an overridden matcher), or a required handle key (no default) absent from the options of a group that owns the feature name, even when another group matches the feature; the message names a close option key when one exists.
+    - A matching group suppresses the refusal only when it is a strict subclass of the refusing group, declares the same missing key, or declares a handle key the request itself set (a forwarded key counts, a default does not).
+    - A config-path group refuses a misspelled handle key the same way, when the handle key is the only one missing, a close supplied key exists and no `match_guard` declines the options.
+    - On the configuration path, a group missing only its handle key, with none close, while the request sets one of its own required non-handle keys and no `match_guard` declines it, is listed as a near-miss in the "No feature groups found" error;
 - the value is not a non-empty `str`;
 - the handle is not registered, or is registered under another kind (the message lists the named credential handles);
 - the handle is an unnamed credential (a declared handle must be named);
@@ -448,7 +401,7 @@ mloda changes these process-wide settings:
 - **"Option 'K' holds a mapping with secret-shaped keys (...) but G is not the source group K ..."**: a plain mapping under a pointer key on a group that never reads it holds a secret-shaped key (count names such as `max_token` are exempt). Register the credential and name its handle in an option declared with `credential_handle_spec`.
 - **"Handle '<pointer>' is reserved ..."**: `<pointer>` and `<unnamed>` are plan record names; pick another handle name.
 - **"credentials list entry N has type T, not a mapping"**: each list entry must be a dict or `Credential`; wrap a bare value such as a DSN as `Credential(dsn=...)`.
-- **"HashableDict is no longer accepted as a credential value"**: pre-0.7 call sites wrapped credentials in `HashableDict`. The credentials path no longer accepts it; pass `Credential(...)` or a plain dict instead. `HashableDict` is not removed from the library: it still backs hashability-required internals (for example `Options` hashing and similar internals). It is simply no longer unwrapped anywhere on the database credential / data-access path.
+- **"HashableDict is no longer accepted as a credential value"**: the credentials path does not accept `HashableDict`; pass `Credential(...)` or a plain dict instead. `HashableDict` still backs hashability-required internals (for example `Options` hashing) but is not unwrapped anywhere on the database credential / data-access path.
 
 ## Related
 

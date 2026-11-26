@@ -101,31 +101,7 @@ Result: all rows preserved, but only matching values contributed to the sum.
 
 #### Inline masking + row elimination
 
-Use the mask engine for conditional logic **and** return `final_filters() = True`
-so the framework also eliminates non-matching rows afterward. You must preserve
-the filter column in your output (see the
-[overlap contract](filter_data.md#the-overlap-contract) in the filter docs).
-
-```
-class MaskedRegionSumActiveOnly(FeatureGroup):
-    @classmethod
-    def final_filters(cls) -> bool:
-        return True  # also eliminate non-matching rows
-
-    @classmethod
-    def calculate_feature(cls, data, features: FeatureSet):
-        engine = features.mask_engine
-        mask = engine.equal(data, "status", "active")
-        masked = pc.if_else(mask, data["sales"], None)
-        sums = broadcast_sum(masked, data["region"])
-        # Return all rows; the framework will remove non-matching ones
-        return pa.table({
-            cls.get_class_name(): sums,
-            "status": data["status"],  # preserve the filter column
-        })
-```
-
-Result: only matching rows remain, with aggregated values computed from masked data.
+Combine the mask engine with `final_filters() = True` so the framework also eliminates non-matching rows; preserve the filter column in your output (see the [overlap contract](filter_data.md#the-overlap-contract)).
 
 ### Pipeline data flow (inline masking)
 

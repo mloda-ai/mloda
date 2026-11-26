@@ -242,7 +242,7 @@ The annotate tier is per field, not per class: a degraded entry is listed, not h
 base-class-derived: a broken `description()` falls back to the class docstring (or
 `__name__`) and stays findable via `search=`, and a broken `prefix()` falls back to `"<__name__>_"`. The
 reads that feed a filter (`get_class_name()`, `description()`, `version()`) also degrade on a non-str return.
-The labelled `get_feature_group_docs` reads log a warning when they swallow a failure (once per broken class);
+The labelled `get_feature_group_docs` reads log a warning when they swallow a failure (the version read warns once per broken class, the others on each swallow);
 the unlabelled guards stay silent because degrading there is by design.
 
 ## Related Documentation

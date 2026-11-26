@@ -6,8 +6,7 @@ Framework transformers are a key component of mloda's compute framework system, 
 
 ## Core Components
 
-`BaseTransformer` is the abstract interface for converting data between two compute frameworks. `ComputeFrameworkTransformer` keeps the registry of transformers and finds the one for a framework pair. It auto-loads transformer files from the `compute_framework` group on first use; pandas, polars, duckdb, iceberg and spark ones load once that library is imported.
-
+`BaseTransformer` is the abstract interface for converting data between two compute frameworks. `ComputeFrameworkTransformer` keeps the registry of transformers and finds the one for a framework pair.
 ### Built-in transformers
 
 | Transformer | Frameworks | Direction | Connection |
@@ -15,12 +14,12 @@ Framework transformers are a key component of mloda's compute framework system, 
 | `PandasPyArrowTransformer` | Pandas DataFrame, PyArrow Table | two-way | no |
 | `PolarsPyArrowTransformer` | Polars DataFrame, PyArrow Table | two-way | no |
 | `PolarsLazyPyArrowTransformer` | Polars LazyFrame, PyArrow Table | two-way | no |
-| `PythonDictPyArrowTransformer` | Python dict rows, PyArrow Table | two-way | no |
+| `PythonDictPyArrowTransformer` | columnar Python dict (`dict[str, list]`), PyArrow Table | two-way | no |
 | `DuckDBPyArrowTransformer` | DuckDB Relation, PyArrow Table | two-way | required for PyArrow to DuckDB |
 | `SqlitePyArrowTransformer` | SQLite relation, PyArrow Table | two-way | required for PyArrow to SQLite |
-| `SparkPyArrowTransformer` | Spark DataFrame, PyArrow Table | two-way | optional `SparkSession`; otherwise the active session or a new local one |
-| `IcebergPyArrowTransformer` | Iceberg table, PyArrow Table | two-way | optional catalog |
-| `FileSourcePyArrowTransformer`, `FileSourceDictTransformer` | file source, PyArrow Table or Python dicts | one-way | no |
+| `SparkPyArrowTransformer` | Spark DataFrame, PyArrow Table | two-way | optional `SparkSession` (the framework supplies or creates one); without one the transformer uses the active session or raises |
+| `IcebergPyArrowTransformer` | Iceberg table, PyArrow Table | two-way | Iceberg to PyArrow; PyArrow to Iceberg passes the table through (catalog unused) |
+| `FileSourcePyArrowTransformer`, `FileSourceDictTransformer` | file source, PyArrow Table or columnar Python dict | one-way | no |
 
 DuckDB and SQLite share `SqlBasePyArrowTransformer`, which validates the connection object (see [Framework Connection Object](framework-connection-object.md)) because their relations belong to one database connection.
 

@@ -8,13 +8,13 @@ The Framework Connection Object is a key concept in mloda's compute framework sy
 
 A connection object is an optional per-framework handle that stateful frameworks use to share one connection or session across steps. Each framework's `connection_requirement()` says how it gets one:
 
-- **Required** (`ConnectionRequirement.REQUIRED`): DuckDB and SQLite need a connection in the `DataAccessCollection`.
-- **Self-managed** (`SELF_MANAGED`): Spark creates or reuses a local `SparkSession` when none is supplied; Iceberg uses a supplied catalog.
+- **Required** (`ConnectionRequirement.REQUIRED`): DuckDB and SQLite need a connection in the `DataAccessCollection`; a step can also take the connection its parent relation carries.
+- **Self-managed** (`SELF_MANAGED`): Spark uses a supplied `SparkSession`, or creates a local one (`getOrCreate` reuses any existing session) when none is supplied; Iceberg uses a supplied catalog when given (a table is also accepted).
 - **None** (`NONE`): Pandas, PyArrow, Polars and PythonDictFramework hold their data in memory.
 
 ## How it Works
 
-`ComputeFramework` holds the object in `framework_connection_object`, set through `set_framework_connection_object` and read through `get_framework_connection_object`. Frameworks that need one override the setter (see Implementation Guidelines). Framework transformers receive it as the `framework_connection_object` argument of `transform_other_fw_to_fw`; see [Framework Transformers](framework-transformers.md).
+`ComputeFramework` holds the object in `framework_connection_object`, set through `set_framework_connection_object` and read through `get_framework_connection_object`. Frameworks that need one override the setter (see [Implementation Guidelines](#implementation-guidelines)). Framework transformers receive it as the `framework_connection_object` argument of `transform_other_fw_to_fw`; see [Framework Transformers](framework-transformers.md).
 
 ### Using DuckDB with mloda API
 

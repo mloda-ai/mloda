@@ -54,7 +54,7 @@ For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubl
 
 Prefer this hook over raising from `calculate_feature`: it rejects during planning, not at compute time, with a built message.
 
-`resolve_feature(name)` reflects the hook too: its `ResolvedFeature` carries `supported_compute_frameworks` and `unsupported_compute_frameworks` (evaluated under default options unless you pass `options=`, see [Discover Plugins](discover-plugins.md)). A group whose frameworks are all unsupported or uninstalled resolves to `feature_group=None` (see [Compute Frameworks](../chapter1/compute-frameworks.md) for the uninstalled-framework error and `INSTALL_HINT`).
+`resolve_feature(name)` reflects the hook too: its `ResolvedFeature` carries `supported_compute_frameworks` and `unsupported_compute_frameworks` (evaluated under default options unless you pass `options=`, see [Discover Plugins](discover-plugins.md)). A group whose frameworks are all unsupported or uninstalled resolves to `feature_group=None` (see [Compute Frameworks](../chapter1/compute-frameworks.md) for the uninstalled-framework error and `INSTALL_HINT`). An unavailable `output_framework` raises `ValueError` with the install hint.
 
 ### Declaring capability per subtype
 
@@ -253,7 +253,7 @@ When several frameworks can run a step, the choice order is: frameworks the step
 
 - `prefers a matching version`: a divergent implementation was skipped although it would otherwise have won.
 - `reads in place`: a source read from a connection in the collection costs one conversion when served off a framework that accepts that connection, so the work stays in the database ahead of list order.
-- `loads natively`: a step such a source pulls onto its framework reports it too. `ApiDataFG` is a stock source declaring `neutral_type` (see Framework Selection Process).
+- `loads natively`: on a run without a `compute_frameworks` list, a source group declaring `neutral_type` (the stock `ApiDataFG`) pulls its step onto a framework that takes that type as is or serves the group through an Implementation (see [Framework Selection Process](#framework-selection-process)).
 - `<reason>; runs a version that differs: skips NaN in sum`: the step runs a divergent implementation (only option, pinned, or no matching alternative). A reasonless `NOT_IMPLEMENTED` record reads `not implemented`.
 
 ### Pinning an implementation
@@ -324,7 +324,7 @@ The `transform` method converts data between frameworks through the registered t
 - **Spark**: requires PySpark 4.0+ and a Java 17+ runtime (`JAVA_HOME`). mloda can auto-create a local `SparkSession`; for production, supply a configured one through the data access collection. The session stays in the parent process, so Spark steps run in SYNC or THREADING mode, never in a multiprocessing worker; Spark's own distributed processing covers scale-out.
 - **Iceberg**: needs a catalog supplied through the data access collection. The catalog stays in the parent process, so Iceberg steps run in SYNC or THREADING mode, never in a multiprocessing worker.
 
-A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these frameworks at setup; a run left with no usable framework, or a feature pinned to a dropped one, raises. Request `{SYNC, MULTIPROCESSING}` or `{THREADING, MULTIPROCESSING}` to combine them with worker-dispatched frameworks.
+A run requesting only `{ParallelizationMode.MULTIPROCESSING}` drops these frameworks at setup; a run left with no usable framework, a feature pinned to a dropped one, or a group that can run only on dropped frameworks fails at resolution. Request `{SYNC, MULTIPROCESSING}` or `{THREADING, MULTIPROCESSING}` to combine them with worker-dispatched frameworks.
 
 ## SQL Relation Helpers (DuckDB / SQLite)
 
@@ -423,7 +423,13 @@ class MyFrameworkAdapter(FrameworkAdapter):
     def from_arrow(self, table: Any) -> Any:
         return MyFramework.from_arrow(table)
 
-    # column_names, row_count, column_values, column_type and lost_type follow the same shape.
+    def column_type(self, result: Any, column: str) -> Any:
+        return None  # untyped framework
+
+    def lost_type(self, result: Any, column: str) -> bool:
+        return False
+
+    # column_names, row_count and column_values follow the same shape.
 
 
 class TestMyFrameworkEmptyResult(EmptyResultRunAllSuite):

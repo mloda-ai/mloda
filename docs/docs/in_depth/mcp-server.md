@@ -154,7 +154,8 @@ Credentials a group reads at run time with `read_credential` stay here too (see 
 - A plugin marks a key it never wants from a caller (a base URL, an API key) with
   `PropertySpec(..., caller_settable=False)`. MCP requests and `mloda_describe_feature` refuse that key as
   `policy_denied` even when `allow_options` lists it, and describe shows `caller_settable: false`. The match is by key
-  name across all installed plugins. A planned
+  name across all installed plugins. A declared credential handle option is always refused this way, and data-access
+  keys stay refused even when `allow_options` lists them. A planned
   feature name that binds the key through the plugin's name pattern is refused too, even when `[mcp.options]` sets
   it, at `/features/<i>` for a requested name and `/features` for a planned one. `[mcp.options]` defaults and the
   local CLI may still set it.

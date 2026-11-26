@@ -213,8 +213,8 @@ the dependency resolution of a later typed request.
 
 The other identity constraints still apply (options, context, domain, compute frameworks, implementation,
 data source). Two different explicit types stay separate, and so does a typed input with an untyped direct
-request. Across framework sets, the one copy on the strictly narrowest set serves the wider copies, typed or
-not, and the shared copy keeps the declared type. When typed requests of different types compete, the type
+request. Across framework sets, when exactly one copy sits on the strictly narrowest set, it serves the wider copies
+(a typed direct request and an untyped input, either way round), and the shared copy keeps the declared type. When typed requests of different types compete, the type
 whose name sorts first wins (for example `INT32` before `INT64`). Feature equality and hashing remain
 type-sensitive.
 

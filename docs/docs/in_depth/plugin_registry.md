@@ -46,12 +46,14 @@ class MyFeatureGroup(FeatureGroup):
     """First definition."""
 
 key = register_plugin(MyFeatureGroup)
+assert PluginRegistry.default().get(key) is MyFeatureGroup
 
 class MyFeatureGroup(FeatureGroup):
     """Edited and re-run: a new class under the same key."""
 
 try:
     register_plugin(MyFeatureGroup)
+    raise AssertionError("expected a collision")
 except PluginRegistryCollisionError:
     register_plugin(MyFeatureGroup, replace=True)
 

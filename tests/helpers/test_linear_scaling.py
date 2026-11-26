@@ -1,4 +1,4 @@
-"""Unit tests for tests/helpers/linear_scaling.py driven by a fake CPU clock."""
+"""Unit tests for tests/helpers/linear_scaling.py driven by a fake clock."""
 
 from collections.abc import Callable
 from types import SimpleNamespace
@@ -11,7 +11,9 @@ from tests.helpers.linear_scaling import assert_runs_linearly
 
 def _fake_clock(monkeypatch: pytest.MonkeyPatch) -> Callable[[float], None]:
     now = [0.0]
-    monkeypatch.setattr(linear_scaling, "time", SimpleNamespace(process_time=lambda: now[0]))
+    monkeypatch.setattr(
+        linear_scaling, "time", SimpleNamespace(process_time=lambda: now[0], perf_counter=lambda: now[0])
+    )
 
     def advance(seconds: float) -> None:
         now[0] += seconds

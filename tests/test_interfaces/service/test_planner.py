@@ -2455,7 +2455,7 @@ class TestCredentialTable:
         assert service_sources.check_credentials(settings, {"TOK_VAR": TOKEN}) is None
 
     def test_values_read_env_and_file_and_strip_one_newline(self, tmp_path: Path) -> None:
-        (tmp_path / "pii").write_text(ROTATED + "\n\n")
+        (tmp_path / "pii").write_text(ROTATED + "\n\n", newline="")
         settings = _cred_settings(tmp_path, 'token = "TOK_VAR"\nother = { file = "pii" }')
 
         values = service_sources.credential_values(settings.credentials, {"TOK_VAR": TOKEN})

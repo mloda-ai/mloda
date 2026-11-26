@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import os
 import signal
+import sys
 import time
 from pathlib import Path
 from typing import Any
@@ -19,6 +20,8 @@ from mloda.core.runtime.worker.multiprocessing_worker import worker
 from mloda.core.runtime.worker_manager import WorkerManager
 from mloda_plugins.compute_framework.base_implementations.python_dict.python_dict_framework import PythonDictFramework
 from tests.helpers.probe_runner import run_probes
+
+pytestmark = pytest.mark.skipif(sys.platform == "win32", reason="needs os.fork, /proc and SIGKILL")
 
 
 class _FakeCfwManager:

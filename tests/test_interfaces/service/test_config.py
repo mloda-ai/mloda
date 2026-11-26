@@ -8,7 +8,7 @@ from typing import Any
 
 import pytest
 
-from mloda.interfaces.service.config import ConfigError, Settings, SourceConfig, load_settings
+from mloda.interfaces.service.config import ConfigError, FileRef, Settings, SourceConfig, load_settings
 from tests.test_interfaces.source_groups import PASTED
 
 
@@ -424,7 +424,9 @@ def test_credentials_table_loads_env_and_file_refs(tmp_path: Path) -> None:
     assert set(settings.credentials) == {"db"}
     assert set(settings.credentials["db"]) == {"token", "path"}
     assert settings.credentials["db"]["token"] == "DB_TOKEN_VAR"
-    assert (tmp_path / "secrets" / "pii").as_posix() in repr(settings.credentials["db"]["path"])
+    path_ref = settings.credentials["db"]["path"]
+    assert isinstance(path_ref, FileRef)
+    assert Path(path_ref.path) == (tmp_path / "secrets" / "pii").resolve()
 
 
 def test_relative_credential_file_resolves_against_config_dir_not_cwd(tmp_path: Path) -> None:
@@ -435,7 +437,8 @@ def test_relative_credential_file_resolves_against_config_dir_not_cwd(tmp_path: 
 
     ref = load_settings(path, env={}).credentials["db"]["token"]
 
-    assert (tmp_path / "nested" / "secrets" / "pii").as_posix() in repr(ref)
+    assert isinstance(ref, FileRef)
+    assert Path(ref.path) == (tmp_path / "nested" / "secrets" / "pii").resolve()
     assert ".." not in repr(ref)
 
 

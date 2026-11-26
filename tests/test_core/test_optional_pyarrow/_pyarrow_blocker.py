@@ -9,6 +9,10 @@ from __future__ import annotations
 
 import subprocess  # nosec
 import sys
+from pathlib import Path
+
+# Bodies import tests.* through the -c cwd entry, so the cwd must be the repo root.
+_REPO_ROOT = Path(__file__).resolve().parents[3]
 
 # The preamble installs a meta_path finder that raises ModuleNotFoundError for any
 # import of the blocked module, then confirms the module is truly blocked.
@@ -49,4 +53,5 @@ def run_blocked(body: str, module: str = "pyarrow", timeout: int = 30) -> "subpr
         capture_output=True,
         text=True,
         timeout=timeout,
+        cwd=_REPO_ROOT,
     )

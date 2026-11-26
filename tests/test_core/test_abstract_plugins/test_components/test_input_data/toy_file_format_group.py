@@ -41,7 +41,9 @@ def read_toy_file(path: str, columns: tuple[str, ...]) -> dict[str, list[Any]]:
 def write_toy_file(path: str | Path, columns: dict[str, list[Any]]) -> None:
     names = list(columns)
     rows = zip(*(columns[n] for n in names))
-    Path(path).write_text(",".join(names) + "\n" + "".join(",".join(str(v) for v in r) + "\n" for r in rows))
+    Path(path).write_text(
+        ",".join(names) + "\n" + "".join(",".join(str(v) for v in r) + "\n" for r in rows), newline="", encoding="utf-8"
+    )
 
 
 def toy_match(path: str | Path) -> SourceMatch:

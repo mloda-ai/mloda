@@ -75,7 +75,7 @@ _NULL_TOKENS: tuple[str, ...] = (
 
 def _materialize(tmp_path: Path, content: str, columns: tuple[str, ...]) -> Any:
     path = tmp_path / "data.csv"
-    path.write_text(content, encoding="utf-8")
+    path.write_text(content, encoding="utf-8", newline="")
     return FileSourceDictTransformer.transform_fw_to_other_fw(FileSource(path=str(path), format="csv", columns=columns))
 
 

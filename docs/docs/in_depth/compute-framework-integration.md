@@ -52,7 +52,7 @@ Use resolve_feature(name, options=...) to debug feature resolution.
 For troubleshooting guide, see: https://mloda-ai.github.io/mloda/in_depth/troubleshooting/feature-group-resolution-errors/
 ```
 
-Prefer this hook over raising a generic error from inside `calculate_feature`: the rejection happens during planning rather than at compute time, and the message is built for you.
+Prefer this hook over raising from `calculate_feature`: it rejects during planning, not at compute time, with a built message.
 
 `resolve_feature(name)` reflects the hook too: its `ResolvedFeature` carries `supported_compute_frameworks` and `unsupported_compute_frameworks` (evaluated under default options unless you pass `options=`, see [Discover Plugins](discover-plugins.md)). A group whose frameworks are all unsupported or uninstalled resolves to `feature_group=None` (see [Compute Frameworks](../chapter1/compute-frameworks.md) for the uninstalled-framework error and `INSTALL_HINT`).
 
@@ -399,7 +399,7 @@ Use `assert_compute_framework_shape` (or `check_compute_framework_shape`) from `
 
 A pipeline result policy is a rule or FeatureGroup-level flag that changes how the pipeline treats a result. It ships a suite on `RunAllSuite` from `mloda.testing.compute_framework.run_all_suite`, covering every built-in framework in SYNC plus THREADING; a framework without THREADING declares `sync_only_reason` on its adapter. Each case is a `PolicySuccess` or a `PolicyRaises`. `EmptyResultRunAllSuite` is the worked example, and a host only sets `adapter_class`.
 
-Drive the policy through `run_all` rather than testing one enforcement surface, so every framework and mode is covered. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.
+Drive the policy through `run_all` rather than testing one enforcement surface. A framework adapter's `rows` / `row_count` must read the frame its framework's `run_all` returns.
 
 ### Writing a FrameworkAdapter
 

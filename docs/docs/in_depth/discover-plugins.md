@@ -239,7 +239,7 @@ its declaration is read. Both apply identically to a run, so a scope that rescue
 ### Per-field fallbacks
 
 The annotate tier is per field, not per class: a degraded entry is listed, not hidden. Fallbacks are
-base-class-derived, so it stays usable: a broken `description()` falls back to the class docstring (or
+base-class-derived: a broken `description()` falls back to the class docstring (or
 `__name__`) and stays findable via `search=`, and a broken `prefix()` falls back to `"<__name__>_"`. The
 reads that feed a filter (`get_class_name()`, `description()`, `version()`) also degrade on a non-str return.
 The labelled `get_feature_group_docs` reads log a warning when they swallow a failure (once per broken class);

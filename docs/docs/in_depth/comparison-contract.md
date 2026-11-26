@@ -43,7 +43,7 @@ filter-engine hook: an engine enables the timezone/unit guard by setting `provid
 True` and implementing the hook. Engines that leave the flag `False` (for example a time-agnostic
 custom ComputeFramework) skip the guard entirely and are never forced to implement it. An engine that
 opts in but forgets to implement the hook raises a clear error rather than silently skipping
-validation. As-of joins always require `_column_semantics` regardless of the flag, since ordered
+validation. As-of joins always require `_column_semantics` regardless of the flag, as ordered
 time columns are intrinsic to the operation. All built-in backends below opt in.
 
 | Backend | ordered / temporal / numeric | timezone-awareness | zone (`tz`) | time unit |

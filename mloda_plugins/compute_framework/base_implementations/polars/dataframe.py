@@ -11,7 +11,14 @@ from mloda.provider import BaseFilterEngine, BaseMaskEngine
 from mloda_plugins.compute_framework.base_implementations.attribute_column_read import is_attribute_column_read
 from mloda_plugins.compute_framework.base_implementations.polars.polars_filter_engine import PolarsFilterEngine
 from mloda_plugins.compute_framework.base_implementations.polars.polars_mask_engine import PolarsMaskEngine
-from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import aware_zone, is_gap
+from mloda_plugins.compute_framework.base_implementations.pyarrow.arrow_build import (
+    aware_zone,
+    has_gap,
+    is_gap,
+    nested_leaves,
+    null_gaps,
+    utc_copy,
+)
 from mloda_plugins.compute_framework.base_implementations.polars.polars_pyarrow_transformer import (
     reject_sub_hour_zone,
 )
@@ -28,6 +35,13 @@ def _polars_zone(zone: str) -> str:
         hours = int(zone[1:3])
         return "UTC" if hours == 0 else f"Etc/GMT{'-' if zone[0] == '+' else '+'}{hours}"
     return zone
+
+
+def _with_polars_zone(dtype: Any, zone: str) -> Any:
+    """The nested dtype with its Datetime leaf in the zone."""
+    if isinstance(dtype, pl.List):
+        return pl.List(_with_polars_zone(dtype.inner, zone))
+    return pl.Datetime(dtype.time_unit, zone) if isinstance(dtype, pl.Datetime) else dtype
 
 
 _POLARS_EXACT: dict[Any, DataType] = (
@@ -111,17 +125,24 @@ class PolarsDataFrame(ComputeFramework):
 
     @staticmethod
     def _aware_series(columns: Mapping[str, Any]) -> dict[str, Any]:
-        """Series for each aware list column in its zone (raise if mixed, unnameable or sub-hour) and each NaT list."""
+        """Series for aware and gapped list columns; raise on mixed, unnameable or sub-hour zones."""
         series = {}
         for name, values in columns.items():
             if isinstance(values, (list, tuple)):
+                leaves = nested_leaves(values)
+                nested_zone = None if leaves is None else aware_zone(leaves, name)
+                if nested_zone is not None:
+                    reject_sub_hour_zone(name, nested_zone)
+                    nested = pl.Series(name, utc_copy(values))
+                    series[name] = nested.cast(_with_polars_zone(nested.dtype, _polars_zone(nested_zone)))
+                    continue
                 zone = aware_zone(values, name)
                 if zone is not None:
                     reject_sub_hour_zone(name, zone)
                     utc = [None if is_gap(v) else v.astimezone(UTC) for v in values]
                     series[name] = pl.Series(name, utc, dtype=pl.Datetime("us", _polars_zone(zone)))
-                elif any(v is not None and is_gap(v) for v in values):
-                    series[name] = pl.Series(name, [None if is_gap(v) else v for v in values])
+                elif has_gap(values):
+                    series[name] = pl.Series(name, null_gaps(values))
         return series
 
     def _extract_column_dtype(self, data: Any, column_name: str) -> str | None:

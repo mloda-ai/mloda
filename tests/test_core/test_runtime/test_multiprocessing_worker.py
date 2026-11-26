@@ -1101,8 +1101,7 @@ class TestWorkerCredentialGrant:
         assert "second_leaf=True" in message
 
     def test_the_holder_and_secrets_are_gone_after_the_worker_returns(self) -> None:
-        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant
-        from tests.helpers.credential_grant_reader import _read_granted
+        from mloda.core.abstract_plugins.components.credential_grant import StaticGrant, _GRANT_HOLDER
         from mloda.core.abstract_plugins.components.credential_scrub import current_registered_secrets
 
         command_queue, result_queue, cfw_register, cfw = _grant_worker_setup()
@@ -1114,8 +1113,7 @@ class TestWorkerCredentialGrant:
         worker(command_queue, result_queue, cfw_register, cfw, uuid4(), worker_index=0)
 
         assert _FIRST_SECRET not in current_registered_secrets()
-        with pytest.raises(RuntimeError, match="not available outside a step"):
-            _read_granted("first")
+        assert _GRANT_HOLDER.get() is None
 
     def test_a_grant_only_value_echoed_by_a_failing_command_is_masked(self) -> None:
         from mloda.core.abstract_plugins.components.credential_grant import StaticGrant

@@ -25,6 +25,7 @@ from mloda.core.abstract_plugins.components.credential_access import (
     restore_readable,
 )
 from mloda.core.abstract_plugins.components.credential_grant import (
+    _GRANT_HOLDER,
     _READ_RECORDERS,
     CredentialLookup,
     StaticGrant,
@@ -446,8 +447,7 @@ class TestReadCredential:
                 with run_boundary():
                     with pytest.raises(CredentialReadRefused):
                         read_credential("h")
-                    with pytest.raises(RuntimeError):
-                        _read_granted("h")
+                    assert _GRANT_HOLDER.get() is None
                     with credentials_scope({"inner": _credential()}):
                         assert read_credential("inner")["host"] == _HOST
                 assert outer == set()

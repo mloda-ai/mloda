@@ -82,9 +82,6 @@ class TestCredentialLookup:
 
 
 class TestGrantScope:
-    def test_no_grant_is_held_outside_any_scope(self) -> None:
-        assert _GRANT_HOLDER.get() is None
-
     def test_declared_value_is_readable_inside_and_refused_after(self) -> None:
         with grant_scope(StaticGrant({"h": _credential()})):
             assert _read_granted("h") == _credential()
@@ -174,8 +171,7 @@ class TestGrantScope:
             with pytest.raises(Exception, match="h"):
                 _read_granted("h")
 
-        with pytest.raises(Exception, match="h"):
-            _read_granted("h")
+        assert _GRANT_HOLDER.get() is None
 
     def test_a_second_scope_does_not_see_the_first_scopes_handle(self) -> None:
         with grant_scope(StaticGrant({"first": _credential()})):

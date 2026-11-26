@@ -180,7 +180,7 @@ For this purpose, mloda accepts request data through the `api_data` parameter.
 
 The built-in `ApiDataFG` (a `SourceFeatureGroup`) reads data given to mloda at request time. It claims a feature whose name is a column of a set in the `api_data` parameter, and loads it through the `INPUT_DATA_LOAD` hook with `data_access_identity` `api_data:<set key>`.
 
-`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. A rerun's `api_data` must match the prepared set keys and column names (see [prepare() + run()](mloda-api.md#two-phase-execution-prepare-run)); values, row counts and element types are not compared (for sets loaded natively as a dict, see below). A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`. A subclass overriding `load_neutral` or `api_values` declares `neutral_type` itself; one building its own `ApiDataRef` passes `value_type`.
+`Options({"ApiDataFG": "<set key>"})` narrows a feature to one set; an unknown key aborts. `run(api_data=...)` after `prepare()` must match the prepared set keys and column names (see [prepare() + run()](mloda-api.md#two-phase-execution-prepare-run)); values, row counts and element types are not compared. A FeatureGroup computing a name that is also an `api_data` column is an ambiguity error. For a custom transport, subclass `ApiDataFG` and override `load_neutral`, reading the run's values with `cls.api_values(match)`. A subclass overriding `load_neutral` or `api_values` declares `neutral_type` itself; one building its own `ApiDataRef` passes `value_type`.
 
 ```python
 from mloda.user import mloda

@@ -184,8 +184,7 @@ results = mloda.run_all(
         )
 results
 ```
-As this case works, we should not see an error. However, we see how similar the functionalities of input and output validations are.
-
+As this case works, we should not see an error.
 `validate_output_features(cls, data, features)` works like the input hook, with the same validators; wrap it with `ExtenderHook.VALIDATE_OUTPUT_FEATURE`.
 
 #### Artifacts

@@ -39,7 +39,7 @@ The GlobalFilter provides methods to add filters to the collection. The preferre
 
 A `Feature` passed as `filter_feature` is snapshotted, so later changes to your own object do not affect the stored filter.
 
-**add_time_and_time_travel_filters**: Adds an event time range (`event_from`, `event_to`) and optionally a validity period (`valid_from`, `valid_to`, which must be given together). `max_exclusive` (default `True`) makes the upper bounds exclusive. The filters apply to the `reference_time` column by default for the event range and the `time_travel` column for validity; override with `event_time_column` and `validity_time_column`. See the `GlobalFilter.add_time_and_time_travel_filters` docstring for when each range is needed.
+**add_time_and_time_travel_filters**: Adds an event time range (`event_from`, `event_to`) and optionally a validity period (`valid_from`, `valid_to`, which must be given together). `max_exclusive` (default `True`) makes the upper bounds exclusive. The filters apply to the `reference_time` column by default for the event range and the `time_travel` column for validity; override with `event_time_column` and `validity_time_column`. Bounds must be tz-aware (a naive `datetime` raises `ValueError`). The event range alone gives the state at event time; add the validity range when earlier actions (for example payments made before the event) matter.
 
 The bounds of the created **single_filters** are normalized to tz-aware `datetime` objects in UTC, so each filter engine can compare them directly against the framework's native temporal type.
 
@@ -316,8 +316,6 @@ filter is applied, not *where* the computation runs physically:
 
 All frameworks that return `True` produce the same logical result (non-matching rows
 absent from output), but the physical execution path differs.
-
-For inline masking with `features.mask_engine`, see [Mask Engine](mask_engine.md). A custom FilterEngine that skips row elimination (for example at scan time) can be overridden per group: return `True` from `final_filters()` to force elimination for derived columns the scan could not filter.
 
 ### The overlap contract
 

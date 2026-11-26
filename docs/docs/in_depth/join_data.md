@@ -7,7 +7,7 @@ The framework merges data from feature groups automatically when a feature depen
 -   the same feature group with different feature options,
 -   one base feature group joined to several right-side feature groups within one framework.
 
-For such a feature, define a Link, and the ComputeFramework must support the matching merge. Below: **Index**, **JoinType**, **Link**, then the **merge** in the ComputeFramework.
+To merge data from feature groups in one of these setups, define a Link; the ComputeFramework performs the merge if it supports it. The sections below cover **Index**, **JoinType**, **Link**, and the **merge** in the ComputeFramework.
 
 #### Index
 

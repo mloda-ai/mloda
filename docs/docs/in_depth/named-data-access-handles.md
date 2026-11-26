@@ -95,7 +95,6 @@ When a feature group asks the DAC for a resource of a given kind, the resolver a
     - One match: bind it.
     - More than one match: raise `ValueError` listing the candidate handles and telling the user to set `data_access_handle`.
 
-
 ```python
 import sqlite3
 import pytest
@@ -171,7 +170,7 @@ dac.handles()
 
 ## Interaction with `column_to_file`
 
-`column_to_file` is a file-specific override that takes precedence over the resolver; its values may be a file handle or a file path (see [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the example and rules). For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (for example a missing column), resolution aborts with an error instead of falling back to another file. When no ReadFileFG group owns the pinned file's suffix, the group is declined and this is recorded as an attributable elimination.
+`column_to_file` is a file-specific override that takes precedence over the resolver; its values may be a file handle or a file path (see [Disambiguating columns shared across multiple files](access-feature-data.md#disambiguating-columns-shared-across-multiple-files) for the example and rules). For columns not listed, the regular resolver rule applies (single match binds; multiple raises and asks for `data_access_handle`). If the pinned file cannot serve the request (for example a missing column), resolution aborts with an error (unless another group computes the feature) instead of falling back to another file. When no ReadFileFG group owns the pinned file's suffix, the group is declined and this is recorded as an attributable elimination.
 
 ## Declaring a credential handle
 

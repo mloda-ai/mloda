@@ -57,7 +57,7 @@ rename, and the mixin `_build_effective_options` pass-through.
 | `PropertySpec` construction: defaults, immutability, `allowed_values` normalization, flag and callable rules, strict needs a value space | `tests/.../feature_chainer/test_property_spec_type.py` |
 | `name_converter` applies to named captures, runs before validation, and a raising one is a rejected value | `tests/.../feature_chainer/test_parsed_name_bindings.py` |
 | Unknown or mistyped field caught by mypy at author time | `tests/.../feature_chainer/test_property_spec_author_time.py` |
-| `PROPERTY_MAPPING` accepts nothing but `PropertySpec`, and the pipeline behaves as before | `tests/.../feature_chainer/test_property_spec_hard_break.py` |
+| `PROPERTY_MAPPING` accepts nothing but `PropertySpec` | `tests/.../feature_chainer/test_property_spec_hard_break.py` |
 | The constructor IS the schema (no key set left to curate) | `tests/.../feature_chainer/test_property_mapping_spec_schema.py` |
 | Shape rules, relocated from class definition to construction | `tests/.../feature_chainer/test_property_mapping_spec_shape.py` |
 | Declared-default invariant | `tests/test_core/test_abstract_plugins/test_property_mapping_default_invariant.py` |

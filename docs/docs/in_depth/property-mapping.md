@@ -600,7 +600,7 @@ Fix it with `MIN_IN_FEATURES = 0` if the group is source-less, or declare an `in
 
 ## Migrating from the dict form
 
-Spec dicts are gone: every value in a `PROPERTY_MAPPING` must be a `PropertySpec`, and an unmigrated spec raises at class definition, naming the class, the key and the remedy. Renames: `validation_function` is `element_validator` (one element per call, not a stringified sequence; a whole-container check moves to `match_guard`), `type_validator` is `match_guard`, a present `default: None` entry is the `default=None` field, and accepted values live under `allowed_values`.
+Every value in a `PROPERTY_MAPPING` must be a `PropertySpec`, and a non-`PropertySpec` value raises at class definition, naming the class, the key and the remedy. Renames: `validation_function` is `element_validator` (one element per call, not a stringified sequence; a whole-container check moves to `match_guard`), `type_validator` is `match_guard`, a present `default: None` entry is the `default=None` field, and accepted values live under `allowed_values`.
 
 Per-invariant test coverage is mapped in `tests/test_core/test_abstract_plugins/test_components/feature_chainer/PROPERTY_MAPPING_TEST_MATRIX.md`.
 

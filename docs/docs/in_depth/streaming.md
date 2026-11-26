@@ -35,7 +35,7 @@ results = mloda.run_all(
 # results is a list, all groups are already complete
 ```
 
-`stream_all` (above) yields each result as soon as its group is done.
+`stream_all` yields each result as soon as its group is done.
 
 Both produce the same elements, but `stream_all` yields in completion order while `run_all`'s list follows plan order (positions can differ under THREADING/MULTIPROCESSING).
 

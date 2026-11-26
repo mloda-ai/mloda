@@ -56,7 +56,7 @@ mloda uses multiple mechanisms for governance and quality control. The extender 
 
 #### How do plugins work in mloda, and can I develop my own plugins?
 
-mloda automatically selects the appropriate plugins for a given feature. Users can develop custom plugins to extend the platform's capabilities, and contributions are always welcome. Feedback and design critiques are also greatly appreciated!
+mloda automatically selects the appropriate plugins for a given feature. Users can develop custom plugins to extend the platform's capabilities, and contributions are always welcome.
 
 #### How do I join a feature group with itself (self-join)?
 

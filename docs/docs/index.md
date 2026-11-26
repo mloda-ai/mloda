@@ -14,37 +14,11 @@ Plugins are **small, template-like structures** - easy to test, easy to debug, a
 
 ## Key Benefits
 
-**AI & Agent Integration**
-
-- declarative API - agents describe WHAT, not HOW
-- JSON-based feature requests for LLM tool functions
-- built-in lineage for traceability
-
-**Data Processing**
-
-- automated feature engineering and dependency resolution
-- data cleaning and synthetic data generation
-
-**Data Management**
-
-- rich metadata including data lineage and usage tracking
-- clear role separation: providers, users, and stewards
-
-**Data Quality and Security**
-
-- data quality definitions
-- unit- and integration tests
-- secure queries
-
-**Scalability**
-
-- switch compute framework without changing feature logic
-- same plugins work from notebook to production
-
-**Community Engagement by Design**
-
-- shareable plugin ecosystem
-- fostering community
+- **AI and agents:** a declarative API where agents describe WHAT, not HOW, with JSON feature requests for LLM tool functions and built-in lineage.
+- **Data processing and management:** automated dependency resolution, rich metadata, and clear roles for providers, users, and stewards.
+- **Quality and security:** data quality definitions, unit and integration tests, secure queries.
+- **Scalability:** switch compute framework without changing feature logic; the same plugins work from notebook to production.
+- **Community:** a shareable plugin ecosystem.
 
 ## Core Components and Architecture
 
@@ -53,7 +27,7 @@ mloda addresses common challenges in data and feature engineering by leveraging 
 #### Plugins
   - Feature Groups: **Define feature dependencies**, such as creating a composite label based on features e.g. user activity, purchase history, and support interactions. Once defined, only the label needs to be requested, as dependencies are resolved automatically, simplifying processing. [Learn more here.](chapter1/feature-groups.md)
 
-  - Compute Frameworks: Define the **technology stack**, like Spark or Pandas, along with support for different storage engines such as Parquet, Delta Lake, or PostgreSQL, to execute feature transformations and computations, ensuring efficient processing at scale. [Learn more here.](chapter1/compute-frameworks.md)
+  - Compute Frameworks: Define the **technology stack**, like Spark or Pandas, along with support for different storage engines such as DuckDB, SQLite, or Iceberg, to execute feature transformations and computations, ensuring efficient processing at scale. [Learn more here.](chapter1/compute-frameworks.md)
 
   - Extenders: Automate **metadata extraction processes**, helping you enhance data governance, compliance, and traceability, such as analyzing how often features are used by models or analysts, or understanding where the data is coming from. [Learn more here.](chapter1/extender.md)
 

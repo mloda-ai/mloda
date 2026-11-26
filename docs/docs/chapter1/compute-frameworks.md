@@ -37,11 +37,7 @@ The only error here is when no compute framework plugin is loaded at all:
 ValueError: No compute framework plugin is loaded; import one or call PluginLoader.all().
 ```
 
-Choosing the compute framework per run is a **feature**, allowing you to compare different technologies and computation methods, particularly useful in scenarios such as:
-
--   **Migrations**: Moving from one environment to another.
--   **Scaling Projects**: Upleveling a project from MVP to production.
--   **ML Lifecycle**: Using the same KPIs (feature groups) across training, real-time inference, and model evaluation.
+Choosing the compute framework per run is a **feature**, allowing you to compare different technologies and computation methods.
 
 #### 4. Design options
 There are several ways to choose the compute framework explicitly:
@@ -49,8 +45,6 @@ There are several ways to choose the compute framework explicitly:
 -   **Using specific feature configuration** to define compute frameworks for individual features.
 -   **Within the feature group definition**, by enforcing a specific compute framework rule.
 -   **As part of the mloda request** (as shown in previous examples).
-##### Part of mloda request
-
 ##### Specific feature configuration
 You can configure individual features to use a specific compute framework. Here’s how to specify that a feature should use the PyArrowTable framework:
 ```python
@@ -150,30 +144,11 @@ from mloda.user.spark import SparkFramework
 
 One policy for every backend: importing `mloda.user.<backend>` never fails because the backend library is missing. `import mloda.user` needs no backend at all, importing a backend module always gives you the framework class, and a framework whose library is missing reports itself unavailable through `is_available()`. Discovery filters on `is_available()`, so an unavailable framework is never selected. The deep import paths keep working unchanged.
 
-Why it works this way:
-
-- mloda core declares zero hard dependencies; every backend is an optional extra (`pip install mloda[polars]`), so you install only what your use case needs and can deploy in minimal environments.
-- A framework that is importable but unavailable stays visible in the plugin catalogue, where `is_available()` reports it as unavailable, instead of vanishing entirely from discovery. The table above says which libraries an extra installs.
+mloda core declares zero hard dependencies; every backend is an optional extra (`pip install mloda[polars]`; the table above says which libraries an extra installs). An unavailable framework stays visible in the plugin catalogue, where `is_available()` reports it unavailable.
 
 For example, without `polars` installed, `from mloda.user.polars import PolarsDataFrame` still works, `PolarsDataFrame.is_available()` returns `False`, and mloda plans with the remaining frameworks.
 
 If `compute_frameworks` names only unavailable frameworks, a requested feature or an input feature pins an unavailable framework, or a group's frameworks are all unavailable, mloda raises an error. When the framework declares an install command (`INSTALL_HINT`), the error names it.
-
-##### Framework Examples
-
-Example using PythonDictFramework:
-```python
-from mloda.user import mloda
-from mloda.user import Feature
-
-feature = Feature("id", options={"compute_framework": "PythonDictFramework"})
-
-result = mloda.run_all(
-    [feature],
-    data_access_collection=data_access_collection
-)
-result[0]  # Returns dict[str, list[Any]] (columnar)
-```
 
 A feature group running on PythonDictFramework may also return row-wise data as a list of dicts; it is normalized to the columnar form, and all rows must have identical keys.
 
@@ -190,51 +165,10 @@ rows = result_rows(mloda.run_all(...))
 
 Strictness stays in the library; `result_rows` packages the forgiving application-side policy.
 
-Example using Polars frameworks:
-```python
-from mloda.user import mloda
-from mloda.user import Feature
+##### Backend examples
 
-# Using Polars eager evaluation
-feature_eager = Feature("id", options={"compute_framework": "PolarsDataFrame"})
-
-# Using Polars lazy evaluation
-feature_lazy = Feature("id", options={"compute_framework": "PolarsLazyDataFrame"})
-
-result = mloda.run_all(
-    [feature_eager],
-    data_access_collection=data_access_collection
-)
-result[0]  # Returns polars.DataFrame
-```
-
-The backend examples that follow are sketches, not executed: each needs a configured backend and a
+The example that follows is a sketch, not executed: it needs a configured backend and a
 source that provides `id`.
-
-Example using DuckDB framework:
-```py
-from mloda.user import mloda
-from mloda.user import Feature, DataAccessCollection
-import duckdb
-
-# Create DuckDB connection
-connection = duckdb.connect()
-
-# Set up data access with connection
-data_access_collection = DataAccessCollection(
-    connections={connection}
-)
-
-feature = Feature("id", options={"compute_framework": "DuckDBFramework"})
-
-result = mloda.run_all(
-    [feature],
-    data_access_collection=data_access_collection
-)
-result[0]  # Returns pyarrow.Table
-```
-
-**Note**: DuckDB framework requires a connection object and does not support mloda framework inherent multiprocessing. Multiprocessing from DuckDB still works. It's optimized for analytical workloads and provides SQL-like operations on data.
 
 Example using Iceberg framework:
 ```py
@@ -266,39 +200,7 @@ result[0]  # Returns pyarrow.Table
 
 **Note**: Iceberg framework requires a catalog connection object for table operations. It's optimized for data lake scenarios with schema evolution, time travel capabilities, and large-scale analytics. The framework uses PyArrow as an interchange format for compatibility with other mloda frameworks. A filtered Iceberg table is passed on to later feature groups and returned as a `pyarrow.Table`. Does not support mloda framework inherent multiprocessing (the catalog stays in the parent process). The filtered step passes on only those columns to later feature groups: its own features, its filter columns, and the columns a Link reads from it or from any step downstream of it, including ASOF time columns. In the result, a nested field requested as a feature (e.g. `"b.c"`) comes back as its own column.
 
-Example using Spark framework:
-```py
-from mloda.user import mloda
-from mloda.user import Feature, DataAccessCollection
-from pyspark.sql import SparkSession
-
-# Create SparkSession (optional - framework will auto-create if not provided)
-spark = SparkSession.builder \
-    .appName("MLoda-Spark-Example") \
-    .master("local[*]") \
-    .getOrCreate()
-
-# Set up data access with SparkSession
-data_access_collection = DataAccessCollection(
-    connections={spark}
-)
-
-feature = Feature("id", options={"compute_framework": "SparkFramework"})
-
-result = mloda.run_all(
-    [feature],
-    data_access_collection=data_access_collection
-)
-result[0]  # Returns pyspark.sql.DataFrame
-```
-
-**Note**: Spark framework requires PySpark 4.0+ and Java 17+ environment with JAVA_HOME configured. It's optimized for big data processing, distributed computing, and production clusters. The framework can auto-create a local SparkSession if none is provided, but for production use, you should provide a configured SparkSession. Does not support mloda framework inherent multiprocessing (uses Spark's own distributed processing).
-
-#### 6. Summary
-
-mloda's compute framework adds flexibility, allowing you to select the best tool for different stages of data and feature engineering. While it introduces some complexity, it's invaluable for comparing technologies and managing environments.
-
-That said, **you can configure mloda to use just one compute framework** for a more familiar workflow, similar to traditional feature stores, data pipelines, or ETL systems. Whether you prefer flexibility or simplicity, mloda adapts to your needs while ensuring consistent feature processing.
+DuckDB and Spark take their connection or session through the data access collection like Iceberg; see [Framework Connection Object](../in_depth/framework-connection-object.md) for both and [Compute Framework Integration](../in_depth/compute-framework-integration.md) for their multiprocessing limits.
 
 ### 6. Advanced Compute Framework Topics
 

@@ -2,7 +2,7 @@
 
 The **Extender** class is an abstract base class (ABC) that provides an extensible framework for enhancing and wrapping functions with additional capabilities. It is especially useful for automating and monitoring various operations such as metadata harvesting, messaging integration, and event logging. This class offers a standardized approach to augmenting functions with critical features like performance monitoring, audit trails, and impact analysis.
 
-Extenders are configured on the session: every call that plans (the `mlodaAPI(...)` constructor, `prepare()`, `run_all()`, `stream_all()`, `explain()`, and `diagnose()`) accepts `function_extender` and snapshots it. `run()` and `stream_run()` don't take it and never re-read it: they reuse the set snapshotted when the session was planned (a session is planned exactly once), so changing `function_extender` afterwards has no effect.
+Extenders are configured on the session through `function_extender`, snapshotted when the session is planned; see [mlodaAPI configuration](../in_depth/mloda-api.md#configuration-for-mlodaapi).
 
 In the following example, we will reuse the previous feature group example and demonstrate how to monitor the execution time of the **calculate_feature** function using a custom extender.
 
@@ -10,6 +10,8 @@ In the following example, we will reuse the previous feature group example and d
 
 We will create a DokuExtender class to monitor and log the time taken for the calculate_feature function of the feature group to execute.
 #### 1. Define the Extender
+A simple DokuExtender class:
+
 ```python
 from typing import Any
 import time
@@ -17,11 +19,8 @@ from mloda.steward import Extender, ExtenderHook
 import logging
 
 logger = logging.getLogger(__name__)
-```
 
-A simple DokuExtender class:
 
-```python
 class DokuExtender(Extender):
     def wraps(self) -> set[ExtenderHook]:
         return {ExtenderHook.FEATURE_GROUP_CALCULATE_FEATURE}
@@ -42,9 +41,6 @@ data_access_collection = DataAccessCollection(files={file_path})
 
 feature_list = ["id","V1","V2","V3"]
 
-example_feature_list = [f"ExampleB_{f}" for f in feature_list]
-
-
 mloda.run_all(
     feature_list,
     compute_frameworks=["PyArrowTable"],
@@ -54,13 +50,11 @@ mloda.run_all(
 ```
 Expected Output (Logged Execution Times)
 ```text
-ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.00454258918762207
-ERROR    test_getting_started:test_getting_started.py:29 Time taken: 0.001033782958984375
+ERROR    <logger>:<module>.py:<line> Time taken: 0.00454258918762207
+ERROR    <logger>:<module>.py:<line> Time taken: 0.001033782958984375
 ```
 
-#### 3. Summary
-
-With this simple extender, you can easily log and monitor the execution time of any functionality within feature groups. By extending the Extender class, you can wrap additional behavior such as performance monitoring, logging, or auditing around critical functions to enhance observability and traceability in your data processing workflows.
+#### 3. Multiple extenders
 
 When multiple extenders are provided, they are automatically chained and executed in priority order (lower values first). Each extender's `wraps()` is read once per run, so the hook set is fixed for the run; `wraps()` must return `ExtenderHook` members, otherwise the run fails at setup with a `TypeError`.
 
@@ -132,7 +126,7 @@ assert context.failed_rows == tuple(collector.entries)
 
 `mloda.steward.DeniedNameGate(is_denied)` refuses a source group's `INPUT_DATA_MATCH` probe for any name the predicate denies, whether or not a source has the column. It fails closed: with no hook context or the default predicate, it refuses every name. The predicate receives column base names (a `~N` suffix stripped), including link, key and filter columns, for every source group including inline data; a predicate that raises refuses too, but its own message is not scrubbed, so keep names out of it. It covers source groups only (not a feature group that computes the name), and `resolve_feature()` only under `reader_probe_scope`. Under MULTIPROCESSING the predicate must be picklable.
 
-Core's own failure logs and `MlodaRunError` scrub exception text through `mloda.steward.scrub_credentials`, which drops URL user info, query and fragment, masks credential-named `key=value` and quoted dict-key values (including tuple and set values and multi-line pretty-printed JSON and pprint values, also when escaped inside a `repr` or a JSON dump, up to two outer layers that double backslashes without escaping the value's quote kind, such as a JSON dump inside a `repr`; not masked: a dump in a string that pprint wrapped over several lines when that output is itself escaped inside a `repr` or a JSON dump, or wrapped by pprint again, and a value holding a quote directly followed by a delimiter, such as `", `, in a JSON dump inside a `repr`), bearer and `Authorization` tokens (also prefixed or underscored header names such as `X-Authorization` or `HTTP_AUTHORIZATION`), and masks the password in `user/password@host:port`, `@host/service` and `@//host` DSNs. Session-id keys (`jsessionid`, `PHPSESSID`, `sessionid`) are masked like other credential-named keys, and a percent-encoded path is kept as-is unless its decoded form looks like it carries a credential, in which case the path is cut back to the last `/` before the first escape. A `/`- or `::`-separated URI part whose percent-decoded form holds `;`, `?` or `#` followed by text cuts the URI back to the start of that part, unless it only adds credential-named `key=value` parameters (masked in place) or punctuation. A `jdbc:` URI keeps its path unless the path, or the text directly after it, contains `=`, `;` or `@`, in which case the path is dropped along with the rest of that text. Multi-colon subprotocols such as `jdbc:h2:tcp:` count as `jdbc:`. An extender that logs a wrapped failure message itself should apply the same function. During a run or planning, every string value of 8 or more characters of a credential in the request's `DataAccessCollection` is also masked, raw, stripped of surrounding whitespace and in its `repr` (either quote style) and JSON escaped forms, in the raised exception (args including nested strings, instance attributes (str ones, and the strings and keys inside dict, list, tuple and set ones), the str fields of `OSError`, `ImportError`, `SyntaxError`, the `UnicodeError` subclasses and `SystemExit`, an `ExceptionGroup`'s message (a masked copy is raised, since the message is read-only), notes, refusals, and the cause and context chain) and in every log record created inside the run (see [Log record masking](../in_depth/named-data-access-handles.md#log-record-masking), including the opt-in `enable_process_wide_log_masking()` for records outside it), except under known connection fields such as `host`, `user` or `path` (see `named-data-access-handles.md`); values under any other key are masked (fail closed). A container attribute holding a registered value is rebuilt as a plain dict, list, tuple or set (others are left untouched), and containers nested deeper than 32 levels are masked whole. Extenders wrapping a hook see the exception already masked. Not masked: bytes, other C-level attributes (such as `AttributeError.obj`), objects held in attributes or nested in their containers (exceptions included), non-dict mappings (such as HTTP header objects) and a value escaped twice (such as `repr(json.dumps(value))`). Other exception text stays raw; `data_access_collection.redact(str(exc))` also masks host, user and path values.
+Core's own failure logs and `MlodaRunError` scrub exception text through `mloda.steward.scrub_credentials`, which drops URL user info, query and fragment, masks credential-named `key=value` and quoted dict-key values (including tuple and set values and multi-line pretty-printed JSON and pprint values, also when escaped inside a `repr` or a JSON dump, up to two outer layers that double backslashes without escaping the value's quote kind, such as a JSON dump inside a `repr`; not masked: a dump in a string that pprint wrapped over several lines when that output is itself escaped inside a `repr` or a JSON dump, or wrapped by pprint again, and a value holding a quote directly followed by a delimiter, such as `", `, in a JSON dump inside a `repr`), bearer and `Authorization` tokens (also prefixed or underscored header names such as `X-Authorization` or `HTTP_AUTHORIZATION`), and masks the password in `user/password@host:port`, `@host/service` and `@//host` DSNs. Session-id keys (`jsessionid`, `PHPSESSID`, `sessionid`) are masked like other credential-named keys, and a percent-encoded path is kept as-is unless its decoded form looks like it carries a credential, in which case the path is cut back to the last `/` before the first escape. A `/`- or `::`-separated URI part whose percent-decoded form holds `;`, `?` or `#` followed by text cuts the URI back to the start of that part, unless it only adds credential-named `key=value` parameters (masked in place) or punctuation. A `jdbc:` URI keeps its path unless the path, or the text directly after it, contains `=`, `;` or `@`, in which case the path is dropped along with the rest of that text. Multi-colon subprotocols such as `jdbc:h2:tcp:` count as `jdbc:`. An extender that logs a wrapped failure message itself should apply the same function. During a run or planning, every string value of 8 or more characters of a credential in the request's `DataAccessCollection` is also masked in the raised exception (args, attributes, notes, refusals, cause and context chain) and in every log record created inside the run, with the opt-in `enable_process_wide_log_masking()` for records outside it. The covered fields, the connection fields left unmasked and what is not masked are listed under [Log record masking](../in_depth/named-data-access-handles.md#log-record-masking) and in the `dac.redact` entry of [Named Data Access Handles](../in_depth/named-data-access-handles.md). Extenders wrapping a hook see the exception already masked. Other exception text stays raw; `data_access_collection.redact(str(exc))` also masks host, user and path values.
 
 `FEATURE_GROUP_MATCHED` reads the `mloda.steward.verified_context()` scope active while a session is planned (for example `prepare()`, `explain()`, `diagnose()`, and the planning half of `run_all()`/`stream_all()`). Every other hook reads the scope active at run-call time (`run()`, `stream_run()`, and the run half of `run_all()`/`stream_all()`; for the stream calls that is creation, not first iteration).
 
@@ -181,7 +175,7 @@ To list all available extenders and their documentation, use the `get_extender_d
 
 #### 7. Extender identity under `ParallelizationMode.MULTIPROCESSING`
 
-A framework that stays resident in the parent process uses the caller's own extender objects, not copies: identity and mutable state on an extender (a client, tracer, connection) hold across every framework built there, including one whose own resolved `parallelization_mode` is not `MULTIPROCESSING` inside an overall MULTIPROCESSING-enabled run (e.g. a compute framework that only supports `SYNC`). For that SYNC-only framework to run at all, the requested `parallelization_modes` set must also contain the framework's own supported mode, e.g. `{ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING}`; requesting `{ParallelizationMode.MULTIPROCESSING}` alone filters the framework out at setup and the run raises.
+A framework that stays resident in the parent process uses the caller's own extender objects, not copies: identity and mutable state on an extender (a client, tracer, connection) hold across every framework built there, including one whose own resolved `parallelization_mode` is not `MULTIPROCESSING` inside an overall MULTIPROCESSING-enabled run (e.g. a compute framework that only supports `SYNC`). For that SYNC-only framework to run at all, the requested `parallelization_modes` set must also contain the framework's own supported mode, e.g. `{ParallelizationMode.SYNC, ParallelizationMode.MULTIPROCESSING}`; requesting `{ParallelizationMode.MULTIPROCESSING}` alone drops the framework at setup, and the run raises when no usable framework is left or a feature is pinned to a dropped one; a group that can run only on dropped frameworks fails at resolution (see [Compute Framework Integration](../in_depth/compute-framework-integration.md)).
 
 A parent-resident extender is one shared object, invoked by every framework built there, potentially concurrently under `ParallelizationMode.THREADING`. It must be thread-safe. Apart from the sealed flags (section 4) its state is unprotected, so keeping it consistent across frameworks and runs is the author's job.
 
@@ -250,7 +244,7 @@ class SealingExtender(Extender):
         self.completed_run_ids.append(run.run_id)
 ```
 
-To refuse a run when a step declares a handle, check `PlanStep.credential_handles` in `on_run_start`:
+To refuse a run when a step declares a handle outside an allow list, check `PlanStep.credential_handles` in `on_run_start` (a source step lists the handle it binds):
 
 ```python
 from typing import Any
@@ -258,22 +252,6 @@ from typing import Any
 from mloda.steward import Extender, ExtenderHook, PlanContext, PlanStep, RunContext
 
 
-class NoProdCredentials(Extender):
-    def wraps(self) -> set[ExtenderHook]:
-        return set()
-
-    def __call__(self, func: Any, *args: Any, **kwargs: Any) -> Any:
-        return func(*args, **kwargs)
-
-    def on_run_start(self, run: RunContext, plan: PlanContext, steps: tuple[PlanStep, ...]) -> None:
-        for step in steps:
-            if "prod_db" in step.credential_handles:
-                raise PermissionError("prod_db may not be used in this run")
-```
-
-To allow only some handles, refuse a run whose step lists one outside an allow list (a source step lists the handle it binds):
-
-```python
 class OnlyAllowedCredentials(Extender):
     ALLOWED = frozenset({"analytics_db"})
 
@@ -289,7 +267,7 @@ class OnlyAllowedCredentials(Extender):
                 if handle not in self.ALLOWED:
                     raise PermissionError(f"{handle} may not be used in this run")
 
-extenders = {NoProdCredentials(), OnlyAllowedCredentials()}
+extenders = {OnlyAllowedCredentials()}
 ```
 
 To find over-declared handles, aggregate over the run's steps: keep the calculate contexts and report, per feature group, each declared handle that none of that group's contexts bound or read. A reported pair is a declaration to drop from that group, not a credential to remove, since another step's source may bind it.

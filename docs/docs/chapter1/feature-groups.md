@@ -64,11 +64,7 @@ Example_id: [[0,2,4,...]]
 ....
 ```
 
-#### 4. Summary
-
-In this example, we implemented a custom feature group, Example, that multiplies each feature value by 2. By defining a straightforward input_features method and a calculate_feature method, we were able to extend mloda's feature engineering capabilities with custom transformations. We then executed the request by simply modifying the feature names with a prefix ("Example_"), allowing mloda to handle dependencies and computations automatically.
-
-#### 5. The result contract
+#### 4. The result contract
 
 A feature group must return its **columns**, even when it has no rows. Zero rows
 is a valid result; zero columns is not, and raises `EmptyResultError`. On the
@@ -87,7 +83,7 @@ A group that could not compute a value for some rows can say so with `report_fai
 
 Options are read-only inside `calculate_feature`: `mloda.prepare` freezes the compiled plan, so writing an option raises `FrozenPlanError`. Set the option before `prepare`, or pass per-run values with `run(api_data=...)` or `run(artifacts=...)`. Values nested inside an option (a list, a dict) are not frozen, so do not mutate them either. A `Feature` object returned from `input_features` is copied into the plan, so planning never renames or rewrites the group's own object; read planned names from the `FeatureSet` in `calculate_feature`.
 
-#### 6. Advanced Feature Group Topics
+#### 5. Advanced Feature Group Topics
 
 For more in-depth information about feature groups, check out these advanced topics:
 
@@ -100,8 +96,7 @@ For more in-depth information about feature groups, check out these advanced top
 - [Data Type Enforcement](../in_depth/data-type-enforcement.md) - Runtime validation of declared feature data types
 - [Filter Handling in FeatureGroups](../in_depth/filter_data.md#handling-filters-in-a-featuregroup) - Row elimination and `final_filters()`
 - [Mask Engine](../in_depth/mask_engine.md) - Inline masking with `features.mask_engine`
-- [Empty Result Handling](../in_depth/compute-framework-integration.md#empty-results) - Zero rows is always valid; a zero-column (schema-less) result raises `EmptyResultError`
 
-#### 7. Discovering Feature Groups
+#### 6. Discovering Feature Groups
 
 To list all available feature groups and their documentation, use the `get_feature_group_docs()` function from `mloda.steward`.

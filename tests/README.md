@@ -5,8 +5,8 @@ Testing is a critical aspect of the mloda framework, ensuring reliability, corre
 
 ## Directory Structure
 
-Directories to three levels deep; regenerate with
-`find tests -type d -not -path "*__pycache__*" | sort`.
+Directories to two levels deep; regenerate with
+`find tests -maxdepth 2 -type d -not -path "*__pycache__*" | sort`.
 
 ```
 tests/
@@ -29,28 +29,22 @@ tests/
 ├── test_project_structure.py       # Repository layout invariants
 ├── test_registry_isolation.py      # Plugin registry isolation between tests
 ├── helpers/                        # Shared stub plugins tests import (see plugin_stubs.py)
+├── mixins/                         # Shared test mixins
+│   └── reader_feature_groups/      # Mixins for reader feature group tests
 ├── test_core/                      # Tests for core functionality
 │   ├── test_abstract_plugins/      # Tests for abstract plugin interfaces
-│   │   ├── test_components/        # Tests for component implementations
-│   │   ├── test_feature_group/     # Tests for the feature group base class
-│   │   ├── test_plugin_loader/     # Tests for plugin loading mechanism
-│   │   └── test_plugin_registry/   # Tests for the plugin registry
 │   ├── test_api/                   # Tests for API functionality
-│   │   └── feature_config/         # Tests for feature configuration
 │   ├── test_artifacts/             # Tests for artifact handling
 │   ├── test_core/                  # Tests for core engine
-│   │   └── test_step/              # Tests for execution steps
 │   ├── test_filter/                # Tests for filtering mechanisms
 │   ├── test_flight/                # Tests for flight server
 │   ├── test_index/                 # Tests for indexing functionality
 │   ├── test_integration/           # Core integration tests
-│   │   └── test_core/              # Tests for core integration scenarios
 │   ├── test_mask/                  # Tests for the mask engine
 │   ├── test_optional_dependency/   # Behaviour when an optional dependency is absent
 │   ├── test_optional_pyarrow/      # Behaviour when pyarrow is absent
 │   ├── test_plugin_collector/      # Tests for plugin collection
 │   ├── test_prepare/               # Tests for the planning/preparation phase
-│   │   └── test_validators/        # Tests for planning validators
 │   ├── test_resolution_parity/     # Parity between resolution paths
 │   ├── test_runtime/               # Tests for runtime behaviour
 │   ├── test_setup/                 # Tests for setup procedures
@@ -67,15 +61,9 @@ tests/
 └── test_plugins/                   # Tests for plugin implementations
     ├── api/                        # Tests for plugin-facing API
     ├── compute_framework/          # Tests for compute framework plugins
-    │   └── base_implementations/   # Tests per framework (pandas, polars, pyarrow, ...)
     ├── extender/                   # Tests for extender plugins
     ├── feature_group/              # Tests for feature group plugins
-    │   ├── experimental/           # Tests for experimental feature groups
-    │   ├── input_data/             # Tests for input data handling
-    │   └── src/                    # Fixture sources for feature group tests
     └── integration_plugins/        # Tests for plugin integration
-        ├── chainer/                # Tests for feature chaining
-        └── test_validate_features/ # Tests for feature validation
 ```
 
 Test dependencies are declared in the `test` extra in `pyproject.toml`.

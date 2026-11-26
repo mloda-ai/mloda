@@ -73,11 +73,7 @@ deprecation warning or a release-note entry.
 
 ### Running Checks Locally
 
-Run the full suite (linting, formatting, type checking, security, and tests). Always run tox before submitting a pull request:
-
-```bash
-tox
-```
+Always run `tox` (linting, formatting, type checking, security, and tests) before submitting a pull request.
 
 For quick iteration during development, you can run only the tests. Note that this skips linting, type checking, and security checks, so it is not a substitute for tox:
 

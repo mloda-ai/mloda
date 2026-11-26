@@ -927,15 +927,8 @@ class IdentifyFeatureGroupClass:
         self, feature_group: type[FeatureGroup], feature: Feature, options: Options
     ) -> str | None:
         """The near-miss reason for a config-path group the request selects but leaves a required key absent."""
-        if not self._selects_by_required_own_key(feature_group, options):
-            return None
-        if is_nominal_subclass(feature_group, FeatureChainParserMixin) and safe_field(
-            lambda: feature_group.resolve_feature_name(feature.name).owned, True, catching=(ValueError, re.error)
-        ):
-            return None
-        mapping = feature_group.PROPERTY_MAPPING or {}
-        absent = FeatureChainParser._config_path_missing_required_keys(options, mapping)
-        if not absent or not self._no_guard_declines(feature_group, options):
+        reason = self.config_path_absent_required_reason(feature_group, feature.name, options)
+        if reason is None:
             return None
         if feature.domain and (
             self._domain_outcome(feature_group)[1] is not None
@@ -943,6 +936,23 @@ class IdentifyFeatureGroupClass:
         ):
             return None
         if inspect.isabstract(feature_group):
+            return None
+        return reason
+
+    @staticmethod
+    def config_path_absent_required_reason(
+        feature_group: type[FeatureGroup], feature_name: FeatureName | str, options: Options
+    ) -> str | None:
+        """The absent-required reason that depends only on group, name and options."""
+        if not IdentifyFeatureGroupClass._selects_by_required_own_key(feature_group, options):
+            return None
+        if is_nominal_subclass(feature_group, FeatureChainParserMixin) and safe_field(
+            lambda: feature_group.resolve_feature_name(feature_name).owned, True, catching=(ValueError, re.error)
+        ):
+            return None
+        mapping = feature_group.PROPERTY_MAPPING or {}
+        absent = FeatureChainParser._config_path_missing_required_keys(options, mapping)
+        if not absent or not IdentifyFeatureGroupClass._no_guard_declines(feature_group, options):
             return None
         handles = credential_handle_keys(feature_group)
         handle_absent = [key for key in absent if key in handles]

@@ -55,6 +55,7 @@ from mloda.core.abstract_plugins.implementation import (
     variant_block_reason,
 )
 from mloda.core.abstract_plugins.operation_feature_group import OperationFeatureGroup
+from mloda.core.prepare.identify_feature_group import IdentifyFeatureGroupClass
 
 __all__ = [
     "assert_feature_group_shape",
@@ -160,6 +161,15 @@ def _check_names(
     return failures
 
 
+def _on_config_path(cls: type[FeatureGroup], base: Options) -> bool:
+    in_features = DefaultOptionKeys.in_features
+    return bool(
+        is_nominal_subclass(cls, FeatureChainParserMixin)
+        and not cls.NAME_ONLY_MATCH
+        and (in_features in base.group or in_features in base.context)
+    )
+
+
 def _check_foreign(
     cls: type[FeatureGroup], base: Options, dac: DataAccessCollection | None = None
 ) -> tuple[list[str], list[str]]:
@@ -172,11 +182,7 @@ def _check_foreign(
     base_label = "base options"
     foreign_base = base
     in_features = DefaultOptionKeys.in_features
-    if (
-        is_nominal_subclass(cls, FeatureChainParserMixin)
-        and not cls.NAME_ONLY_MATCH
-        and (in_features in base.group or in_features in base.context)
-    ):
+    if _on_config_path(cls, base):
         foreign_base = _without_key(base, in_features)
         base_label = "base options without in_features"
         notes.append(
@@ -223,26 +229,48 @@ def _check_required(
     base: Options,
     bound_keys: Mapping[str, frozenset[str]],
     dac: DataAccessCollection | None = None,
-) -> list[str]:
-    """Dropping each required key must record REQUIRED_OPTION_ABSENT naming it."""
+) -> tuple[list[str], list[str]]:
+    """Dropping a required key must record a rejection naming it; an unowned config-path name may defer to resolution."""
     failures = []
+    notes: list[str] = []
+    config_path = _on_config_path(cls, base)
+    owned = {n: _name_bound_keys(cls, n) is not None for n in names}
     for name, key in product(names, _required_keys(cls)):
         if key in bound_keys.get(name, frozenset()):
             continue
-        matched, rejection, aborted, _ = _probe(cls, name, _without_key(base, key), dac)
+        reduced = _without_key(base, key)
+        matched, rejection, aborted, _ = _probe(cls, name, reduced, dac)
         if aborted is not None:
             failures.append(f"required: matching '{name}' without '{key}' aborted: {aborted}")
         elif matched:
             failures.append(f"required: matches without required option '{key}'")
         elif rejection is None:
-            failures.append(f"required: no rejection recorded without required option '{key}'")
+            if (
+                config_path
+                and not owned[name]
+                and not IdentifyFeatureGroupClass._selects_by_required_own_key(cls, reduced)
+            ):
+                note = (
+                    f"required: without '{key}' the request no longer selects {cls.__name__} on its "
+                    "configuration path, so its decline is silent (nothing to check)"
+                )
+                if note not in notes:
+                    notes.append(note)
+                continue
+            reason = (
+                IdentifyFeatureGroupClass.config_path_absent_required_reason(cls, name, reduced)
+                if config_path and not owned[name]
+                else None
+            )
+            if reason is None:
+                failures.append(f"required: no rejection recorded without required option '{key}'")
         elif rejection.code != CoreDeclineCode.REQUIRED_OPTION_ABSENT:
             failures.append(
                 f"required: rejection without '{key}' has code {rejection.code}, not required_option_absent"
             )
         elif key not in rejection.reason:
             failures.append(f"required: rejection reason does not name the absent option '{key}'")
-    return failures
+    return failures, notes
 
 
 def _check_strict(
@@ -1099,7 +1127,8 @@ def check_feature_group_shape(
     on the serving Implementation whose columns all match exactly on a typed framework fails as stale (scope a
     data-dependent one with subtypes or outputs); a group-level one is only a note, since it applies on every framework.
     On a mixin group's configuration path (in_features in base_options, NAME_ONLY_MATCH off) the foreign name
-    is probed without in_features.
+    is probed without in_features, and a silent decline on a dropped required key passes when resolution names the key
+    or the request no longer selects the group (noted).
     data_access_collection= is matched against by every match probe and checks a source's match_credentials.
     requests= probes those names instead of the class and declared names; a base_options value contradicting them
     is a failure with the abort text.
@@ -1134,10 +1163,11 @@ def check_feature_group_shape(
     foreign_failures, foreign_notes = _check_foreign(cls, base, dac)
     failures += foreign_failures
     failures += _check_inputs(cls, names, base)
-    failures += _check_required(cls, names, base, bound_keys, dac)
+    required_failures, required_notes = _check_required(cls, names, base, bound_keys, dac)
+    failures += required_failures
     failures += _check_strict(cls, names, base, dac)
     failures += secret_failures
-    notes: list[str] = [*secret_notes, *foreign_notes]
+    notes: list[str] = [*secret_notes, *foreign_notes, *required_notes]
     if is_nominal_subclass(cls, SourceFeatureGroup):
         if dac is None:
             notes.append("credentials: match-time credential binding not checked (no data_access_collection)")

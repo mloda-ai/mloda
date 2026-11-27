@@ -4,6 +4,7 @@ from typing import Any
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 
 import logging
+import warnings
 
 logger = logging.getLogger(__name__)
 
@@ -52,6 +53,13 @@ class BaseValidator(ABC):
         pass
 
     def handle_log_level(self, _error: str, _exception: Exception) -> None:
+        """Deprecated since 0.9.0, to be removed in 1.0.0: kept as deliberate validator API."""
+        warnings.warn(
+            "BaseValidator.handle_log_level is deprecated and will be removed in 1.0.0; "
+            "log or raise in validate() instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         if self.log_level == "error":
             raise _exception
         # The non-error levels contain the raise, so the diagnosis goes on the record as text: exc_info= pins

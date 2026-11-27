@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any, Literal
 import functools
 import inspect
 import logging
+import warnings
 
 from mloda.core.abstract_plugins.components.utils import contained_raise_reason
 
@@ -221,7 +222,16 @@ class Extender(ABC):
 
     @staticmethod
     def feature_options(args: tuple[Any, ...]) -> "Options | None":
-        """Return the Options of the FeatureSet in the hook args, else None."""
+        """Return the Options of the FeatureSet in the hook args, else None.
+
+        Deprecated since 0.9.0, to be removed in 1.0.0: kept as deliberate extender API.
+        """
+        warnings.warn(
+            "Extender.feature_options is deprecated and will be removed in 1.0.0; "
+            "use Extender.feature_set(args).options instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
         feature_set = Extender.feature_set(args)
         if feature_set is None:
             return None
